@@ -16,6 +16,9 @@
     <!-- Read-only access to contacts, used to import people. -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
 
+    <!-- Read-only access to the call log, used to detect recent calls. -->
+    <uses-permission android:name="android.permission.READ_CALL_LOG" />
+
     <application
         android:name=".FriendsApplication"
         android:allowBackup="false"

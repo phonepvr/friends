@@ -7,6 +7,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.phonepvr.friends.ui.calls.ConfirmationQueueScreen
 import com.phonepvr.friends.ui.contacts.ImportContactsScreen
 import com.phonepvr.friends.ui.people.AddEditPersonScreen
 import com.phonepvr.friends.ui.people.PeopleListScreen
@@ -17,6 +18,7 @@ import com.phonepvr.friends.ui.timeline.TimelineScreen
 object Routes {
     const val PEOPLE_LIST = "people"
     const val TIMELINE = "timeline"
+    const val CALLS = "calls"
     const val ADD_PERSON = "person/add"
     const val EDIT_PERSON = "person/edit/{personId}"
     const val PERSON_DETAIL = "person/detail/{personId}"
@@ -55,6 +57,11 @@ fun FriendsNavHost(navController: NavHostController = rememberNavController()) {
                     navController.navigate(Routes.personDetail(personId))
                 },
                 bottomBar = { FriendsBottomBar(TopLevelTab.TIMELINE, onSelectTab) },
+            )
+        }
+        composable(Routes.CALLS) {
+            ConfirmationQueueScreen(
+                bottomBar = { FriendsBottomBar(TopLevelTab.CALLS, onSelectTab) },
             )
         }
         composable(Routes.ADD_PERSON) {

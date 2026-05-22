@@ -18,4 +18,7 @@ interface PhoneNumberDao {
 
     @Query("SELECT * FROM phone_numbers WHERE normalizedNumber = :normalizedNumber")
     suspend fun findByNormalizedNumber(normalizedNumber: String): List<PhoneNumberEntity>
+
+    @Query("SELECT * FROM phone_numbers")
+    suspend fun getAll(): List<PhoneNumberEntity>
 }

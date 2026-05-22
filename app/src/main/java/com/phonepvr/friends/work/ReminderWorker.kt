@@ -13,6 +13,8 @@ import com.phonepvr.friends.domain.cadence.CadenceState
 import com.phonepvr.friends.domain.model.AnnualDate
 import com.phonepvr.friends.domain.model.EventType
 import com.phonepvr.friends.notification.ReminderNotifier
+import com.phonepvr.friends.widget.UpcomingWidget
+import androidx.glance.appwidget.updateAll
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
@@ -83,6 +85,7 @@ class ReminderWorker(
         if (lines.isNotEmpty()) {
             ReminderNotifier.postReminders(applicationContext, lines)
         }
+        UpcomingWidget().updateAll(applicationContext)
         return Result.success()
     }
 }

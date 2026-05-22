@@ -1,0 +1,127 @@
+package com.phonepvr.friends.widget
+
+import android.content.Context
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.glance.GlanceId
+import androidx.glance.GlanceModifier
+import androidx.glance.GlanceTheme
+import androidx.glance.action.clickable
+import androidx.glance.appwidget.GlanceAppWidget
+import androidx.glance.appwidget.action.actionStartActivity
+import androidx.glance.appwidget.provideContent
+import androidx.glance.background
+import androidx.glance.layout.Column
+import androidx.glance.layout.Spacer
+import androidx.glance.layout.fillMaxSize
+import androidx.glance.layout.height
+import androidx.glance.layout.padding
+import androidx.glance.text.FontWeight
+import androidx.glance.text.Text
+import androidx.glance.text.TextStyle
+import com.phonepvr.friends.MainActivity
+import com.phonepvr.friends.data.repository.PeopleRepository
+import com.phonepvr.friends.domain.model.AnnualDate
+import com.phonepvr.friends.domain.model.EventType
+import dagger.hilt.EntryPoint
+import dagger.hilt.InstallIn
+import dagger.hilt.android.EntryPointAccessors
+import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.flow.first
+import java.time.LocalDate
+
+@EntryPoint
+@InstallIn(SingletonComponent::class)
+interface UpcomingWidgetEntryPoint {
+    fun peopleRepository(): PeopleRepository
+}
+
+private data class WidgetItem(val days: Long, val line: String)
+
+/** Home-screen widget listing birthdays and anniversaries in the next 30 days. */
+class UpcomingWidget : GlanceAppWidget() {
+
+    override suspend fun provideGlance(context: Context, id: GlanceId) {
+        val items = loadUpcoming(context)
+        provideContent {
+            WidgetContent(items)
+        }
+    }
+
+    private suspend fun loadUpcoming(context: Context): List<WidgetItem> {
+        val deps = EntryPointAccessors.fromApplication(
+            context,
+            UpcomingWidgetEntryPoint::class.java,
+        )
+        val people = deps.peopleRepository().observeActiveWithDetails().first()
+        val today = LocalDate.now()
+        return people
+            .flatMap { personWithDetails ->
+                personWithDetails.events.map { event ->
+                    val days = AnnualDate(event.month, event.day, event.year)
+                        .daysUntilNextOccurrence(today)
+                    WidgetItem(
+                        days = days,
+                        line = widgetLine(
+                            personWithDetails.person.displayName,
+                            event.type,
+                            days,
+                        ),
+                    )
+                }
+            }
+            .filter { it.days in 0..30 }
+            .sortedBy { it.days }
+            .take(5)
+    }
+}
+
+@Composable
+private fun WidgetContent(items: List<WidgetItem>) {
+    Column(
+        modifier = GlanceModifier
+            .fillMaxSize()
+            .background(GlanceTheme.colors.background)
+            .padding(12.dp)
+            .clickable(actionStartActivity<MainActivity>()),
+    ) {
+        Text(
+            text = "Upcoming",
+            style = TextStyle(
+                color = GlanceTheme.colors.onBackground,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+            ),
+        )
+        Spacer(GlanceModifier.height(8.dp))
+        if (items.isEmpty()) {
+            Text(
+                text = "No birthdays or anniversaries in the next 30 days.",
+                style = TextStyle(color = GlanceTheme.colors.onBackground),
+            )
+        } else {
+            items.forEach { item ->
+                Text(
+                    text = item.line,
+                    style = TextStyle(color = GlanceTheme.colors.onBackground),
+                    modifier = GlanceModifier.padding(vertical = 2.dp),
+                )
+            }
+        }
+    }
+}
+
+private fun widgetLine(name: String, type: EventType, days: Long): String {
+    val occasion = when (type) {
+        EventType.BIRTHDAY -> "birthday"
+        EventType.WEDDING_ANNIVERSARY -> "anniversary"
+        EventType.CUSTOM -> "date"
+    }
+    val whenText = when (days) {
+        0L -> "today"
+        1L -> "tomorrow"
+        else -> "in $days days"
+    }
+    return "$name — $occasion $whenText"
+}

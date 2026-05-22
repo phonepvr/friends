@@ -4,9 +4,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -33,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.phonepvr.friends.data.db.relation.PersonWithDetails
+import com.phonepvr.friends.ui.components.PersonAvatar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -105,25 +109,35 @@ private fun PersonRow(item: PersonWithDetails, onClick: () -> Unit) {
             .fillMaxWidth()
             .clickable { onClick() },
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(item.person.displayName, style = MaterialTheme.typography.titleMedium)
-            val parts = buildList {
-                item.person.relationshipTag
-                    ?.takeIf { it.isNotBlank() }
-                    ?.let { add(it) }
-                if (item.phoneNumbers.isNotEmpty()) {
-                    val count = item.phoneNumbers.size
-                    add(if (count == 1) "1 number" else "$count numbers")
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            PersonAvatar(
+                photoRelativePath = item.person.photoRelativePath,
+                displayName = item.person.displayName,
+            )
+            Spacer(Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(item.person.displayName, style = MaterialTheme.typography.titleMedium)
+                val parts = buildList {
+                    item.person.relationshipTag
+                        ?.takeIf { it.isNotBlank() }
+                        ?.let { add(it) }
+                    if (item.phoneNumbers.isNotEmpty()) {
+                        val count = item.phoneNumbers.size
+                        add(if (count == 1) "1 number" else "$count numbers")
+                    }
                 }
-            }
-            if (parts.isNotEmpty()) {
-                Text(
-                    text = parts.joinToString("  ·  "),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                if (parts.isNotEmpty()) {
+                    Text(
+                        text = parts.joinToString("  ·  "),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
         }
     }

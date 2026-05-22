@@ -32,6 +32,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.phonepvr.friends.data.db.entity.EventEntity
 import com.phonepvr.friends.data.db.entity.TimelineEntryEntity
 import com.phonepvr.friends.data.db.relation.PersonWithDetails
+import com.phonepvr.friends.ui.components.PersonAvatar
 import com.phonepvr.friends.domain.cadence.CadenceState
 import com.phonepvr.friends.domain.cadence.CadenceStatus
 import com.phonepvr.friends.domain.model.EventType
@@ -94,6 +95,7 @@ fun PersonDetailScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                item { PersonHeader(current) }
                 item { CadenceCard(cadence) }
                 item { InfoSection(current) }
                 item { Text("History", style = MaterialTheme.typography.titleMedium) }
@@ -110,6 +112,17 @@ fun PersonDetailScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun PersonHeader(person: PersonWithDetails) {
+    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        PersonAvatar(
+            photoRelativePath = person.person.photoRelativePath,
+            displayName = person.person.displayName,
+            diameter = 96.dp,
+        )
     }
 }
 

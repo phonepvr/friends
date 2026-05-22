@@ -8,6 +8,7 @@ import com.phonepvr.friends.data.contacts.DeviceContact
 import com.phonepvr.friends.data.db.entity.EventEntity
 import com.phonepvr.friends.data.db.entity.PersonEntity
 import com.phonepvr.friends.data.db.entity.PhoneNumberEntity
+import com.phonepvr.friends.data.photo.PhotoStorage
 import com.phonepvr.friends.data.repository.PeopleRepository
 import com.phonepvr.friends.domain.model.EventType
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -31,6 +32,7 @@ data class ImportUiState(
 class ImportContactsViewModel @Inject constructor(
     private val contactsReader: ContactsReader,
     private val repository: PeopleRepository,
+    private val photoStorage: PhotoStorage,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ImportUiState())
@@ -62,10 +64,17 @@ class ImportContactsViewModel @Inject constructor(
                 val now = System.currentTimeMillis()
                 ids.forEach { contactId ->
                     val details = contactsReader.readDetails(contactId) ?: return@forEach
+                    val uuid = UUID.randomUUID().toString()
+                    val photoRelativePath = runCatching {
+                        contactsReader.openContactPhoto(contactId)?.use { stream ->
+                            photoStorage.savePhoto(uuid, stream)
+                        }
+                    }.getOrNull()
                     val person = PersonEntity(
-                        uuid = UUID.randomUUID().toString(),
+                        uuid = uuid,
                         displayName = details.displayName,
                         contactLookupKey = details.lookupKey.ifBlank { null },
+                        photoRelativePath = photoRelativePath,
                         createdAt = now,
                         updatedAt = now,
                     )

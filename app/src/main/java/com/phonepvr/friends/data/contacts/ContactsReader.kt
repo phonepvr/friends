@@ -1,9 +1,11 @@
 package com.phonepvr.friends.data.contacts
 
 import android.content.ContentResolver
+import android.content.ContentUris
 import android.content.Context
 import android.provider.ContactsContract
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.InputStream
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -139,6 +141,19 @@ class ContactsReader @Inject constructor(
             phoneNumbers = phoneNumbers.distinct(),
             birthday = birthday,
             anniversary = anniversary,
+        )
+    }
+
+    /** Opens the contact's photo for reading, or null when it has none. */
+    fun openContactPhoto(contactId: Long): InputStream? {
+        val contactUri = ContentUris.withAppendedId(
+            ContactsContract.Contacts.CONTENT_URI,
+            contactId,
+        )
+        return ContactsContract.Contacts.openContactPhotoInputStream(
+            resolver,
+            contactUri,
+            true,
         )
     }
 

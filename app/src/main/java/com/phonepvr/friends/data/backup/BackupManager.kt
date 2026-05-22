@@ -14,12 +14,14 @@ import com.phonepvr.friends.data.db.entity.PendingConfirmationEntity
 import com.phonepvr.friends.data.db.entity.PersonEntity
 import com.phonepvr.friends.data.db.entity.PhoneNumberEntity
 import com.phonepvr.friends.data.db.entity.TimelineEntryEntity
+import com.phonepvr.friends.data.photo.PhotoStorage
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.io.IOException
 import java.security.GeneralSecurityException
 import java.util.zip.ZipEntry
@@ -46,13 +48,14 @@ class InvalidBackupException(message: String) : Exception(message)
 class WrongPassphraseException : Exception("The passphrase is incorrect.")
 
 /**
- * Exports and restores the whole database as a single self-contained file.
+ * Exports and restores the whole app as a single self-contained file.
  *
- * A backup is a ZIP holding [ENTRY_BACKUP_JSON] (every table, versioned) and
- * an empty [ENTRY_PHOTOS_DIR] folder reserved for contact photos. The ZIP may
- * be optionally sealed with a passphrase (see [BackupCrypto]). Restore is
- * atomic: the database is cleared and refilled inside one transaction, and the
- * original row ids are kept so foreign keys stay valid on a new device.
+ * A backup is a ZIP holding [ENTRY_BACKUP_JSON] (every table, versioned) and a
+ * [ENTRY_PHOTOS_DIR] folder with the contact photos. The ZIP may be optionally
+ * sealed with a passphrase (see [BackupCrypto]). The database restore is
+ * atomic — cleared and refilled inside one transaction, keeping the original
+ * row ids so foreign keys stay valid on a new device. Photos live on the file
+ * system, so they are restored on a best-effort basis after that transaction.
  */
 @Singleton
 class BackupManager @Inject constructor(
@@ -63,6 +66,7 @@ class BackupManager @Inject constructor(
     private val eventDao: EventDao,
     private val timelineDao: TimelineDao,
     private val pendingConfirmationDao: PendingConfirmationDao,
+    private val photoStorage: PhotoStorage,
 ) {
     private val json = Json {
         prettyPrint = true
@@ -70,7 +74,7 @@ class BackupManager @Inject constructor(
         encodeDefaults = true
     }
 
-    /** Writes a backup of the whole database to [uri], encrypting it when a
+    /** Writes a backup of the whole app to [uri], encrypting it when a
      *  non-empty [passphrase] is given. */
     suspend fun export(uri: Uri, passphrase: CharArray?): Unit = withContext(Dispatchers.IO) {
         val backup = BackupFile(
@@ -82,7 +86,10 @@ class BackupManager @Inject constructor(
             timelineEntries = timelineDao.getAll().map { it.toBackup() },
             pendingConfirmations = pendingConfirmationDao.getAll().map { it.toBackup() },
         )
-        val zipBytes = buildZip(json.encodeToString(BackupFile.serializer(), backup))
+        val zipBytes = buildZip(
+            jsonText = json.encodeToString(BackupFile.serializer(), backup),
+            photos = photoStorage.allPhotos(),
+        )
         val payload = if (passphrase != null && passphrase.isNotEmpty()) {
             BackupCrypto.encrypt(zipBytes, passphrase)
         } else {
@@ -103,11 +110,11 @@ class BackupManager @Inject constructor(
 
     fun isEncrypted(data: ByteArray): Boolean = BackupCrypto.isEncrypted(data)
 
-    /** Replaces the entire database with the contents of [data]. */
+    /** Replaces the entire app contents with those of [data]. */
     suspend fun restore(data: ByteArray, passphrase: CharArray?): BackupCounts =
         withContext(Dispatchers.IO) {
-            val zipBytes = decrypt(data, passphrase)
-            val entities = toEntities(parse(zipBytes))
+            val archive = readArchive(decrypt(data, passphrase))
+            val entities = toEntities(parseJson(archive.json))
             database.withTransaction {
                 database.clearAllTables()
                 personDao.insertAll(entities.people)
@@ -116,6 +123,9 @@ class BackupManager @Inject constructor(
                 timelineDao.insertAll(entities.timelineEntries)
                 pendingConfirmationDao.insertAll(entities.pendingConfirmations)
             }
+            // Photos are files, not database rows; a photo failure must not
+            // undo the (already committed) restore of the data itself.
+            runCatching { photoStorage.replaceAll(archive.photos) }
             entities.counts()
         }
 
@@ -134,8 +144,7 @@ class BackupManager @Inject constructor(
         }
     }
 
-    private fun parse(zipBytes: ByteArray): BackupFile {
-        val jsonText = readBackupJson(zipBytes)
+    private fun parseJson(jsonText: String): BackupFile {
         val backup = try {
             json.decodeFromString(BackupFile.serializer(), jsonText)
         } catch (e: Exception) {
@@ -161,26 +170,37 @@ class BackupManager @Inject constructor(
         throw InvalidBackupException("The backup contains an unrecognised value.")
     }
 
-    private fun buildZip(jsonText: String): ByteArray {
+    private fun buildZip(jsonText: String, photos: List<File>): ByteArray {
         val buffer = ByteArrayOutputStream()
         ZipOutputStream(buffer).use { zip ->
             zip.putNextEntry(ZipEntry(ENTRY_BACKUP_JSON))
             zip.write(jsonText.toByteArray(Charsets.UTF_8))
             zip.closeEntry()
-            // An empty folder reserved for contact photos in a later version.
             zip.putNextEntry(ZipEntry(ENTRY_PHOTOS_DIR))
             zip.closeEntry()
+            photos.forEach { photo ->
+                zip.putNextEntry(ZipEntry("$ENTRY_PHOTOS_DIR${photo.name}"))
+                photo.inputStream().use { it.copyTo(zip) }
+                zip.closeEntry()
+            }
         }
         return buffer.toByteArray()
     }
 
-    private fun readBackupJson(zipBytes: ByteArray): String {
+    private fun readArchive(zipBytes: ByteArray): Archive {
+        var jsonText: String? = null
+        val photos = mutableMapOf<String, ByteArray>()
         try {
             ZipInputStream(ByteArrayInputStream(zipBytes)).use { zip ->
                 var entry = zip.nextEntry
                 while (entry != null) {
-                    if (entry.name == ENTRY_BACKUP_JSON) {
-                        return zip.readBytes().toString(Charsets.UTF_8)
+                    val name = entry.name
+                    if (!entry.isDirectory) {
+                        val bytes = zip.readBytes()
+                        when {
+                            name == ENTRY_BACKUP_JSON -> jsonText = bytes.toString(Charsets.UTF_8)
+                            isSafePhotoEntry(name) -> photos[name] = bytes
+                        }
                     }
                     entry = zip.nextEntry
                 }
@@ -190,8 +210,23 @@ class BackupManager @Inject constructor(
         } catch (e: IOException) {
             throw InvalidBackupException("The backup file could not be read.")
         }
-        throw InvalidBackupException("The backup is missing its data file.")
+        return Archive(
+            json = jsonText ?: throw InvalidBackupException(
+                "The backup is missing its data file.",
+            ),
+            photos = photos,
+        )
     }
+
+    /** Guards against ZIP path traversal: a photo must be a plain file name. */
+    private fun isSafePhotoEntry(name: String): Boolean =
+        name.startsWith(ENTRY_PHOTOS_DIR) &&
+            name.substring(ENTRY_PHOTOS_DIR.length).matches(SAFE_PHOTO_NAME)
+
+    private class Archive(
+        val json: String,
+        val photos: Map<String, ByteArray>,
+    )
 
     private class RestoreEntities(
         val people: List<PersonEntity>,
@@ -212,5 +247,6 @@ class BackupManager @Inject constructor(
     private companion object {
         const val ENTRY_BACKUP_JSON = "backup.json"
         const val ENTRY_PHOTOS_DIR = "photos/"
+        val SAFE_PHOTO_NAME = Regex("[A-Za-z0-9-]+\\.jpg")
     }
 }

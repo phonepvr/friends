@@ -94,6 +94,7 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.biometric)
     implementation(libs.androidx.fragment)
+    implementation(libs.coil.compose)
 
     testImplementation(libs.junit)
 }

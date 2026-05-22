@@ -20,16 +20,25 @@ android {
 
     signingConfigs {
         getByName("debug") {
-            storeFile = rootProject.file("keystore/friends.keystore")
-            storePassword = "friendsdebugkey"
-            keyAlias = "friends"
-            keyPassword = "friendsdebugkey"
-        }
-    }
-
-    buildTypes {
-        getByName("debug") {
-            signingConfig = signingConfigs.getByName("debug")
+            // No keystore is committed to this public repository. Stable
+            // signing is used only when CI supplies a keystore through
+            // repository secrets; otherwise the build falls back to the
+            // auto-generated debug key.
+            val keystorePath = System.getenv("SIGNING_KEYSTORE_PATH")
+            val storePass = System.getenv("SIGNING_STORE_PASSWORD")
+            val alias = System.getenv("SIGNING_KEY_ALIAS")
+            val keyPass = System.getenv("SIGNING_KEY_PASSWORD")
+            if (!keystorePath.isNullOrBlank() &&
+                !storePass.isNullOrBlank() &&
+                !alias.isNullOrBlank() &&
+                !keyPass.isNullOrBlank() &&
+                file(keystorePath).exists()
+            ) {
+                storeFile = file(keystorePath)
+                storePassword = storePass
+                keyAlias = alias
+                keyPassword = keyPass
+            }
         }
     }
 

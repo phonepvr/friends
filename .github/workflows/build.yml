@@ -29,7 +29,23 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
+      - name: Prepare signing keystore (optional)
+        env:
+          SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$SIGNING_KEYSTORE_BASE64" ]; then
+            echo "$SIGNING_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/signing-keystore.jks"
+            echo "SIGNING_KEYSTORE_PATH=$RUNNER_TEMP/signing-keystore.jks" >> "$GITHUB_ENV"
+            echo "Signing keystore configured from a repository secret."
+          else
+            echo "No signing secret set; the debug APK will use an ephemeral key."
+          fi
+
       - name: Run unit tests and assemble debug APK
+        env:
+          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
         run: ./gradlew testDebugUnitTest assembleDebug --stacktrace
 
       - name: Verify APK declares no network permissions
@@ -56,11 +72,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.0-build.${{ github.run_number }}.${{ github.run_attempt }}
-          name: Friends build ${{ github.run_number }}
-          body: |
-            Automated offline debug build of Friends.
-
-            - Build: ${{ github.run_number }} (attempt ${{ github.run_attempt }})
-            - Commit: ${{ github.sha }}
-            - Message: ${{ github.event.head_commit.message }}
+          name: Build ${{ github.run_number }}
+          body: "Debug build ${{ github.run_number }}."
           files: app/build/outputs/apk/debug/app-debug.apk

@@ -16,6 +16,10 @@ interface PendingConfirmationDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(confirmation: PendingConfirmationEntity): Long
 
+    /** Inserts rows keeping their ids; used to restore a backup. */
+    @Insert
+    suspend fun insertAll(confirmations: List<PendingConfirmationEntity>)
+
     @Update
     suspend fun update(confirmation: PendingConfirmationEntity)
 
@@ -27,4 +31,7 @@ interface PendingConfirmationDao {
 
     @Query("SELECT EXISTS(SELECT 1 FROM pending_confirmations WHERE callDedupKey = :key)")
     suspend fun existsByCallDedupKey(key: String): Boolean
+
+    @Query("SELECT * FROM pending_confirmations")
+    suspend fun getAll(): List<PendingConfirmationEntity>
 }

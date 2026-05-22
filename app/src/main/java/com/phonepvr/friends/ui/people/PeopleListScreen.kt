@@ -38,6 +38,7 @@ fun PeopleListScreen(
     onAddPerson: () -> Unit,
     onOpenPerson: (Long) -> Unit,
     onImportContacts: () -> Unit,
+    onOpenBackup: () -> Unit,
     bottomBar: @Composable () -> Unit,
     viewModel: PeopleListViewModel = hiltViewModel(),
 ) {
@@ -50,6 +51,7 @@ fun PeopleListScreen(
                 title = { Text("Friends") },
                 actions = {
                     TextButton(onClick = onImportContacts) { Text("Import") }
+                    TextButton(onClick = onOpenBackup) { Text("Backup") }
                 },
             )
         },

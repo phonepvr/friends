@@ -13,6 +13,10 @@ interface TimelineDao {
     @Insert
     suspend fun insert(entry: TimelineEntryEntity): Long
 
+    /** Inserts rows keeping their ids; used to restore a backup. */
+    @Insert
+    suspend fun insertAll(entries: List<TimelineEntryEntity>)
+
     @Update
     suspend fun update(entry: TimelineEntryEntity)
 
@@ -21,6 +25,9 @@ interface TimelineDao {
 
     @Query("SELECT * FROM timeline_entries ORDER BY occurredAt DESC")
     fun observeAll(): Flow<List<TimelineEntryEntity>>
+
+    @Query("SELECT * FROM timeline_entries")
+    suspend fun getAll(): List<TimelineEntryEntity>
 
     @Query("SELECT * FROM timeline_entries WHERE personId = :personId ORDER BY occurredAt DESC")
     fun observeForPerson(personId: Long): Flow<List<TimelineEntryEntity>>

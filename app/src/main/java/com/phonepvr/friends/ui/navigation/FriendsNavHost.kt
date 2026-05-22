@@ -7,6 +7,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.phonepvr.friends.ui.backup.BackupScreen
 import com.phonepvr.friends.ui.calls.ConfirmationQueueScreen
 import com.phonepvr.friends.ui.contacts.ImportContactsScreen
 import com.phonepvr.friends.ui.people.AddEditPersonScreen
@@ -24,6 +25,7 @@ object Routes {
     const val PERSON_DETAIL = "person/detail/{personId}"
     const val LOG_INTERACTION = "interaction/log/{personId}"
     const val IMPORT_CONTACTS = "contacts/import"
+    const val BACKUP = "backup"
     const val PERSON_ID_ARG = "personId"
 
     fun editPerson(personId: Long): String = "person/edit/$personId"
@@ -48,6 +50,7 @@ fun FriendsNavHost(navController: NavHostController = rememberNavController()) {
                     navController.navigate(Routes.personDetail(personId))
                 },
                 onImportContacts = { navController.navigate(Routes.IMPORT_CONTACTS) },
+                onOpenBackup = { navController.navigate(Routes.BACKUP) },
                 bottomBar = { FriendsBottomBar(TopLevelTab.PEOPLE, onSelectTab) },
             )
         }
@@ -93,6 +96,9 @@ fun FriendsNavHost(navController: NavHostController = rememberNavController()) {
         }
         composable(Routes.IMPORT_CONTACTS) {
             ImportContactsScreen(onDone = { navController.popBackStack() })
+        }
+        composable(Routes.BACKUP) {
+            BackupScreen(onBack = { navController.popBackStack() })
         }
     }
 }

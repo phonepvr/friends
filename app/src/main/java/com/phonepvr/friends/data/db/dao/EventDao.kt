@@ -13,6 +13,10 @@ interface EventDao {
     @Insert
     suspend fun insert(event: EventEntity): Long
 
+    /** Inserts rows keeping their ids; used to restore a backup. */
+    @Insert
+    suspend fun insertAll(events: List<EventEntity>)
+
     @Update
     suspend fun update(event: EventEntity)
 
@@ -21,6 +25,9 @@ interface EventDao {
 
     @Query("SELECT * FROM events WHERE personId = :personId")
     suspend fun getForPerson(personId: Long): List<EventEntity>
+
+    @Query("SELECT * FROM events")
+    suspend fun getAll(): List<EventEntity>
 
     @Query("SELECT * FROM events")
     fun observeAll(): Flow<List<EventEntity>>

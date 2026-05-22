@@ -15,6 +15,10 @@ interface PersonDao {
     @Insert
     suspend fun insert(person: PersonEntity): Long
 
+    /** Inserts rows keeping their ids; used to restore a backup. */
+    @Insert
+    suspend fun insertAll(people: List<PersonEntity>)
+
     @Update
     suspend fun update(person: PersonEntity)
 
@@ -23,6 +27,9 @@ interface PersonDao {
 
     @Query("SELECT * FROM people WHERE id = :id")
     suspend fun getById(id: Long): PersonEntity?
+
+    @Query("SELECT * FROM people")
+    suspend fun getAll(): List<PersonEntity>
 
     @Query("SELECT * FROM people WHERE id = :id")
     fun observeById(id: Long): Flow<PersonEntity?>

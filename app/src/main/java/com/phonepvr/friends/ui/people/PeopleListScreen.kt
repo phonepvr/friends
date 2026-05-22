@@ -20,6 +20,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -36,13 +37,21 @@ import com.phonepvr.friends.data.db.relation.PersonWithDetails
 fun PeopleListScreen(
     onAddPerson: () -> Unit,
     onEditPerson: (Long) -> Unit,
+    onImportContacts: () -> Unit,
     viewModel: PeopleListViewModel = hiltViewModel(),
 ) {
     val people by viewModel.people.collectAsStateWithLifecycle()
     val query by viewModel.searchQuery.collectAsStateWithLifecycle()
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Friends") }) },
+        topBar = {
+            TopAppBar(
+                title = { Text("Friends") },
+                actions = {
+                    TextButton(onClick = onImportContacts) { Text("Import") }
+                },
+            )
+        },
         floatingActionButton = {
             FloatingActionButton(onClick = onAddPerson) {
                 Icon(Icons.Filled.Add, contentDescription = "Add person")

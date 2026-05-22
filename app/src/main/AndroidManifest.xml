@@ -13,6 +13,9 @@
         android:name="android.permission.ACCESS_NETWORK_STATE"
         tools:node="remove" />
 
+    <!-- Read-only access to contacts, used to import people. -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+
     <application
         android:name=".FriendsApplication"
         android:allowBackup="false"

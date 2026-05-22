@@ -3,9 +3,11 @@ package com.phonepvr.friends.ui.people
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.phonepvr.friends.data.db.entity.EventEntity
 import com.phonepvr.friends.data.db.entity.PersonEntity
 import com.phonepvr.friends.data.db.entity.PhoneNumberEntity
 import com.phonepvr.friends.data.repository.PeopleRepository
+import com.phonepvr.friends.domain.model.EventType
 import com.phonepvr.friends.ui.navigation.Routes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,12 +18,20 @@ import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
 
+data class DateFields(
+    val month: String = "",
+    val day: String = "",
+    val year: String = "",
+)
+
 data class PersonFormState(
     val displayName: String = "",
     val phoneNumbers: List<String> = listOf(""),
     val relationshipTag: String = "",
     val cadenceTargetDays: String = "",
     val notes: String = "",
+    val birthday: DateFields = DateFields(),
+    val anniversary: DateFields = DateFields(),
     val loading: Boolean = false,
 )
 
@@ -54,6 +64,12 @@ class AddEditPersonViewModel @Inject constructor(
                         relationshipTag = details.person.relationshipTag.orEmpty(),
                         cadenceTargetDays = details.person.cadenceTargetDays?.toString().orEmpty(),
                         notes = details.person.notes.orEmpty(),
+                        birthday = details.events
+                            .firstOrNull { it.type == EventType.BIRTHDAY }
+                            ?.toDateFields() ?: DateFields(),
+                        anniversary = details.events
+                            .firstOrNull { it.type == EventType.WEDDING_ANNIVERSARY }
+                            ?.toDateFields() ?: DateFields(),
                         loading = false,
                     )
                 } else {
@@ -97,10 +113,16 @@ class AddEditPersonViewModel @Inject constructor(
         val updated = _form.value.phoneNumbers.toMutableList()
         if (index in updated.indices) {
             updated.removeAt(index)
-            _form.value = _form.value.copy(
-                phoneNumbers = updated.ifEmpty { listOf("") },
-            )
+            _form.value = _form.value.copy(phoneNumbers = updated.ifEmpty { listOf("") })
         }
+    }
+
+    fun updateBirthday(transform: (DateFields) -> DateFields) {
+        _form.value = _form.value.copy(birthday = transform(_form.value.birthday))
+    }
+
+    fun updateAnniversary(transform: (DateFields) -> DateFields) {
+        _form.value = _form.value.copy(anniversary = transform(_form.value.anniversary))
     }
 
     fun save(onSaved: () -> Unit) {
@@ -118,6 +140,10 @@ class AddEditPersonViewModel @Inject constructor(
                         normalizedNumber = raw.filter { ch -> ch.isDigit() },
                     )
                 }
+            val events = listOfNotNull(
+                state.birthday.toEvent(EventType.BIRTHDAY),
+                state.anniversary.toEvent(EventType.WEDDING_ANNIVERSARY),
+            )
             val cadence = state.cadenceTargetDays.toIntOrNull()?.takeIf { it > 0 }
             val existing = loadedPerson
             if (existing == null) {
@@ -132,6 +158,7 @@ class AddEditPersonViewModel @Inject constructor(
                         updatedAt = now,
                     ),
                     phoneNumbers = phones,
+                    events = events,
                 )
             } else {
                 repository.updatePerson(
@@ -143,6 +170,7 @@ class AddEditPersonViewModel @Inject constructor(
                         updatedAt = now,
                     ),
                     phoneNumbers = phones,
+                    events = events,
                 )
             }
             onSaved()
@@ -156,4 +184,23 @@ class AddEditPersonViewModel @Inject constructor(
             onDeleted()
         }
     }
+}
+
+private fun EventEntity.toDateFields(): DateFields = DateFields(
+    month = month.toString(),
+    day = day.toString(),
+    year = year?.toString().orEmpty(),
+)
+
+private fun DateFields.toEvent(type: EventType): EventEntity? {
+    val parsedMonth = month.toIntOrNull() ?: return null
+    val parsedDay = day.toIntOrNull() ?: return null
+    if (parsedMonth !in 1..12 || parsedDay !in 1..31) return null
+    return EventEntity(
+        personId = 0,
+        type = type,
+        month = parsedMonth,
+        day = parsedDay,
+        year = year.toIntOrNull(),
+    )
 }

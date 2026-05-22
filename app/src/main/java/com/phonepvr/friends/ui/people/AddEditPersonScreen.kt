@@ -112,6 +112,17 @@ fun AddEditPersonScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
 
+            DateEntry(
+                label = "Birthday (year optional)",
+                value = form.birthday,
+                onChange = viewModel::updateBirthday,
+            )
+            DateEntry(
+                label = "Wedding anniversary (year optional)",
+                value = form.anniversary,
+                onChange = viewModel::updateAnniversary,
+            )
+
             OutlinedTextField(
                 value = form.notes,
                 onValueChange = viewModel::onNotesChange,
@@ -128,6 +139,49 @@ fun AddEditPersonScreen(
                     Text("Delete person")
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun DateEntry(
+    label: String,
+    value: DateFields,
+    onChange: ((DateFields) -> DateFields) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label, style = MaterialTheme.typography.titleSmall)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                value = value.month,
+                onValueChange = { input ->
+                    onChange { it.copy(month = input.filter { c -> c.isDigit() }.take(2)) }
+                },
+                label = { Text("Month") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.weight(1f),
+            )
+            OutlinedTextField(
+                value = value.day,
+                onValueChange = { input ->
+                    onChange { it.copy(day = input.filter { c -> c.isDigit() }.take(2)) }
+                },
+                label = { Text("Day") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.weight(1f),
+            )
+            OutlinedTextField(
+                value = value.year,
+                onValueChange = { input ->
+                    onChange { it.copy(year = input.filter { c -> c.isDigit() }.take(4)) }
+                },
+                label = { Text("Year") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.weight(1.4f),
+            )
         }
     }
 }

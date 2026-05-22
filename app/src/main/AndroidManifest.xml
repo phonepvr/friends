@@ -19,6 +19,9 @@
     <!-- Read-only access to the call log, used to detect recent calls. -->
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
 
+    <!-- Post reminder notifications (runtime permission on Android 13+). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <application
         android:name=".FriendsApplication"
         android:allowBackup="false"

@@ -30,7 +30,7 @@ class CallLogRepository @Inject constructor(
      * already seen. Re-scanning is safe: the unique call dedup key means
      * already-queued, confirmed, or dismissed calls are ignored.
      */
-    suspend fun scanRecentCalls(windowDays: Int = 30) {
+    suspend fun scanRecentCalls(windowDays: Int = 120) {
         val sinceMillis =
             System.currentTimeMillis() - windowDays.toLong() * 24L * 60L * 60L * 1000L
         val calls = callLogReader.recentCalls(sinceMillis)

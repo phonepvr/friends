@@ -38,6 +38,7 @@ fun PeopleListScreen(
     onAddPerson: () -> Unit,
     onOpenPerson: (Long) -> Unit,
     onImportContacts: () -> Unit,
+    bottomBar: @Composable () -> Unit,
     viewModel: PeopleListViewModel = hiltViewModel(),
 ) {
     val people by viewModel.people.collectAsStateWithLifecycle()
@@ -52,6 +53,7 @@ fun PeopleListScreen(
                 },
             )
         },
+        bottomBar = bottomBar,
         floatingActionButton = {
             FloatingActionButton(onClick = onAddPerson) {
                 Icon(Icons.Filled.Add, contentDescription = "Add person")

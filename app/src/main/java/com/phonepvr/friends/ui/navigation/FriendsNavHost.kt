@@ -12,9 +12,11 @@ import com.phonepvr.friends.ui.people.AddEditPersonScreen
 import com.phonepvr.friends.ui.people.PeopleListScreen
 import com.phonepvr.friends.ui.person.PersonDetailScreen
 import com.phonepvr.friends.ui.timeline.LogInteractionScreen
+import com.phonepvr.friends.ui.timeline.TimelineScreen
 
 object Routes {
     const val PEOPLE_LIST = "people"
+    const val TIMELINE = "timeline"
     const val ADD_PERSON = "person/add"
     const val EDIT_PERSON = "person/edit/{personId}"
     const val PERSON_DETAIL = "person/detail/{personId}"
@@ -29,6 +31,13 @@ object Routes {
 
 @Composable
 fun FriendsNavHost(navController: NavHostController = rememberNavController()) {
+    val onSelectTab: (TopLevelTab) -> Unit = { tab ->
+        navController.navigate(tab.route) {
+            popUpTo(navController.graph.startDestinationId) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
     NavHost(navController = navController, startDestination = Routes.PEOPLE_LIST) {
         composable(Routes.PEOPLE_LIST) {
             PeopleListScreen(
@@ -37,6 +46,15 @@ fun FriendsNavHost(navController: NavHostController = rememberNavController()) {
                     navController.navigate(Routes.personDetail(personId))
                 },
                 onImportContacts = { navController.navigate(Routes.IMPORT_CONTACTS) },
+                bottomBar = { FriendsBottomBar(TopLevelTab.PEOPLE, onSelectTab) },
+            )
+        }
+        composable(Routes.TIMELINE) {
+            TimelineScreen(
+                onOpenPerson = { personId ->
+                    navController.navigate(Routes.personDetail(personId))
+                },
+                bottomBar = { FriendsBottomBar(TopLevelTab.TIMELINE, onSelectTab) },
             )
         }
         composable(Routes.ADD_PERSON) {

@@ -7,6 +7,7 @@ import com.phonepvr.friends.data.db.entity.EventEntity
 import com.phonepvr.friends.data.db.entity.PersonEntity
 import com.phonepvr.friends.data.db.entity.PhoneNumberEntity
 import com.phonepvr.friends.data.repository.PeopleRepository
+import com.phonepvr.friends.data.settings.SettingsRepository
 import com.phonepvr.friends.domain.model.EventType
 import com.phonepvr.friends.ui.navigation.Routes
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -38,6 +39,7 @@ data class PersonFormState(
 @HiltViewModel
 class AddEditPersonViewModel @Inject constructor(
     private val repository: PeopleRepository,
+    settingsRepository: SettingsRepository,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -74,6 +76,16 @@ class AddEditPersonViewModel @Inject constructor(
                     )
                 } else {
                     _form.value = _form.value.copy(loading = false)
+                }
+            }
+        } else {
+            // Pre-fill the cadence for a new person from the configured default.
+            viewModelScope.launch {
+                val defaultCadence = settingsRepository.settings.first().defaultCadenceDays
+                if (_form.value.cadenceTargetDays.isEmpty()) {
+                    _form.value = _form.value.copy(
+                        cadenceTargetDays = defaultCadence.toString(),
+                    )
                 }
             }
         }

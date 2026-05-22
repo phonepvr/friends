@@ -1,6 +1,7 @@
 package com.phonepvr.friends.work
 
 import android.content.Context
+import androidx.glance.appwidget.updateAll
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
@@ -8,13 +9,13 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.phonepvr.friends.data.db.dao.TimelineDao
 import com.phonepvr.friends.data.repository.PeopleRepository
+import com.phonepvr.friends.data.settings.SettingsRepository
 import com.phonepvr.friends.domain.cadence.CadenceCalculator
 import com.phonepvr.friends.domain.cadence.CadenceState
 import com.phonepvr.friends.domain.model.AnnualDate
 import com.phonepvr.friends.domain.model.EventType
 import com.phonepvr.friends.notification.ReminderNotifier
 import com.phonepvr.friends.widget.UpcomingWidget
-import androidx.glance.appwidget.updateAll
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
@@ -28,14 +29,13 @@ import java.time.ZonedDateTime
 import java.util.concurrent.TimeUnit
 
 private const val UNIQUE_WORK_NAME = "friends-daily-reminders"
-private const val LEAD_DAYS = 7L
-private const val NOTIFICATION_HOUR = 9
 
 @EntryPoint
 @InstallIn(SingletonComponent::class)
 interface ReminderWorkerEntryPoint {
     fun peopleRepository(): PeopleRepository
     fun timelineDao(): TimelineDao
+    fun settingsRepository(): SettingsRepository
 }
 
 /**
@@ -52,6 +52,8 @@ class ReminderWorker(
             applicationContext,
             ReminderWorkerEntryPoint::class.java,
         )
+        val leadDays = deps.settingsRepository().settings.first()
+            .notificationLeadDays.toLong()
         val people = deps.peopleRepository().observeActiveWithDetails().first()
         val timelineDao = deps.timelineDao()
         val today = LocalDate.now()
@@ -61,7 +63,7 @@ class ReminderWorker(
             personWithDetails.events.forEach { event ->
                 val days = AnnualDate(event.month, event.day, event.year)
                     .daysUntilNextOccurrence(today)
-                if (days in 0..LEAD_DAYS) {
+                if (days in 0..leadDays) {
                     lines.add(upcomingLine(personWithDetails.person.displayName, event.type, days))
                 }
             }
@@ -104,21 +106,34 @@ private fun upcomingLine(name: String, type: EventType, days: Long): String {
     return "$name's $occasion is $whenText"
 }
 
-/** Schedules the daily reminder job once; safe to call on every app start. */
-fun scheduleReminderWork(context: Context) {
+/** Schedules the daily reminder job, keeping any existing schedule. */
+fun scheduleReminderWork(context: Context, hour: Int) {
+    enqueueReminderWork(context, hour, ExistingPeriodicWorkPolicy.KEEP)
+}
+
+/** Re-enqueues the daily reminder job so a changed notification hour applies. */
+fun rescheduleReminderWork(context: Context, hour: Int) {
+    enqueueReminderWork(context, hour, ExistingPeriodicWorkPolicy.UPDATE)
+}
+
+private fun enqueueReminderWork(
+    context: Context,
+    hour: Int,
+    policy: ExistingPeriodicWorkPolicy,
+) {
     val request = PeriodicWorkRequestBuilder<ReminderWorker>(1, TimeUnit.DAYS)
-        .setInitialDelay(initialDelayMillis(), TimeUnit.MILLISECONDS)
+        .setInitialDelay(initialDelayMillis(hour), TimeUnit.MILLISECONDS)
         .build()
     WorkManager.getInstance(context).enqueueUniquePeriodicWork(
         UNIQUE_WORK_NAME,
-        ExistingPeriodicWorkPolicy.KEEP,
+        policy,
         request,
     )
 }
 
-private fun initialDelayMillis(): Long {
+private fun initialDelayMillis(hour: Int): Long {
     val now = ZonedDateTime.now()
-    var next = now.withHour(NOTIFICATION_HOUR).withMinute(0).withSecond(0).withNano(0)
+    var next = now.withHour(hour).withMinute(0).withSecond(0).withNano(0)
     if (!next.isAfter(now)) {
         next = next.plusDays(1)
     }

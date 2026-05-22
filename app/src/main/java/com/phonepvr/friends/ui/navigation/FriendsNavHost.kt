@@ -13,6 +13,7 @@ import com.phonepvr.friends.ui.contacts.ImportContactsScreen
 import com.phonepvr.friends.ui.people.AddEditPersonScreen
 import com.phonepvr.friends.ui.people.PeopleListScreen
 import com.phonepvr.friends.ui.person.PersonDetailScreen
+import com.phonepvr.friends.ui.settings.SettingsScreen
 import com.phonepvr.friends.ui.timeline.LogInteractionScreen
 import com.phonepvr.friends.ui.timeline.TimelineScreen
 
@@ -26,6 +27,7 @@ object Routes {
     const val LOG_INTERACTION = "interaction/log/{personId}"
     const val IMPORT_CONTACTS = "contacts/import"
     const val BACKUP = "backup"
+    const val SETTINGS = "settings"
     const val PERSON_ID_ARG = "personId"
 
     fun editPerson(personId: Long): String = "person/edit/$personId"
@@ -50,7 +52,7 @@ fun FriendsNavHost(navController: NavHostController = rememberNavController()) {
                     navController.navigate(Routes.personDetail(personId))
                 },
                 onImportContacts = { navController.navigate(Routes.IMPORT_CONTACTS) },
-                onOpenBackup = { navController.navigate(Routes.BACKUP) },
+                onOpenSettings = { navController.navigate(Routes.SETTINGS) },
                 bottomBar = { FriendsBottomBar(TopLevelTab.PEOPLE, onSelectTab) },
             )
         }
@@ -96,6 +98,12 @@ fun FriendsNavHost(navController: NavHostController = rememberNavController()) {
         }
         composable(Routes.IMPORT_CONTACTS) {
             ImportContactsScreen(onDone = { navController.popBackStack() })
+        }
+        composable(Routes.SETTINGS) {
+            SettingsScreen(
+                onBack = { navController.popBackStack() },
+                onOpenBackup = { navController.navigate(Routes.BACKUP) },
+            )
         }
         composable(Routes.BACKUP) {
             BackupScreen(onBack = { navController.popBackStack() })

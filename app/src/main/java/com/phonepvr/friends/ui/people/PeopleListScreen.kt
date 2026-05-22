@@ -12,10 +12,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -38,7 +40,7 @@ fun PeopleListScreen(
     onAddPerson: () -> Unit,
     onOpenPerson: (Long) -> Unit,
     onImportContacts: () -> Unit,
-    onOpenBackup: () -> Unit,
+    onOpenSettings: () -> Unit,
     bottomBar: @Composable () -> Unit,
     viewModel: PeopleListViewModel = hiltViewModel(),
 ) {
@@ -51,7 +53,9 @@ fun PeopleListScreen(
                 title = { Text("Friends") },
                 actions = {
                     TextButton(onClick = onImportContacts) { Text("Import") }
-                    TextButton(onClick = onOpenBackup) { Text("Backup") }
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(Icons.Filled.Settings, contentDescription = "Settings")
+                    }
                 },
             )
         },

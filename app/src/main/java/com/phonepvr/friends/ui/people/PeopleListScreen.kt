@@ -36,7 +36,7 @@ import com.phonepvr.friends.data.db.relation.PersonWithDetails
 @Composable
 fun PeopleListScreen(
     onAddPerson: () -> Unit,
-    onEditPerson: (Long) -> Unit,
+    onOpenPerson: (Long) -> Unit,
     onImportContacts: () -> Unit,
     viewModel: PeopleListViewModel = hiltViewModel(),
 ) {
@@ -82,7 +82,7 @@ fun PeopleListScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     items(people, key = { it.person.id }) { item ->
-                        PersonRow(item = item, onClick = { onEditPerson(item.person.id) })
+                        PersonRow(item = item, onClick = { onOpenPerson(item.person.id) })
                     }
                 }
             }

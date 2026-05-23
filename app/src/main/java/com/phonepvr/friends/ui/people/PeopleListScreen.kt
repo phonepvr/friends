@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ElevatedCard
@@ -112,7 +113,7 @@ fun PeopleListScreen(
             ) {
                 todayQuote?.let { quote ->
                     item(span = { GridItemSpan(maxLineSpan) }) {
-                        QuoteCard(quote)
+                        QuoteCard(quote = quote, onShuffle = viewModel::shuffleQuote)
                     }
                 }
                 if (Tooltips.WIDGET !in dismissedTooltips) {
@@ -144,19 +145,28 @@ fun PeopleListScreen(
 }
 
 @Composable
-private fun QuoteCard(quote: Quote) {
+private fun QuoteCard(quote: Quote, onShuffle: () -> Unit) {
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = quote.text,
-                style = MaterialTheme.typography.bodyLarge,
-            )
-            quote.attribution?.let { attribution ->
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = "— $attribution",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+        Row(
+            modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = quote.text, style = MaterialTheme.typography.bodyLarge)
+                quote.attribution?.let { attribution ->
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = "— $attribution",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            IconButton(onClick = onShuffle) {
+                Icon(
+                    imageVector = Icons.Filled.Refresh,
+                    contentDescription = "Shuffle quote",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }

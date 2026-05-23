@@ -58,12 +58,22 @@ class QuoteRepository @Inject constructor(
     /**
      * Today's quote. Returns the cached pick if it was made today, otherwise
      * draws a fresh one from the merged pool, persists it, and returns it.
+     *
+     * Pass [ignoreCache] = true to force a re-pick even when today's cache
+     * still exists — used by the in-app "shuffle" button on the People list.
+     * The cache is updated either way so the app and the widget agree.
      */
-    suspend fun quoteOfTheDay(today: LocalDate = LocalDate.now()): Quote {
+    suspend fun quoteOfTheDay(
+        today: LocalDate = LocalDate.now(),
+        ignoreCache: Boolean = false,
+    ): Quote {
         val isoToday = today.toString()
         val settings = settingsRepository.settings.first()
         val cachedLine = settings.lastQuoteText
-        if (settings.lastQuoteDate == isoToday && cachedLine.isNotBlank()) {
+        if (!ignoreCache &&
+            settings.lastQuoteDate == isoToday &&
+            cachedLine.isNotBlank()
+        ) {
             return parseLine(cachedLine)
         }
         val pool: List<String> = buildList {
@@ -71,8 +81,9 @@ class QuoteRepository @Inject constructor(
             addAll(settings.userQuotes)
         }
         if (pool.isEmpty()) return Quote("Stay in touch.", null) // safety net
-        // Exclude yesterday's pick so a fresh day reads fresh. Falls back to
-        // the full pool when only one quote exists.
+        // Exclude the previously cached pick so two consecutive renders never
+        // match — including the shuffle-button case, which excludes whatever
+        // was just shown.
         val candidates = if (pool.size > 1 && cachedLine.isNotBlank()) {
             pool.filter { it != cachedLine }
         } else {

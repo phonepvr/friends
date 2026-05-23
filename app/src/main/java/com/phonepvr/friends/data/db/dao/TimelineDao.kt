@@ -23,6 +23,9 @@ interface TimelineDao {
     @Delete
     suspend fun delete(entry: TimelineEntryEntity)
 
+    @Query("DELETE FROM timeline_entries WHERE id IN (:ids)")
+    suspend fun deleteByIds(ids: List<Long>)
+
     @Query("SELECT * FROM timeline_entries ORDER BY occurredAt DESC")
     fun observeAll(): Flow<List<TimelineEntryEntity>>
 

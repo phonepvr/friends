@@ -20,4 +20,9 @@ class TimelineRepository @Inject constructor(
     suspend fun deleteEntry(entry: TimelineEntryEntity) {
         timelineDao.delete(entry)
     }
+
+    suspend fun deleteByIds(ids: Collection<Long>) {
+        if (ids.isEmpty()) return
+        timelineDao.deleteByIds(ids.toList())
+    }
 }

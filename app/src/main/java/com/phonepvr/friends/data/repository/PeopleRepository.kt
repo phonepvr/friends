@@ -59,4 +59,9 @@ class PeopleRepository @Inject constructor(
     suspend fun setCadenceTargetDays(personId: Long, days: Int?) {
         personDao.setCadenceTargetDays(personId, days, System.currentTimeMillis())
     }
+
+    /** Used by the inline "Add birthday / anniversary" prompt on Person Detail. */
+    suspend fun addEvent(event: EventEntity) {
+        eventDao.insert(event.copy(id = 0))
+    }
 }

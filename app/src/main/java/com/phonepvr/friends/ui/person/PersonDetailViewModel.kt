@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.phonepvr.friends.data.db.entity.EventEntity
 import com.phonepvr.friends.data.db.entity.TimelineEntryEntity
 import com.phonepvr.friends.data.db.relation.PersonWithDetails
 import com.phonepvr.friends.data.reachout.ReachOutLauncher
@@ -17,6 +18,7 @@ import com.phonepvr.friends.domain.cadence.CadenceState
 import com.phonepvr.friends.domain.cadence.CadenceStatus
 import com.phonepvr.friends.domain.model.CallType
 import com.phonepvr.friends.domain.model.EntrySource
+import com.phonepvr.friends.domain.model.EventType
 import com.phonepvr.friends.domain.model.InteractionType
 import com.phonepvr.friends.ui.navigation.Routes
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -40,7 +42,7 @@ data class InteractionSummary(
     val totalCallSeconds: Long,
 )
 
-private const val SUMMARY_WINDOW_DAYS = 120L
+private const val SUMMARY_WINDOW_DAYS = 365L
 private const val SUMMARY_WINDOW_MILLIS = SUMMARY_WINDOW_DAYS * 24L * 60L * 60L * 1000L
 
 /** State for the per-profile call-log scan section. */
@@ -254,6 +256,54 @@ class PersonDetailViewModel @Inject constructor(
             insertCallCandidate(candidate)
             _callScan.value = CallScanState.Ready(
                 current.candidates.filter { it.callDedupKey != candidate.callDedupKey },
+            )
+        }
+    }
+
+    private val _selectedTimelineIds = MutableStateFlow<Set<Long>>(emptySet())
+    /** Ids of timeline entries the user has marked for bulk delete. */
+    val selectedTimelineIds: StateFlow<Set<Long>> = _selectedTimelineIds.asStateFlow()
+
+    /** Toggle a row in/out of the bulk-delete selection. Long-press enters the
+     *  selection mode by adding the first id; subsequent taps in the same mode
+     *  toggle additions and removals. */
+    fun toggleTimelineSelection(id: Long) {
+        val current = _selectedTimelineIds.value
+        _selectedTimelineIds.value = if (id in current) current - id else current + id
+    }
+
+    fun clearTimelineSelection() {
+        _selectedTimelineIds.value = emptySet()
+    }
+
+    fun deleteSelectedTimeline() {
+        val ids = _selectedTimelineIds.value
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            timelineRepository.deleteByIds(ids)
+            _selectedTimelineIds.value = emptySet()
+        }
+    }
+
+    private val _addEventSheet = MutableStateFlow<EventType?>(null)
+    /** Non-null when the inline "Add birthday / anniversary" sheet is showing. */
+    val addEventSheet: StateFlow<EventType?> = _addEventSheet.asStateFlow()
+
+    fun openAddEventSheet(type: EventType) { _addEventSheet.value = type }
+    fun dismissAddEventSheet() { _addEventSheet.value = null }
+
+    /** Inserts a new EventEntity for [type] and closes the sheet. */
+    fun addEvent(type: EventType, day: Int, month: Int, year: Int?) {
+        _addEventSheet.value = null
+        viewModelScope.launch {
+            peopleRepository.addEvent(
+                EventEntity(
+                    personId = personId,
+                    type = type,
+                    month = month,
+                    day = day,
+                    year = year,
+                ),
             )
         }
     }

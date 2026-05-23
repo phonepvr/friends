@@ -53,6 +53,9 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.ui.graphics.Color
 import com.phonepvr.friends.data.db.entity.EventEntity
 import com.phonepvr.friends.data.db.entity.PhoneNumberEntity
 import com.phonepvr.friends.data.db.entity.TimelineEntryEntity
@@ -66,8 +69,18 @@ import com.phonepvr.friends.domain.model.AnnualDate
 import com.phonepvr.friends.domain.model.CallType
 import com.phonepvr.friends.domain.model.EventType
 import com.phonepvr.friends.domain.model.InteractionType
+import com.phonepvr.friends.ui.common.DateTextField
 import com.phonepvr.friends.ui.common.formatDuration
 import com.phonepvr.friends.ui.common.formatTimestamp
+import com.phonepvr.friends.ui.common.parseDateDigits
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.material3.Checkbox
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import java.time.LocalDate
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -87,9 +100,13 @@ fun PersonDetailScreen(
     val pendingLogPrompt by viewModel.pendingLogPrompt.collectAsStateWithLifecycle()
     val cadenceSheetOpen by viewModel.cadenceSheetOpen.collectAsStateWithLifecycle()
     val callScan by viewModel.callScan.collectAsStateWithLifecycle()
+    val selectedTimelineIds by viewModel.selectedTimelineIds.collectAsStateWithLifecycle()
+    val addEventSheet by viewModel.addEventSheet.collectAsStateWithLifecycle()
     val today = remember { LocalDate.now() }
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
+    val isSelectionMode = selectedTimelineIds.isNotEmpty()
+    BackHandler(enabled = isSelectionMode) { viewModel.clearTimelineSelection() }
 
     val callLogPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -124,17 +141,33 @@ fun PersonDetailScreen(
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            TopAppBar(
-                title = { Text(person?.person?.displayName ?: "") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    TextButton(onClick = { onEdit(viewModel.personId) }) { Text("Edit") }
-                },
-            )
+            if (isSelectionMode) {
+                TopAppBar(
+                    title = { Text("${selectedTimelineIds.size} selected") },
+                    navigationIcon = {
+                        IconButton(onClick = viewModel::clearTimelineSelection) {
+                            Icon(Icons.Filled.Close, contentDescription = "Clear selection")
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = viewModel::deleteSelectedTimeline) {
+                            Icon(Icons.Filled.Delete, contentDescription = "Delete selected")
+                        }
+                    },
+                )
+            } else {
+                TopAppBar(
+                    title = { Text(person?.person?.displayName ?: "") },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        }
+                    },
+                    actions = {
+                        TextButton(onClick = { onEdit(viewModel.personId) }) { Text("Edit") }
+                    },
+                )
+            }
         },
         floatingActionButton = {
             ExtendedFloatingActionButton(
@@ -195,6 +228,7 @@ fun PersonDetailScreen(
                         person = current,
                         today = today,
                         onMarkWished = viewModel::markAsWished,
+                        onAddEvent = viewModel::openAddEventSheet,
                     )
                 }
                 item { Text("History", style = MaterialTheme.typography.titleMedium) }
@@ -207,7 +241,14 @@ fun PersonDetailScreen(
                         )
                     }
                 } else {
-                    items(timeline, key = { it.id }) { entry -> TimelineRow(entry) }
+                    items(timeline, key = { it.id }) { entry ->
+                        TimelineRow(
+                            entry = entry,
+                            isSelectionMode = isSelectionMode,
+                            isSelected = entry.id in selectedTimelineIds,
+                            onToggleSelect = { viewModel.toggleTimelineSelection(entry.id) },
+                        )
+                    }
                 }
             }
         }
@@ -229,6 +270,14 @@ fun PersonDetailScreen(
             current = person?.person?.cadenceTargetDays,
             onSelect = viewModel::setCadenceTargetDays,
             onDismiss = viewModel::dismissCadenceSheet,
+        )
+    }
+
+    addEventSheet?.let { type ->
+        AddEventSheet(
+            type = type,
+            onSave = { day, month, year -> viewModel.addEvent(type, day, month, year) },
+            onDismiss = viewModel::dismissAddEventSheet,
         )
     }
 }
@@ -460,7 +509,7 @@ private fun SummaryCard(summary: InteractionSummary) {
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                text = "Last 120 days",
+                text = "Last 365 days",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -516,12 +565,71 @@ private fun CadenceSheet(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AddEventSheet(
+    type: EventType,
+    onSave: (day: Int, month: Int, year: Int?) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var digits by remember { mutableStateOf("") }
+    val parsed = parseDateDigits(digits)
+    val isCompleteAttempt = digits.length == 4 || digits.length == 8
+    val isError = isCompleteAttempt && parsed == null
+    val supporting = when {
+        digits.isEmpty() -> "DD/MM/YYYY — leave year blank if unknown"
+        digits.length == 4 && parsed != null -> "Year unknown"
+        digits.length == 4 -> "Invalid date"
+        digits.length == 8 && parsed == null -> "Invalid date"
+        digits.length in 5..7 -> "Keep typing or shorten to skip the year"
+        else -> null
+    }
+    val title = when (type) {
+        EventType.BIRTHDAY -> "Add birthday"
+        EventType.WEDDING_ANNIVERSARY -> "Add anniversary"
+        EventType.CUSTOM -> "Add date"
+    }
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            DateTextField(
+                digits = digits,
+                onDigitsChange = { digits = it },
+                label = "Date",
+                allowYearOptional = true,
+                isError = isError,
+                supportingText = supporting,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f),
+                ) { Text("Cancel") }
+                Button(
+                    onClick = { parsed?.let { onSave(it.day, it.month, it.year) } },
+                    enabled = parsed != null,
+                    modifier = Modifier.weight(1f),
+                ) { Text("Save") }
+            }
+        }
+    }
+}
 
 @Composable
 private fun InfoSection(
     person: PersonWithDetails,
     today: LocalDate,
     onMarkWished: (String) -> Unit,
+    onAddEvent: (EventType) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         person.person.relationshipTag
@@ -537,12 +645,44 @@ private fun InfoSection(
                 onMarkWished = { onMarkWished(eventLabel(event.type).lowercase()) },
             )
         }
+        val hasBirthday = person.events.any { it.type == EventType.BIRTHDAY }
+        val hasAnniversary = person.events.any { it.type == EventType.WEDDING_ANNIVERSARY }
+        if (!hasBirthday) {
+            AddEventPrompt(
+                label = "No birthday yet — add one?",
+                onClick = { onAddEvent(EventType.BIRTHDAY) },
+            )
+        }
+        if (!hasAnniversary) {
+            AddEventPrompt(
+                label = "No anniversary yet — add one?",
+                onClick = { onAddEvent(EventType.WEDDING_ANNIVERSARY) },
+            )
+        }
         person.person.cadenceTargetDays?.let {
             InfoRow("Stay in touch", "every $it days")
         }
         person.person.notes
             ?.takeIf { it.isNotBlank() }
             ?.let { InfoRow("Notes", it) }
+    }
+}
+
+@Composable
+private fun AddEventPrompt(label: String, onClick: () -> Unit) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = MaterialTheme.shapes.medium,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
@@ -588,24 +728,79 @@ private fun InfoRow(label: String, value: String) {
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun TimelineRow(entry: TimelineEntryEntity) {
-    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Text(
-                text = "${entryHeadline(entry)} · ${formatTimestamp(entry.occurredAt)}",
-                style = MaterialTheme.typography.titleSmall,
+private fun TimelineRow(
+    entry: TimelineEntryEntity,
+    isSelectionMode: Boolean,
+    isSelected: Boolean,
+    onToggleSelect: () -> Unit,
+) {
+    val accent = entryAccentColor(entry)
+    val cardColors = if (isSelected) {
+        androidx.compose.material3.CardDefaults.elevatedCardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+        )
+    } else {
+        androidx.compose.material3.CardDefaults.elevatedCardColors()
+    }
+    ElevatedCard(
+        colors = cardColors,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(IntrinsicSize.Min)
+            .combinedClickable(
+                onClick = { if (isSelectionMode) onToggleSelect() },
+                onLongClick = onToggleSelect,
+            ),
+    ) {
+        Row(modifier = Modifier.fillMaxWidth()) {
+            // 4dp leading bar tints each row by interaction type / call
+            // direction so a scroll glance reveals the shape of someone's
+            // history without reading every line.
+            Box(
+                modifier = Modifier
+                    .width(4.dp)
+                    .fillMaxHeight()
+                    .background(accent),
             )
-            val note = entry.note
-            if (!note.isNullOrBlank()) {
-                Text(
-                    text = note,
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(top = 4.dp),
+            if (isSelectionMode) {
+                Checkbox(
+                    checked = isSelected,
+                    onCheckedChange = { onToggleSelect() },
+                    modifier = Modifier.padding(start = 4.dp),
                 )
+            }
+            Column(modifier = Modifier.padding(12.dp).weight(1f)) {
+                Text(
+                    text = "${entryHeadline(entry)} · ${formatTimestamp(entry.occurredAt)}",
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                val note = entry.note
+                if (!note.isNullOrBlank()) {
+                    Text(
+                        text = note,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
             }
         }
     }
+}
+
+@Composable
+private fun entryAccentColor(entry: TimelineEntryEntity): Color = when (entry.type) {
+    InteractionType.CALL -> when (entry.callDirection) {
+        CallType.INCOMING -> MaterialTheme.colorScheme.primary
+        CallType.OUTGOING -> MaterialTheme.colorScheme.tertiary
+        CallType.MISSED -> MaterialTheme.colorScheme.error
+        CallType.REJECTED -> MaterialTheme.colorScheme.outline
+        null -> MaterialTheme.colorScheme.primary
+    }
+    InteractionType.MEET -> MaterialTheme.colorScheme.secondary
+    InteractionType.MESSAGE -> MaterialTheme.colorScheme.tertiary
+    InteractionType.OTHER -> MaterialTheme.colorScheme.outlineVariant
 }
 
 private fun entryHeadline(entry: TimelineEntryEntity): String {

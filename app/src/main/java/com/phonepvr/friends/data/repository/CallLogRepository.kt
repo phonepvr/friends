@@ -34,7 +34,7 @@ class CallLogRepository @Inject constructor(
      * top. Returns empty when the person has no phones, when no calls
      * matched, or when every match is already in the timeline.
      */
-    suspend fun scanForPerson(personId: Long, windowDays: Int = 120): List<PersonCallCandidate> {
+    suspend fun scanForPerson(personId: Long, windowDays: Int = 365): List<PersonCallCandidate> {
         val phones = phoneNumberDao.getForPerson(personId)
         if (phones.isEmpty()) return emptyList()
         val sinceMillis =

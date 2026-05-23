@@ -146,7 +146,7 @@ private fun ConfirmationCard(
             )
             Text(
                 text = if (item.candidates.size == 1) {
-                    "with ${item.candidates.first().name}"
+                    "with ${candidateLabel(item.candidates.first())}"
                 } else {
                     "Matches multiple people:"
                 },
@@ -161,7 +161,7 @@ private fun ConfirmationCard(
                         if (item.candidates.size == 1) {
                             "Log it"
                         } else {
-                            "Log as ${candidate.name}"
+                            "Log as ${candidateLabel(candidate)}"
                         },
                     )
                 }
@@ -206,6 +206,13 @@ private fun callTypeLabel(type: CallType): String = when (type) {
     CallType.MISSED -> "Missed call"
     CallType.REJECTED -> "Rejected call"
 }
+
+private fun candidateLabel(candidate: PersonRef): String =
+    if (candidate.matchedPhoneLabel.isNullOrBlank()) {
+        candidate.name
+    } else {
+        "${candidate.name} — ${candidate.matchedPhoneLabel}"
+    }
 
 private fun formatTimestamp(epochMillis: Long): String {
     val date = Instant.ofEpochMilli(epochMillis).atZone(ZoneId.systemDefault()).toLocalDate()

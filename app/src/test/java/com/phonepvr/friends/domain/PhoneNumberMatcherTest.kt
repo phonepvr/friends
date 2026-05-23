@@ -36,6 +36,13 @@ class PhoneNumberMatcherTest {
     }
 
     @Test
+    fun matches_plus91FormatAgainstZeroPrefix() {
+        // India: international "+91 98765 43210" and local "09876543210"
+        // share the same trailing 7 digits and so survive the prefilter.
+        assertTrue(PhoneNumberMatcher.matches("+91 98765 43210", "09876543210"))
+    }
+
+    @Test
     fun matches_differentNumbers() {
         assertFalse(PhoneNumberMatcher.matches("5551234567", "5559999999"))
     }

@@ -3,6 +3,7 @@ package com.phonepvr.friends.ui.calls
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.phonepvr.friends.data.db.entity.PendingConfirmationEntity
+import com.phonepvr.friends.data.phone.AndroidPhoneNumberMatcher
 import com.phonepvr.friends.data.repository.CallLogRepository
 import com.phonepvr.friends.data.repository.PeopleRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -17,7 +18,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
-data class PersonRef(val id: Long, val name: String)
+data class PersonRef(
+    val id: Long,
+    val name: String,
+    /** Label of the phone (e.g. "mobile", "work") that matched the call. */
+    val matchedPhoneLabel: String? = null,
+)
 
 data class ConfirmationItem(
     val confirmation: PendingConfirmationEntity,
@@ -38,7 +44,7 @@ class ConfirmationQueueViewModel @Inject constructor(
             callLogRepository.observePending(),
             peopleRepository.observeActiveWithDetails(),
         ) { pending, people ->
-            val nameById = people.associate { it.person.id to it.person.displayName }
+            val byId = people.associateBy { it.person.id }
             pending.map { confirmation ->
                 val personId = confirmation.personId
                 val candidateIds = confirmation.candidatePersonIds
@@ -50,7 +56,22 @@ class ConfirmationQueueViewModel @Inject constructor(
                 }
                 ConfirmationItem(
                     confirmation = confirmation,
-                    candidates = ids.map { PersonRef(it, nameById[it] ?: "Unknown") },
+                    candidates = ids.map { id ->
+                        val person = byId[id]
+                        val matchedLabel = person?.phoneNumbers
+                            ?.firstOrNull {
+                                AndroidPhoneNumberMatcher.strictMatches(
+                                    confirmation.phoneNumber,
+                                    it.rawNumber,
+                                )
+                            }
+                            ?.label
+                        PersonRef(
+                            id = id,
+                            name = person?.person?.displayName ?: "Unknown",
+                            matchedPhoneLabel = matchedLabel,
+                        )
+                    },
                 )
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())

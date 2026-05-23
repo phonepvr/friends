@@ -5,7 +5,9 @@ import com.phonepvr.friends.data.db.dao.PendingConfirmationDao
 import com.phonepvr.friends.data.db.dao.PhoneNumberDao
 import com.phonepvr.friends.data.db.dao.TimelineDao
 import com.phonepvr.friends.data.db.entity.PendingConfirmationEntity
+import com.phonepvr.friends.data.db.entity.PhoneNumberEntity
 import com.phonepvr.friends.data.db.entity.TimelineEntryEntity
+import com.phonepvr.friends.data.phone.AndroidPhoneNumberMatcher
 import com.phonepvr.friends.domain.model.CallType
 import com.phonepvr.friends.domain.model.ConfirmationStatus
 import com.phonepvr.friends.domain.model.EntrySource
@@ -29,26 +31,49 @@ class CallLogRepository @Inject constructor(
      * Reads recent calls, matches them to tracked people, and queues any not
      * already seen. Re-scanning is safe: the unique call dedup key means
      * already-queued, confirmed, or dismissed calls are ignored.
+     *
+     * Matching is two-stage:
+     *  1. **Prefilter** — index all stored phones by their last 7 digits
+     *     (PhoneNumberMatcher.matchKey) and look up the call's last 7 digits.
+     *     Fast O(1) but coarse (rare collisions on shared suffixes).
+     *  2. **Strict confirm** — re-check each surviving candidate with
+     *     PhoneNumberUtils.compare, which handles `+CC` vs `0`-prefix vs
+     *     no-prefix variants correctly.
+     *
+     * Disambiguation policy after both stages:
+     *  - Exactly one person survives → auto-attribute (`personId` set).
+     *  - Two or more people survive → queue with `personId = null` and the
+     *    ids joined into `candidatePersonIds`; the UI shows a picker.
+     *  - No one survives → drop silently (no queue entry, no noise).
+     *
+     * Withheld / RESTRICTED / UNKNOWN / sub-7-digit calls fail the prefilter
+     * (`matchKey` returns null) and are skipped at step 1.
      */
     suspend fun scanRecentCalls(windowDays: Int = 120) {
         val sinceMillis =
             System.currentTimeMillis() - windowDays.toLong() * 24L * 60L * 60L * 1000L
         val calls = callLogReader.recentCalls(sinceMillis)
 
-        val personIdsByMatchKey = HashMap<String, MutableSet<Long>>()
+        // Keep the full phone entity, not just personId — we need rawNumber
+        // for the strict compare and the label for the UI picker.
+        val phonesByMatchKey = HashMap<String, MutableList<PhoneNumberEntity>>()
         phoneNumberDao.getAll().forEach { phone ->
             val key = PhoneNumberMatcher.matchKey(phone.normalizedNumber) ?: return@forEach
-            personIdsByMatchKey.getOrPut(key) { mutableSetOf() }.add(phone.personId)
+            phonesByMatchKey.getOrPut(key) { mutableListOf() }.add(phone)
         }
 
         val now = System.currentTimeMillis()
         calls.forEach { call ->
             val key = PhoneNumberMatcher.matchKey(call.number) ?: return@forEach
-            val personIds = personIdsByMatchKey[key]?.toList().orEmpty()
-            if (personIds.isEmpty()) return@forEach
+            val prefiltered = phonesByMatchKey[key].orEmpty()
+            val confirmedPersonIds = prefiltered
+                .filter { AndroidPhoneNumberMatcher.strictMatches(call.number, it.rawNumber) }
+                .map { it.personId }
+                .distinct()
+            if (confirmedPersonIds.isEmpty()) return@forEach
             pendingConfirmationDao.insert(
                 PendingConfirmationEntity(
-                    personId = personIds.singleOrNull(),
+                    personId = confirmedPersonIds.singleOrNull(),
                     phoneNumber = call.number,
                     callTimestamp = call.timestampMillis,
                     callType = call.type,
@@ -58,7 +83,11 @@ class CallLogRepository @Inject constructor(
                     ),
                     status = ConfirmationStatus.PENDING,
                     candidatePersonIds =
-                        if (personIds.size > 1) personIds.joinToString(",") else null,
+                        if (confirmedPersonIds.size > 1) {
+                            confirmedPersonIds.joinToString(",")
+                        } else {
+                            null
+                        },
                     createdAt = now,
                 ),
             )

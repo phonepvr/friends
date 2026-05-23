@@ -199,9 +199,9 @@ fun SettingsScreen(
             HorizontalDivider()
             SectionHeader("About")
             ListItem(
-                headlineContent = { Text("Privacy & about") },
+                headlineContent = { Text("About Bondwidth") },
                 supportingContent = {
-                    Text("Where the data lives, and where it doesn't go")
+                    Text("What it is, how it works, your privacy")
                 },
                 modifier = Modifier.clickable { onOpenAbout() },
             )

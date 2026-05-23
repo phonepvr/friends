@@ -15,6 +15,7 @@ import com.phonepvr.friends.data.db.entity.PersonEntity
 import com.phonepvr.friends.data.db.entity.PhoneNumberEntity
 import com.phonepvr.friends.data.db.entity.TimelineEntryEntity
 import com.phonepvr.friends.data.photo.PhotoStorage
+import com.phonepvr.friends.data.settings.SettingsRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -67,6 +68,7 @@ class BackupManager @Inject constructor(
     private val timelineDao: TimelineDao,
     private val pendingConfirmationDao: PendingConfirmationDao,
     private val photoStorage: PhotoStorage,
+    private val settingsRepository: SettingsRepository,
 ) {
     private val json = Json {
         prettyPrint = true
@@ -77,14 +79,16 @@ class BackupManager @Inject constructor(
     /** Writes a backup of the whole app to [uri], encrypting it when a
      *  non-empty [passphrase] is given. */
     suspend fun export(uri: Uri, passphrase: CharArray?): Unit = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
         val backup = BackupFile(
             schemaVersion = BACKUP_SCHEMA_VERSION,
-            exportedAt = System.currentTimeMillis(),
+            exportedAt = now,
             people = personDao.getAll().map { it.toBackup() },
             phoneNumbers = phoneNumberDao.getAll().map { it.toBackup() },
             events = eventDao.getAll().map { it.toBackup() },
             timelineEntries = timelineDao.getAll().map { it.toBackup() },
             pendingConfirmations = pendingConfirmationDao.getAll().map { it.toBackup() },
+            settings = settingsRepository.snapshot(),
         )
         val zipBytes = buildZip(
             jsonText = json.encodeToString(BackupFile.serializer(), backup),
@@ -98,6 +102,9 @@ class BackupManager @Inject constructor(
         val output = context.contentResolver.openOutputStream(uri, "wt")
             ?: throw IOException("The selected file could not be opened for writing.")
         output.use { it.write(payload) }
+        // Stamp the timestamp only after the bytes are durably written, so a
+        // failed write does not reset the nudge timer.
+        settingsRepository.setLastSuccessfulBackupAt(now)
     }
 
     /** Reads the chosen file fully into memory so it can be inspected for
@@ -114,7 +121,8 @@ class BackupManager @Inject constructor(
     suspend fun restore(data: ByteArray, passphrase: CharArray?): BackupCounts =
         withContext(Dispatchers.IO) {
             val archive = readArchive(decrypt(data, passphrase))
-            val entities = toEntities(parseJson(archive.json))
+            val parsed = parseJson(archive.json)
+            val entities = toEntities(parsed)
             database.withTransaction {
                 database.clearAllTables()
                 personDao.insertAll(entities.people)
@@ -126,6 +134,9 @@ class BackupManager @Inject constructor(
             // Photos are files, not database rows; a photo failure must not
             // undo the (already committed) restore of the data itself.
             runCatching { photoStorage.replaceAll(archive.photos) }
+            // Settings: v2+ backups carry a snapshot; v1 backups have null and
+            // the restored device keeps whatever preferences it already had.
+            parsed.settings?.let { settingsRepository.restore(it) }
             entities.counts()
         }
 

@@ -33,6 +33,11 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        val initialDeepLink = if (intent.getBooleanExtra(EXTRA_OPEN_BACKUP, false)) {
+            com.phonepvr.friends.ui.navigation.Routes.BACKUP
+        } else {
+            null
+        }
         setContent {
             val settings by viewModel.settings.collectAsStateWithLifecycle()
             val authenticated by viewModel.authenticated.collectAsStateWithLifecycle()
@@ -48,7 +53,7 @@ class MainActivity : FragmentActivity() {
 
                     else -> {
                         NotificationPermissionEffect()
-                        FriendsNavHost()
+                        FriendsNavHost(initialDeepLink = initialDeepLink)
                     }
                 }
             }
@@ -62,6 +67,11 @@ class MainActivity : FragmentActivity() {
         if (!isChangingConfigurations) {
             viewModel.onMovedToBackground()
         }
+    }
+
+    companion object {
+        /** True on the launch intent when the user tapped a backup-nudge notification. */
+        const val EXTRA_OPEN_BACKUP = "com.phonepvr.friends.OPEN_BACKUP"
     }
 }
 

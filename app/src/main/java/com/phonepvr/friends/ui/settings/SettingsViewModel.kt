@@ -46,6 +46,10 @@ class SettingsViewModel @Inject constructor(
         settingsRepository.setAppLockEnabled(enabled)
     }
 
+    fun setBackupNudgeIntervalDays(days: Int) = runUpdate {
+        settingsRepository.setBackupNudgeIntervalDays(days)
+    }
+
     private fun runUpdate(block: suspend () -> Unit) {
         viewModelScope.launch { block() }
     }

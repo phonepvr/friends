@@ -15,8 +15,11 @@ import kotlinx.serialization.Serializable
 /**
  * Bumped only when the backup JSON structure changes in a way older builds
  * cannot read. Import refuses a backup whose version is newer than this.
+ *
+ * v2 added the optional [BackupFile.settings] map; v1 backups still import,
+ * with restored devices keeping their current preference values.
  */
-const val BACKUP_SCHEMA_VERSION = 1
+const val BACKUP_SCHEMA_VERSION = 2
 
 /**
  * The complete, self-contained contents of a backup. Enum fields are stored
@@ -32,6 +35,8 @@ data class BackupFile(
     val events: List<BackupEvent>,
     val timelineEntries: List<BackupTimelineEntry>,
     val pendingConfirmations: List<BackupPendingConfirmation>,
+    /** Added in v2; null when restoring a v1 backup. */
+    val settings: Map<String, String>? = null,
 )
 
 @Serializable

@@ -1,6 +1,7 @@
 package com.phonepvr.friends.ui.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -36,7 +37,15 @@ object Routes {
 }
 
 @Composable
-fun FriendsNavHost(navController: NavHostController = rememberNavController()) {
+fun FriendsNavHost(
+    navController: NavHostController = rememberNavController(),
+    initialDeepLink: String? = null,
+) {
+    LaunchedEffect(initialDeepLink) {
+        if (initialDeepLink != null) {
+            navController.navigate(initialDeepLink)
+        }
+    }
     val onSelectTab: (TopLevelTab) -> Unit = { tab ->
         navController.navigate(tab.route) {
             popUpTo(navController.graph.startDestinationId) { saveState = true }
@@ -53,6 +62,7 @@ fun FriendsNavHost(navController: NavHostController = rememberNavController()) {
                 },
                 onImportContacts = { navController.navigate(Routes.IMPORT_CONTACTS) },
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
+                onOpenBackup = { navController.navigate(Routes.BACKUP) },
                 bottomBar = { FriendsBottomBar(TopLevelTab.PEOPLE, onSelectTab) },
             )
         }

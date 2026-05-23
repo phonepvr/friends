@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ElevatedCard
@@ -45,11 +46,13 @@ fun PeopleListScreen(
     onOpenPerson: (Long) -> Unit,
     onImportContacts: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenBackup: () -> Unit,
     bottomBar: @Composable () -> Unit,
     viewModel: PeopleListViewModel = hiltViewModel(),
 ) {
     val people by viewModel.people.collectAsStateWithLifecycle()
     val query by viewModel.searchQuery.collectAsStateWithLifecycle()
+    val showBackupNudge by viewModel.showBackupNudge.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -75,6 +78,12 @@ fun PeopleListScreen(
                 .padding(padding)
                 .fillMaxSize(),
         ) {
+            if (showBackupNudge) {
+                BackupNudgeBanner(
+                    onOpenBackup = onOpenBackup,
+                    onDismiss = viewModel::dismissBackupNudge,
+                )
+            }
             OutlinedTextField(
                 value = query,
                 onValueChange = viewModel::onSearchQueryChange,
@@ -138,6 +147,38 @@ private fun PersonRow(item: PersonWithDetails, onClick: () -> Unit) {
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BackupNudgeBanner(
+    onOpenBackup: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ElevatedCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .clickable(onClick = onOpenBackup)
+                .padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Time to back up", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    text = "It's been a while since your last backup.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            TextButton(onClick = onOpenBackup) { Text("Back up") }
+            IconButton(onClick = onDismiss) {
+                Icon(Icons.Filled.Close, contentDescription = "Dismiss")
             }
         }
     }

@@ -45,8 +45,9 @@ import com.phonepvr.friends.ui.lock.isAppLockAvailable
 private val LEAD_DAY_OPTIONS = listOf(1, 2, 3, 5, 7, 14, 30)
 private val HOUR_OPTIONS = (0..23).toList()
 private val CADENCE_OPTIONS = listOf(7, 14, 30, 45, 60, 90)
+private val BACKUP_NUDGE_OPTIONS = listOf(7, 14, 21, 30, 60, 90)
 
-private enum class SettingsDialog { THEME, LEAD_DAYS, HOUR, CADENCE }
+private enum class SettingsDialog { THEME, LEAD_DAYS, HOUR, CADENCE, BACKUP_NUDGE }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -143,6 +144,13 @@ fun SettingsScreen(
                 supportingContent = { Text("Export or import all your data") },
                 modifier = Modifier.clickable { onOpenBackup() },
             )
+            ListItem(
+                headlineContent = { Text("Backup reminder interval") },
+                supportingContent = {
+                    Text("Nudge me every ${daysLabel(settings.backupNudgeIntervalDays)}")
+                },
+                modifier = Modifier.clickable { activeDialog = SettingsDialog.BACKUP_NUDGE },
+            )
         }
     }
 
@@ -180,6 +188,15 @@ fun SettingsScreen(
             selected = settings.defaultCadenceDays,
             labelOf = { "Every ${daysLabel(it)}" },
             onSelect = { viewModel.setDefaultCadenceDays(it) },
+            onDismiss = { activeDialog = null },
+        )
+
+        SettingsDialog.BACKUP_NUDGE -> ChoiceDialog(
+            title = "Backup reminder interval",
+            options = BACKUP_NUDGE_OPTIONS,
+            selected = settings.backupNudgeIntervalDays,
+            labelOf = { "Every ${daysLabel(it)}" },
+            onSelect = { viewModel.setBackupNudgeIntervalDays(it) },
             onDismiss = { activeDialog = null },
         )
 

@@ -52,5 +52,9 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/upcoming_widget_info" />
         </receiver>
+
+        <receiver
+            android:name=".notification.MarkAsWishedReceiver"
+            android:exported="false" />
     </application>
 </manifest>

@@ -29,15 +29,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.foundation.layout.Row
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.runtime.remember
 import com.phonepvr.friends.data.db.entity.EventEntity
 import com.phonepvr.friends.data.db.entity.TimelineEntryEntity
 import com.phonepvr.friends.data.db.relation.PersonWithDetails
 import com.phonepvr.friends.ui.components.PersonAvatar
 import com.phonepvr.friends.domain.cadence.CadenceState
 import com.phonepvr.friends.domain.cadence.CadenceStatus
+import com.phonepvr.friends.domain.model.AnnualDate
 import com.phonepvr.friends.domain.model.EventType
 import com.phonepvr.friends.domain.model.InteractionType
 import java.time.Instant
+import java.time.LocalDate
 import java.time.Month
 import java.time.ZoneId
 import java.time.format.TextStyle
@@ -54,6 +59,7 @@ fun PersonDetailScreen(
     val person by viewModel.person.collectAsStateWithLifecycle()
     val timeline by viewModel.timeline.collectAsStateWithLifecycle()
     val cadence by viewModel.cadence.collectAsStateWithLifecycle()
+    val today = remember { LocalDate.now() }
 
     Scaffold(
         topBar = {
@@ -97,7 +103,13 @@ fun PersonDetailScreen(
             ) {
                 item { PersonHeader(current) }
                 item { CadenceCard(cadence) }
-                item { InfoSection(current) }
+                item {
+                    InfoSection(
+                        person = current,
+                        today = today,
+                        onMarkWished = viewModel::markAsWished,
+                    )
+                }
                 item { Text("History", style = MaterialTheme.typography.titleMedium) }
                 if (timeline.isEmpty()) {
                     item {
@@ -158,7 +170,11 @@ private fun CadenceCard(cadence: CadenceStatus) {
 }
 
 @Composable
-private fun InfoSection(person: PersonWithDetails) {
+private fun InfoSection(
+    person: PersonWithDetails,
+    today: LocalDate,
+    onMarkWished: (String) -> Unit,
+) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         person.person.relationshipTag
             ?.takeIf { it.isNotBlank() }
@@ -167,7 +183,11 @@ private fun InfoSection(person: PersonWithDetails) {
             InfoRow(phone.label?.takeIf { it.isNotBlank() } ?: "Phone", phone.rawNumber)
         }
         person.events.forEach { event ->
-            InfoRow(eventLabel(event.type), formatEventDate(event))
+            EventRow(
+                event = event,
+                today = today,
+                onMarkWished = { onMarkWished(eventLabel(event.type).lowercase()) },
+            )
         }
         person.person.cadenceTargetDays?.let {
             InfoRow("Stay in touch", "every $it days")
@@ -175,6 +195,36 @@ private fun InfoSection(person: PersonWithDetails) {
         person.person.notes
             ?.takeIf { it.isNotBlank() }
             ?.let { InfoRow("Notes", it) }
+    }
+}
+
+@Composable
+private fun EventRow(
+    event: EventEntity,
+    today: LocalDate,
+    onMarkWished: () -> Unit,
+) {
+    val daysUntil = AnnualDate(event.month, event.day, event.year).daysUntilNextOccurrence(today)
+    // Show the action when the event is today, in the next 7 days, or in the
+    // past 7 days (where daysUntil wraps to a high value near 365).
+    val showWishButton = daysUntil <= 7L || daysUntil >= 358L
+    if (!showWishButton) {
+        InfoRow(eventLabel(event.type), formatEventDate(event))
+        return
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = eventLabel(event.type),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(text = formatEventDate(event), style = MaterialTheme.typography.bodyLarge)
+        }
+        OutlinedButton(onClick = onMarkWished) { Text("Mark as wished") }
     }
 }
 

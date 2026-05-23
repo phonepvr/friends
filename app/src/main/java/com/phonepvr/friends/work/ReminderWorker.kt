@@ -13,7 +13,6 @@ import com.phonepvr.friends.data.settings.SettingsRepository
 import com.phonepvr.friends.domain.cadence.CadenceCalculator
 import com.phonepvr.friends.domain.cadence.CadenceState
 import com.phonepvr.friends.domain.model.AnnualDate
-import com.phonepvr.friends.domain.model.EventType
 import com.phonepvr.friends.notification.ReminderNotifier
 import com.phonepvr.friends.widget.UpcomingWidget
 import dagger.hilt.EntryPoint
@@ -57,14 +56,22 @@ class ReminderWorker(
         val people = deps.peopleRepository().observeActiveWithDetails().first()
         val timelineDao = deps.timelineDao()
         val today = LocalDate.now()
-        val lines = mutableListOf<String>()
+        val eventReminders = mutableListOf<ReminderNotifier.EventReminder>()
+        val overdueLines = mutableListOf<String>()
 
         people.forEach { personWithDetails ->
             personWithDetails.events.forEach { event ->
                 val days = AnnualDate(event.month, event.day, event.year)
                     .daysUntilNextOccurrence(today)
                 if (days in 0..leadDays) {
-                    lines.add(upcomingLine(personWithDetails.person.displayName, event.type, days))
+                    eventReminders.add(
+                        ReminderNotifier.EventReminder(
+                            personId = personWithDetails.person.id,
+                            personName = personWithDetails.person.displayName,
+                            type = event.type,
+                            daysUntil = days,
+                        ),
+                    )
                 }
             }
         }
@@ -80,30 +87,15 @@ class ReminderWorker(
                 today = today,
             )
             if (status.state == CadenceState.OVERDUE) {
-                lines.add("Reach out to ${personWithDetails.person.displayName} — overdue")
+                overdueLines.add("Reach out to ${personWithDetails.person.displayName} — overdue")
             }
         }
 
-        if (lines.isNotEmpty()) {
-            ReminderNotifier.postReminders(applicationContext, lines)
-        }
+        eventReminders.forEach { ReminderNotifier.postEventReminder(applicationContext, it) }
+        ReminderNotifier.postOverdueSummary(applicationContext, overdueLines)
         UpcomingWidget().updateAll(applicationContext)
         return Result.success()
     }
-}
-
-private fun upcomingLine(name: String, type: EventType, days: Long): String {
-    val occasion = when (type) {
-        EventType.BIRTHDAY -> "birthday"
-        EventType.WEDDING_ANNIVERSARY -> "anniversary"
-        EventType.CUSTOM -> "special date"
-    }
-    val whenText = when (days) {
-        0L -> "today"
-        1L -> "tomorrow"
-        else -> "in $days days"
-    }
-    return "$name's $occasion is $whenText"
 }
 
 /** Schedules the daily reminder job, keeping any existing schedule. */

@@ -1,6 +1,7 @@
 package com.phonepvr.friends
 
 import android.app.Application
+import com.phonepvr.friends.data.repository.CallLogAutoSync
 import com.phonepvr.friends.data.settings.SettingsRepository
 import com.phonepvr.friends.widget.WidgetRefreshObserver
 import com.phonepvr.friends.work.scheduleBackupNudgeWork
@@ -22,6 +23,9 @@ class FriendsApplication : Application() {
     @Inject
     lateinit var widgetRefreshObserver: WidgetRefreshObserver
 
+    @Inject
+    lateinit var callLogAutoSync: CallLogAutoSync
+
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override fun onCreate() {
@@ -38,5 +42,10 @@ class FriendsApplication : Application() {
         // people or the timeline change, debounced. Daily worker still runs
         // for midnight rollovers.
         widgetRefreshObserver.start(appScope)
+        // Sync the device call log into every person's timeline on each
+        // launch. No-ops without READ_CALL_LOG; idempotent via callDedupKey.
+        appScope.launch(Dispatchers.IO) {
+            runCatching { callLogAutoSync.syncAllPeople() }
+        }
     }
 }

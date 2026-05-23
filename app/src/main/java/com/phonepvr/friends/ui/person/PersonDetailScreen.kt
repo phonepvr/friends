@@ -1,9 +1,5 @@
 package com.phonepvr.friends.ui.person
 
-import android.Manifest
-import android.content.pm.PackageManager
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,11 +20,9 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
@@ -50,9 +44,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.material.icons.filled.Close
@@ -66,7 +58,6 @@ import com.phonepvr.friends.data.db.entity.PhoneNumberEntity
 import com.phonepvr.friends.data.db.entity.TimelineEntryEntity
 import com.phonepvr.friends.data.db.relation.PersonWithDetails
 import com.phonepvr.friends.data.reachout.ReachOutMethod
-import com.phonepvr.friends.data.repository.PersonCallCandidate
 import com.phonepvr.friends.ui.components.PersonAvatar
 import com.phonepvr.friends.domain.cadence.CadenceState
 import com.phonepvr.friends.domain.cadence.CadenceStatus
@@ -80,7 +71,6 @@ import com.phonepvr.friends.ui.common.formatEventDay
 import com.phonepvr.friends.ui.common.formatTimestamp
 import com.phonepvr.friends.ui.common.packDateDigits
 import com.phonepvr.friends.ui.common.parseDateDigits
-import com.phonepvr.friends.ui.permissions.PermissionRationaleSheet
 import com.phonepvr.friends.ui.tooltips.CoachMarkBanner
 import com.phonepvr.friends.ui.tooltips.Tooltips
 import androidx.activity.compose.BackHandler
@@ -113,63 +103,14 @@ fun PersonDetailScreen(
     val pickerMethod by viewModel.pickerMethod.collectAsStateWithLifecycle()
     val pendingLogPrompt by viewModel.pendingLogPrompt.collectAsStateWithLifecycle()
     val cadenceSheetOpen by viewModel.cadenceSheetOpen.collectAsStateWithLifecycle()
-    val callScan by viewModel.callScan.collectAsStateWithLifecycle()
-    val callLogRationaleShown by viewModel.callLogRationaleShown.collectAsStateWithLifecycle()
     val dismissedTooltips by viewModel.dismissedTooltips.collectAsStateWithLifecycle()
     val selectedTimelineIds by viewModel.selectedTimelineIds.collectAsStateWithLifecycle()
     val addEventSheet by viewModel.addEventSheet.collectAsStateWithLifecycle()
     val editEventTarget by viewModel.editEventTarget.collectAsStateWithLifecycle()
     val today = remember { LocalDate.now() }
     val snackbarHostState = remember { SnackbarHostState() }
-    val context = LocalContext.current
     val isSelectionMode = selectedTimelineIds.isNotEmpty()
     BackHandler(enabled = isSelectionMode) { viewModel.clearTimelineSelection() }
-
-    var showCallLogRationale by remember { mutableStateOf(false) }
-    val callLogPermissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission(),
-    ) { granted ->
-        if (granted) viewModel.scanCalls()
-    }
-    val onTriggerScan: () -> Unit = {
-        val granted = ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.READ_CALL_LOG,
-        ) == PackageManager.PERMISSION_GRANTED
-        when {
-            granted -> viewModel.scanCalls()
-            callLogRationaleShown ->
-                callLogPermissionLauncher.launch(Manifest.permission.READ_CALL_LOG)
-            else -> showCallLogRationale = true
-        }
-    }
-
-    if (showCallLogRationale) {
-        PermissionRationaleSheet(
-            title = "Pull recent calls into the timeline",
-            body = "Bondwidth can read the device call log to surface the calls " +
-                "you've had with this person — direction, duration and " +
-                "timestamp — so you can drop them straight into the timeline. " +
-                "Stays on this phone, never goes anywhere.",
-            manualFallback = "If you'd rather, skip this and tap " +
-                "\"Log interaction\" to add calls by hand whenever you like.",
-            grantLabel = "Grant access",
-            manualLabel = "I'll log calls myself",
-            onGrant = {
-                viewModel.markCallLogRationaleShown()
-                showCallLogRationale = false
-                callLogPermissionLauncher.launch(Manifest.permission.READ_CALL_LOG)
-            },
-            onManualFallback = {
-                viewModel.markCallLogRationaleShown()
-                showCallLogRationale = false
-            },
-            onDismiss = {
-                viewModel.markCallLogRationaleShown()
-                showCallLogRationale = false
-            },
-        )
-    }
 
     LaunchedEffect(pendingLogPrompt) {
         val method = pendingLogPrompt ?: return@LaunchedEffect
@@ -303,11 +244,7 @@ fun PersonDetailScreen(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         if (hasScan) {
-                            CallScanSection(
-                                state = callScan,
-                                onScan = onTriggerScan,
-                                onAddAll = viewModel::addAllScannedCalls,
-                                onAddOne = viewModel::addScannedCall,
+                            CallLogInfoCard(
                                 modifier = Modifier
                                     .weight(1f)
                                     .fillMaxHeight(),
@@ -472,107 +409,23 @@ private fun StayInTouchCard(
 }
 
 @Composable
-private fun CallScanSection(
-    state: CallScanState,
-    onScan: () -> Unit,
-    onAddAll: () -> Unit,
-    onAddOne: (PersonCallCandidate) -> Unit,
-    modifier: Modifier = Modifier,
-) {
+private fun CallLogInfoCard(modifier: Modifier = Modifier) {
     ElevatedCard(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text("Call log", style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(8.dp))
-            when (state) {
-                CallScanState.Idle -> {
-                    Text(
-                        text = "Pull recent calls with this person from your call log.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    OutlinedButton(onClick = onScan) { Text("Scan call log") }
-                }
-                CallScanState.Scanning -> {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            strokeWidth = 2.dp,
-                        )
-                        Spacer(Modifier.width(12.dp))
-                        Text("Scanning…", style = MaterialTheme.typography.bodyMedium)
-                    }
-                }
-                is CallScanState.Ready -> {
-                    if (state.candidates.isEmpty()) {
-                        Text(
-                            text = "Nothing new to add — every call is already in the timeline.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        OutlinedButton(onClick = onScan) { Text("Scan again") }
-                    } else {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                text = "${state.candidates.size} not yet logged",
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.weight(1f),
-                            )
-                            Button(onClick = onAddAll) { Text("Add all") }
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        state.candidates.forEachIndexed { index, candidate ->
-                            if (index > 0) HorizontalDivider()
-                            CallCandidateRow(
-                                candidate = candidate,
-                                onAdd = { onAddOne(candidate) },
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun CallCandidateRow(
-    candidate: PersonCallCandidate,
-    onAdd: () -> Unit,
-) {
-    val call = candidate.deviceCall
-    val direction = when (call.type) {
-        CallType.INCOMING -> "Incoming"
-        CallType.OUTGOING -> "Outgoing"
-        CallType.MISSED -> "Missed"
-        CallType.REJECTED -> "Rejected"
-    }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = if (call.durationSeconds > 0L) {
-                    "$direction · ${formatDuration(call.durationSeconds)}"
-                } else {
-                    direction
-                },
+                text = "Calls with this person are auto-added as interactions.",
                 style = MaterialTheme.typography.bodyMedium,
             )
+            Spacer(Modifier.height(4.dp))
             Text(
-                text = formatTimestamp(call.timestampMillis),
+                text = "Tap any entry below to edit a note, change the type, " +
+                    "or delete.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        TextButton(onClick = onAdd) { Text("Add") }
     }
 }
 

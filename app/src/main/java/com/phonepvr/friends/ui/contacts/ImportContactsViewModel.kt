@@ -9,6 +9,7 @@ import com.phonepvr.friends.data.db.entity.EventEntity
 import com.phonepvr.friends.data.db.entity.PersonEntity
 import com.phonepvr.friends.data.db.entity.PhoneNumberEntity
 import com.phonepvr.friends.data.photo.PhotoStorage
+import com.phonepvr.friends.data.repository.CallLogAutoSync
 import com.phonepvr.friends.data.repository.PeopleRepository
 import com.phonepvr.friends.data.settings.SettingsRepository
 import com.phonepvr.friends.domain.model.EventType
@@ -41,18 +42,22 @@ class ImportContactsViewModel @Inject constructor(
     private val repository: PeopleRepository,
     private val photoStorage: PhotoStorage,
     private val settingsRepository: SettingsRepository,
+    private val callLogAutoSync: CallLogAutoSync,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ImportUiState())
     val state: StateFlow<ImportUiState> = _state.asStateFlow()
 
-    /** Whether we've already shown the contacts permission explainer. */
+    /** Whether the combined contacts + call-log explainer has already shown. */
     val rationaleAlreadyShown: StateFlow<Boolean> = settingsRepository.settings
-        .map { it.contactsRationaleShown }
+        .map { it.contactsRationaleShown && it.callLogRationaleShown }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     fun markRationaleShown() {
-        viewModelScope.launch { settingsRepository.setContactsRationaleShown(true) }
+        viewModelScope.launch {
+            settingsRepository.setContactsRationaleShown(true)
+            settingsRepository.setCallLogRationaleShown(true)
+        }
     }
 
     fun loadContacts() {
@@ -138,6 +143,10 @@ class ImportContactsViewModel @Inject constructor(
                     }
                     repository.createPerson(person, phones, events)
                 }
+                // Auto-pull recent calls for every active person now that the
+                // freshly-imported ones have phones in the DB. Safe to run
+                // unconditionally — it no-ops without READ_CALL_LOG.
+                callLogAutoSync.syncAllPeople()
             }
             _state.value = _state.value.copy(importing = false)
             onDone()

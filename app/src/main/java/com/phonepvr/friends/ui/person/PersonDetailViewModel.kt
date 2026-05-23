@@ -9,15 +9,12 @@ import com.phonepvr.friends.data.db.entity.TimelineEntryEntity
 import com.phonepvr.friends.data.db.relation.PersonWithDetails
 import com.phonepvr.friends.data.reachout.ReachOutLauncher
 import com.phonepvr.friends.data.reachout.ReachOutMethod
-import com.phonepvr.friends.data.repository.CallLogRepository
 import com.phonepvr.friends.data.repository.PeopleRepository
-import com.phonepvr.friends.data.repository.PersonCallCandidate
 import com.phonepvr.friends.data.repository.TimelineRepository
 import com.phonepvr.friends.data.settings.SettingsRepository
 import com.phonepvr.friends.domain.cadence.CadenceCalculator
 import com.phonepvr.friends.domain.cadence.CadenceState
 import com.phonepvr.friends.domain.cadence.CadenceStatus
-import com.phonepvr.friends.domain.model.CallType
 import com.phonepvr.friends.domain.model.EntrySource
 import com.phonepvr.friends.domain.model.EventType
 import com.phonepvr.friends.domain.model.InteractionType
@@ -46,23 +43,11 @@ data class InteractionSummary(
 private const val SUMMARY_WINDOW_DAYS = 365L
 private const val SUMMARY_WINDOW_MILLIS = SUMMARY_WINDOW_DAYS * 24L * 60L * 60L * 1000L
 
-/** State for the per-profile call-log scan section. */
-sealed interface CallScanState {
-    /** No scan has been requested this session. */
-    data object Idle : CallScanState
-
-    /** Scan in progress — the device call log is being read. */
-    data object Scanning : CallScanState
-
-    /** Scan finished and these calls are eligible to be logged. */
-    data class Ready(val candidates: List<PersonCallCandidate>) : CallScanState
-}
 
 @HiltViewModel
 class PersonDetailViewModel @Inject constructor(
     private val peopleRepository: PeopleRepository,
     private val timelineRepository: TimelineRepository,
-    private val callLogRepository: CallLogRepository,
     private val settingsRepository: SettingsRepository,
     @ApplicationContext private val appContext: Context,
     savedStateHandle: SavedStateHandle,
@@ -230,19 +215,6 @@ class PersonDetailViewModel @Inject constructor(
         }
     }
 
-    private val _callScan = MutableStateFlow<CallScanState>(CallScanState.Idle)
-    /** Per-profile call-log scan state. Idle until the user taps "Scan call log". */
-    val callScan: StateFlow<CallScanState> = _callScan.asStateFlow()
-
-    /** Whether the call-log permission explainer has already been shown. */
-    val callLogRationaleShown: StateFlow<Boolean> = settingsRepository.settings
-        .map { it.callLogRationaleShown }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
-
-    fun markCallLogRationaleShown() {
-        viewModelScope.launch { settingsRepository.setCallLogRationaleShown(true) }
-    }
-
     /** Stable ids of coach-mark tooltips the user has already dismissed. */
     val dismissedTooltips: StateFlow<Set<String>> = settingsRepository.settings
         .map { it.dismissedTooltipIds }
@@ -250,41 +222,6 @@ class PersonDetailViewModel @Inject constructor(
 
     fun dismissTooltip(id: String) {
         viewModelScope.launch { settingsRepository.dismissTooltip(id) }
-    }
-
-    /**
-     * Reads the last 120 days of the device call log and keeps only the
-     * entries matching this person's phones that haven't already been logged
-     * to the timeline. Idempotent and safe to call multiple times.
-     */
-    fun scanCalls() {
-        if (_callScan.value is CallScanState.Scanning) return
-        _callScan.value = CallScanState.Scanning
-        viewModelScope.launch {
-            val candidates = callLogRepository.scanForPerson(personId)
-            _callScan.value = CallScanState.Ready(candidates)
-        }
-    }
-
-    /** Insert every scanned candidate as a timeline entry and clear the list. */
-    fun addAllScannedCalls() {
-        val current = _callScan.value as? CallScanState.Ready ?: return
-        if (current.candidates.isEmpty()) return
-        viewModelScope.launch {
-            current.candidates.forEach { insertCallCandidate(it) }
-            _callScan.value = CallScanState.Ready(emptyList())
-        }
-    }
-
-    /** Insert a single scanned candidate and drop it from the list. */
-    fun addScannedCall(candidate: PersonCallCandidate) {
-        val current = _callScan.value as? CallScanState.Ready ?: return
-        viewModelScope.launch {
-            insertCallCandidate(candidate)
-            _callScan.value = CallScanState.Ready(
-                current.candidates.filter { it.callDedupKey != candidate.callDedupKey },
-            )
-        }
     }
 
     private val _selectedTimelineIds = MutableStateFlow<Set<Long>>(emptySet())
@@ -361,28 +298,4 @@ class PersonDetailViewModel @Inject constructor(
         }
     }
 
-    private suspend fun insertCallCandidate(candidate: PersonCallCandidate) {
-        val call = candidate.deviceCall
-        timelineRepository.addEntry(
-            TimelineEntryEntity(
-                personId = personId,
-                occurredAt = call.timestampMillis,
-                type = InteractionType.CALL,
-                note = null,
-                source = EntrySource.CALL_LOG,
-                // Auto-imported calls only count toward cadence when both
-                // direction (incoming / outgoing) AND duration (> 0s) indicate
-                // a real conversation happened. Missed / rejected calls and
-                // ring-and-hang-up entries are excluded. Manual calls go
-                // through a different path with no such filter — if the user
-                // logs a call by hand we trust them.
-                countsAsContact = (call.type == CallType.INCOMING ||
-                    call.type == CallType.OUTGOING) && call.durationSeconds > 0L,
-                callDedupKey = candidate.callDedupKey,
-                callDirection = call.type,
-                callDurationSeconds = call.durationSeconds,
-                createdAt = System.currentTimeMillis(),
-            ),
-        )
-    }
 }

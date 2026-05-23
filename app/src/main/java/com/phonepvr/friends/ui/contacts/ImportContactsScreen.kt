@@ -58,6 +58,9 @@ fun ImportContactsScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val rationaleAlreadyShown by viewModel.rationaleAlreadyShown.collectAsStateWithLifecycle()
 
+    val requestedPermissions = remember {
+        arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.READ_CALL_LOG)
+    }
     var hasPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) ==
@@ -68,15 +71,18 @@ fun ImportContactsScreen(
     var showRationale by remember { mutableStateOf(false) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission(),
-    ) { granted ->
-        hasPermission = granted
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { grants ->
+        // Contacts is the only one that gates this screen; call log is best-
+        // effort so the auto-sync can find anything to pull. Declining call
+        // log doesn't break the import.
+        hasPermission = grants[Manifest.permission.READ_CONTACTS] == true
         permissionRequested = true
     }
 
     val onRequestPermission: () -> Unit = {
         if (rationaleAlreadyShown) {
-            permissionLauncher.launch(Manifest.permission.READ_CONTACTS)
+            permissionLauncher.launch(requestedPermissions)
         } else {
             showRationale = true
         }
@@ -84,18 +90,21 @@ fun ImportContactsScreen(
 
     if (showRationale) {
         PermissionRationaleSheet(
-            title = "Pull in the people you already know",
-            body = "Bondwidth can read your device contacts to import names, " +
-                "numbers, photos, birthdays and anniversaries — all stays on " +
-                "this phone, nothing leaves.",
-            manualFallback = "If you'd rather, tap the back arrow and add " +
-                "people one at a time with the + button. The app works the same.",
+            title = "Two doors, asked once",
+            body = "Contacts — to pull names, numbers, photos, birthdays " +
+                "and anniversaries straight in instead of typing them. " +
+                "Call log — so calls with the people you import auto-fill " +
+                "the timeline in the background, no per-profile tapping. " +
+                "Both reads, both stay on this phone, nothing leaves.",
+            manualFallback = "Decline either or both and the app still " +
+                "works. You'll just add people by hand and log calls " +
+                "yourself.",
             grantLabel = "Grant access",
-            manualLabel = "I'll add by hand",
+            manualLabel = "I'll do it by hand",
             onGrant = {
                 viewModel.markRationaleShown()
                 showRationale = false
-                permissionLauncher.launch(Manifest.permission.READ_CONTACTS)
+                permissionLauncher.launch(requestedPermissions)
             },
             onManualFallback = {
                 viewModel.markRationaleShown()

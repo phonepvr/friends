@@ -321,7 +321,7 @@ private fun ImportConfirmDialog(
         text = {
             Text(
                 text = "Restoring a backup deletes everything currently in " +
-                    "Friends and replaces it with the backup's contents. " +
+                    "Bondwidth and replaces it with the backup's contents. " +
                     "This cannot be undone.",
             )
         },

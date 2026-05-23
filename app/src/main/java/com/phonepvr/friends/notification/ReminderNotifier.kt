@@ -99,7 +99,7 @@ object ReminderNotifier {
         lines.forEach { style.addLine(it) }
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("Friends — overdue")
+            .setContentTitle("Bondwidth — overdue")
             .setContentText(lines.first())
             .setStyle(style)
             .setContentIntent(pi)

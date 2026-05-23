@@ -130,7 +130,7 @@ private fun OnboardingSlide(page: Int, quote: Quote?) {
             1 -> TitleBodySlide(
                 title = "Friendship is small attentions, often.",
                 body = "Set a check-in cadence — every 7, 14, 30 days, whatever fits. " +
-                    "Friends quietly flags who's getting too quiet, so you can reach out " +
+                    "Bondwidth quietly flags who's getting too quiet, so you can reach out " +
                     "before silence becomes a habit.",
             )
             2 -> TitleBodySlide(
@@ -147,14 +147,14 @@ private fun OnboardingSlide(page: Int, quote: Quote?) {
             )
             4 -> TitleBodySlide(
                 title = "Two doors you can leave shut.",
-                body = "Friends can ask for contacts (to import the people you already " +
+                body = "Bondwidth can ask for contacts (to import the people you already " +
                     "know) and the call log (to count calls automatically). Both are " +
                     "optional. Say no and the app still works — add anyone by hand, " +
                     "log every conversation yourself.",
             )
             5 -> TitleBodySlide(
                 title = "There's a widget, too.",
-                body = "Long-press your home screen and drop a Friends widget there. " +
+                body = "Long-press your home screen and drop a Bondwidth widget there. " +
                     "Upcoming birthdays, anniversaries, who's overdue for a check-in " +
                     "— at a glance.",
             )
@@ -171,7 +171,7 @@ private fun WelcomeSlide(quote: Quote?) {
     )
     Spacer(Modifier.height(12.dp))
     Text(
-        text = "Friends is a tiny ledger of the people you care about.",
+        text = "Bondwidth is a tiny ledger of the people you care about.",
         style = MaterialTheme.typography.bodyLarge,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         textAlign = TextAlign.Center,

@@ -147,7 +147,7 @@ fun PersonDetailScreen(
     if (showCallLogRationale) {
         PermissionRationaleSheet(
             title = "Pull recent calls into the timeline",
-            body = "Friends can read the device call log to surface the calls " +
+            body = "Bondwidth can read the device call log to surface the calls " +
                 "you've had with this person — direction, duration and " +
                 "timestamp — so you can drop them straight into the timeline. " +
                 "Stays on this phone, never goes anywhere.",
@@ -283,17 +283,6 @@ fun PersonDetailScreen(
                     }
                 }
                 if (current.phoneNumbers.isNotEmpty() && availableMethods.isNotEmpty()) {
-                    if (Tooltips.REACH_OUT !in dismissedTooltips) {
-                        item {
-                            CoachMarkBanner(
-                                tipId = Tooltips.REACH_OUT,
-                                text = "Quick reach-out. Friends will offer to log it " +
-                                    "after you return.",
-                                dismissed = dismissedTooltips,
-                                onDismiss = viewModel::dismissTooltip,
-                            )
-                        }
-                    }
                     item {
                         ReachOutRow(
                             methods = availableMethods,
@@ -303,17 +292,6 @@ fun PersonDetailScreen(
                 }
                 val hasScan = current.phoneNumbers.isNotEmpty()
                 val cadenceTargetDays = current.person.cadenceTargetDays
-                if (hasScan && Tooltips.SCAN_CALLS !in dismissedTooltips) {
-                    item {
-                        CoachMarkBanner(
-                            tipId = Tooltips.SCAN_CALLS,
-                            text = "Friends can pull recent calls with this person " +
-                                "into the timeline. Tap below to scan.",
-                            dismissed = dismissedTooltips,
-                            onDismiss = viewModel::dismissTooltip,
-                        )
-                    }
-                }
                 // Stay-in-touch card always renders so the user has one place
                 // to set or change cadence; the call-scan card joins it on
                 // the same row when the person has a phone number.

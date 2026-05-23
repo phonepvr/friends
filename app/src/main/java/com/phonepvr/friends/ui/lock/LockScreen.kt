@@ -65,7 +65,7 @@ fun LockScreen(onUnlocked: () -> Unit) {
             )
             Spacer(Modifier.height(16.dp))
             Text(
-                text = "Friends is locked",
+                text = "Bondwidth is locked",
                 style = MaterialTheme.typography.titleLarge,
             )
             Spacer(Modifier.height(8.dp))

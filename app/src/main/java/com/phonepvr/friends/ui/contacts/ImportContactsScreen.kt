@@ -85,7 +85,7 @@ fun ImportContactsScreen(
     if (showRationale) {
         PermissionRationaleSheet(
             title = "Pull in the people you already know",
-            body = "Friends can read your device contacts to import names, " +
+            body = "Bondwidth can read your device contacts to import names, " +
                 "numbers, photos, birthdays and anniversaries — all stays on " +
                 "this phone, nothing leaves.",
             manualFallback = "If you'd rather, tap the back arrow and add " +
@@ -253,7 +253,7 @@ private fun PermissionPrompt(denied: Boolean, onRequest: () -> Unit) {
                 "Permission was denied. Grant it in system settings, " +
                     "or go back and add people manually."
             } else {
-                "Friends needs read access to your contacts to import people. " +
+                "Bondwidth needs read access to your contacts to import people. " +
                     "Nothing leaves your device."
             },
             style = MaterialTheme.typography.bodyMedium,

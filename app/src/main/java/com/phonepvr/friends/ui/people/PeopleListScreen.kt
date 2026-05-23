@@ -67,7 +67,7 @@ fun PeopleListScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Friends") },
+                title = { Text("Bondwidth") },
                 actions = {
                     TextButton(onClick = onImportContacts) { Text("Import") }
                     IconButton(onClick = onOpenSettings) {
@@ -120,7 +120,7 @@ fun PeopleListScreen(
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         CoachMarkBanner(
                             tipId = Tooltips.WIDGET,
-                            text = "Long-press your home screen to drop a Friends widget — " +
+                            text = "Long-press your home screen to drop a Bondwidth widget — " +
                                 "upcoming events and check-ins at a glance.",
                             dismissed = dismissedTooltips,
                             onDismiss = viewModel::dismissTooltip,

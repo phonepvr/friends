@@ -96,6 +96,13 @@ class PersonDetailViewModel @Inject constructor(
             CadenceStatus(CadenceState.NOT_TRACKED, null, null),
         )
 
+    /** Epoch millis of the most recent counts-as-contact interaction, null if none. */
+    val lastContactAt: StateFlow<Long?> = timeline
+        .map { entries ->
+            entries.filter { it.countsAsContact }.maxOfOrNull { it.occurredAt }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
     /** Interactions logged in the last 120 days and total call time over the same window. */
     val summary120d: StateFlow<InteractionSummary> = timeline
         .map { entries ->

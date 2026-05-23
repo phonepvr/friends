@@ -87,7 +87,9 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.material3.Checkbox
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -101,6 +103,7 @@ fun PersonDetailScreen(
     val person by viewModel.person.collectAsStateWithLifecycle()
     val timeline by viewModel.timeline.collectAsStateWithLifecycle()
     val cadence by viewModel.cadence.collectAsStateWithLifecycle()
+    val lastContactAt by viewModel.lastContactAt.collectAsStateWithLifecycle()
     val summary by viewModel.summary120d.collectAsStateWithLifecycle()
     val availableMethods by viewModel.availableMethods.collectAsStateWithLifecycle()
     val pickerMethod by viewModel.pickerMethod.collectAsStateWithLifecycle()
@@ -250,6 +253,7 @@ fun PersonDetailScreen(
                         ) {
                             CadenceCard(
                                 cadence = cadence,
+                                lastContactAt = lastContactAt,
                                 onTap = viewModel::openCadenceSheet,
                                 modifier = Modifier.weight(1f).fillMaxHeight(),
                             )
@@ -261,6 +265,7 @@ fun PersonDetailScreen(
                     } else {
                         CadenceCard(
                             cadence = cadence,
+                            lastContactAt = lastContactAt,
                             onTap = viewModel::openCadenceSheet,
                         )
                     }
@@ -297,25 +302,48 @@ fun PersonDetailScreen(
                         )
                     }
                 }
-                if (current.phoneNumbers.isNotEmpty()) {
-                    if (Tooltips.SCAN_CALLS !in dismissedTooltips) {
-                        item {
-                            CoachMarkBanner(
-                                tipId = Tooltips.SCAN_CALLS,
-                                text = "Friends can pull recent calls with this person " +
-                                    "into the timeline. Tap below to scan.",
-                                dismissed = dismissedTooltips,
-                                onDismiss = viewModel::dismissTooltip,
-                            )
-                        }
-                    }
+                val hasScan = current.phoneNumbers.isNotEmpty()
+                val cadenceTargetDays = current.person.cadenceTargetDays
+                if (hasScan && Tooltips.SCAN_CALLS !in dismissedTooltips) {
                     item {
-                        CallScanSection(
-                            state = callScan,
-                            onScan = onTriggerScan,
-                            onAddAll = viewModel::addAllScannedCalls,
-                            onAddOne = viewModel::addScannedCall,
+                        CoachMarkBanner(
+                            tipId = Tooltips.SCAN_CALLS,
+                            text = "Friends can pull recent calls with this person " +
+                                "into the timeline. Tap below to scan.",
+                            dismissed = dismissedTooltips,
+                            onDismiss = viewModel::dismissTooltip,
                         )
+                    }
+                }
+                if (hasScan || cadenceTargetDays != null) {
+                    item {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(IntrinsicSize.Min),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            if (hasScan) {
+                                CallScanSection(
+                                    state = callScan,
+                                    onScan = onTriggerScan,
+                                    onAddAll = viewModel::addAllScannedCalls,
+                                    onAddOne = viewModel::addScannedCall,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight(),
+                                )
+                            }
+                            if (cadenceTargetDays != null) {
+                                StayInTouchCard(
+                                    days = cadenceTargetDays,
+                                    onTap = viewModel::openCadenceSheet,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight(),
+                                )
+                            }
+                        }
                     }
                 }
                 item {
@@ -414,13 +442,42 @@ private fun ReachOutRow(
 }
 
 @Composable
+private fun StayInTouchCard(
+    days: Int,
+    onTap: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    ElevatedCard(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onTap),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("Stay in touch", style = MaterialTheme.typography.titleSmall)
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "Every $days days",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = "Tap to change",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
 private fun CallScanSection(
     state: CallScanState,
     onScan: () -> Unit,
     onAddAll: () -> Unit,
     onAddOne: (PersonCallCandidate) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+    ElevatedCard(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text("Call log", style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(8.dp))
@@ -576,6 +633,7 @@ private fun PersonHeader(person: PersonWithDetails) {
 @Composable
 private fun CadenceCard(
     cadence: CadenceStatus,
+    lastContactAt: Long?,
     onTap: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -595,6 +653,9 @@ private fun CadenceCard(
         CadenceState.DUE_SOON -> MaterialTheme.colorScheme.tertiaryContainer
         else -> MaterialTheme.colorScheme.surfaceVariant
     }
+    val lastContactDate = lastContactAt?.let {
+        Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate()
+    }
     Surface(
         color = containerColor,
         shape = MaterialTheme.shapes.medium,
@@ -604,6 +665,17 @@ private fun CadenceCard(
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(text = text, style = MaterialTheme.typography.bodyLarge)
+            if (lastContactDate != null) {
+                Text(
+                    text = "Last: ${formatEventDay(
+                        day = lastContactDate.dayOfMonth,
+                        month = lastContactDate.monthValue,
+                        year = lastContactDate.year,
+                    )}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             Text(
                 text = if (cadence.state == CadenceState.NOT_TRACKED) {
                     "Tap to start tracking"
@@ -799,9 +871,6 @@ private fun InfoSection(
                     onMarkWished = { onMarkWished(eventLabel(event.type).lowercase()) },
                 )
             }
-        person.person.cadenceTargetDays?.let {
-            InfoRow("Stay in touch", "every $it days")
-        }
         person.person.notes
             ?.takeIf { it.isNotBlank() }
             ?.let { InfoRow("Notes", it) }

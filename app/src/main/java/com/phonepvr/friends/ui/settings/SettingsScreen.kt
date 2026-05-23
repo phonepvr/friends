@@ -57,6 +57,7 @@ fun SettingsScreen(
     onOpenBackup: () -> Unit,
     onOpenMyQuotes: () -> Unit,
     onReplayOnboarding: () -> Unit,
+    onOpenAbout: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
@@ -193,6 +194,16 @@ fun SettingsScreen(
                     Text("See the welcome screens again")
                 },
                 modifier = Modifier.clickable { onReplayOnboarding() },
+            )
+
+            HorizontalDivider()
+            SectionHeader("About")
+            ListItem(
+                headlineContent = { Text("Privacy & about") },
+                supportingContent = {
+                    Text("Where the data lives, and where it doesn't go")
+                },
+                modifier = Modifier.clickable { onOpenAbout() },
             )
         }
     }

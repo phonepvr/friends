@@ -21,7 +21,10 @@ import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import com.phonepvr.friends.MainActivity
+import com.phonepvr.friends.data.db.dao.TimelineDao
 import com.phonepvr.friends.data.repository.PeopleRepository
+import com.phonepvr.friends.domain.cadence.CadenceCalculator
+import com.phonepvr.friends.domain.cadence.CadenceState
 import com.phonepvr.friends.domain.model.AnnualDate
 import com.phonepvr.friends.domain.model.EventType
 import dagger.hilt.EntryPoint
@@ -29,15 +32,24 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.flow.first
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 
 @EntryPoint
 @InstallIn(SingletonComponent::class)
 interface UpcomingWidgetEntryPoint {
     fun peopleRepository(): PeopleRepository
+    fun timelineDao(): TimelineDao
 }
 
-private data class WidgetItem(val days: Long, val line: String)
+private data class WidgetItem(
+    val days: Long,
+    val line: String,
+    val recencyText: String,
+    val cadenceState: CadenceState,
+)
 
 /** Home-screen widget listing birthdays and anniversaries in the next 30 days. */
 class UpcomingWidget : GlanceAppWidget() {
@@ -55,9 +67,20 @@ class UpcomingWidget : GlanceAppWidget() {
             UpcomingWidgetEntryPoint::class.java,
         )
         val people = deps.peopleRepository().observeActiveWithDetails().first()
+        val timelineDao = deps.timelineDao()
         val today = LocalDate.now()
         return people
             .flatMap { personWithDetails ->
+                val lastContactDate = timelineDao
+                    .latestContactAt(personWithDetails.person.id)
+                    ?.let { Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate() }
+                val daysSinceContact = lastContactDate
+                    ?.let { ChronoUnit.DAYS.between(it, today) }
+                val cadenceState = CadenceCalculator.status(
+                    lastContact = lastContactDate,
+                    cadenceTargetDays = personWithDetails.person.cadenceTargetDays,
+                    today = today,
+                ).state
                 personWithDetails.events.map { event ->
                     val days = AnnualDate(event.month, event.day, event.year)
                         .daysUntilNextOccurrence(today)
@@ -68,6 +91,8 @@ class UpcomingWidget : GlanceAppWidget() {
                             event.type,
                             days,
                         ),
+                        recencyText = recencyText(daysSinceContact),
+                        cadenceState = cadenceState,
                     )
                 }
             }
@@ -102,11 +127,26 @@ private fun WidgetContent(items: List<WidgetItem>) {
             )
         } else {
             items.forEach { item ->
-                Text(
-                    text = item.line,
-                    style = TextStyle(color = GlanceTheme.colors.onBackground),
-                    modifier = GlanceModifier.padding(vertical = 2.dp),
-                )
+                Column(modifier = GlanceModifier.padding(vertical = 2.dp)) {
+                    Text(
+                        text = item.line,
+                        style = TextStyle(color = GlanceTheme.colors.onBackground),
+                    )
+                    Text(
+                        text = item.recencyText,
+                        style = TextStyle(
+                            color = when (item.cadenceState) {
+                                CadenceState.OVERDUE ->
+                                    GlanceTheme.colors.error
+                                CadenceState.DUE_SOON, CadenceState.NEVER_CONTACTED ->
+                                    GlanceTheme.colors.primary
+                                CadenceState.ON_TRACK, CadenceState.NOT_TRACKED ->
+                                    GlanceTheme.colors.onBackground
+                            },
+                            fontSize = 12.sp,
+                        ),
+                    )
+                }
             }
         }
     }
@@ -124,4 +164,11 @@ private fun widgetLine(name: String, type: EventType, days: Long): String {
         else -> "in $days days"
     }
     return "$name — $occasion $whenText"
+}
+
+private fun recencyText(daysSinceContact: Long?): String = when {
+    daysSinceContact == null -> "never logged"
+    daysSinceContact <= 0L -> "last spoke today"
+    daysSinceContact == 1L -> "last spoke yesterday"
+    else -> "last spoke $daysSinceContact days ago"
 }

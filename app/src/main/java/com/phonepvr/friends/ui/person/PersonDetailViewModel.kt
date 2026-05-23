@@ -16,15 +16,6 @@ import com.phonepvr.friends.domain.cadence.CadenceStatus
 import com.phonepvr.friends.domain.model.EntrySource
 import com.phonepvr.friends.domain.model.InteractionType
 import com.phonepvr.friends.ui.navigation.Routes
-
-/** Interactions logged + total call time over the recent window the screen shows. */
-data class InteractionSummary(
-    val interactionCount: Int,
-    val totalCallSeconds: Long,
-)
-
-private const val SUMMARY_WINDOW_DAYS = 120L
-private const val SUMMARY_WINDOW_MILLIS = SUMMARY_WINDOW_DAYS * 24L * 60L * 60L * 1000L
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -39,6 +30,15 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import javax.inject.Inject
+
+/** Interactions logged + total call time over the recent window the screen shows. */
+data class InteractionSummary(
+    val interactionCount: Int,
+    val totalCallSeconds: Long,
+)
+
+private const val SUMMARY_WINDOW_DAYS = 120L
+private const val SUMMARY_WINDOW_MILLIS = SUMMARY_WINDOW_DAYS * 24L * 60L * 60L * 1000L
 
 @HiltViewModel
 class PersonDetailViewModel @Inject constructor(

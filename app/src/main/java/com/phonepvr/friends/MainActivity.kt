@@ -42,7 +42,10 @@ class MainActivity : FragmentActivity() {
             val settings by viewModel.settings.collectAsStateWithLifecycle()
             val authenticated by viewModel.authenticated.collectAsStateWithLifecycle()
             val current = settings
-            FriendsTheme(themeMode = current?.themeMode ?: ThemeMode.SYSTEM) {
+            FriendsTheme(
+                themeMode = current?.themeMode ?: ThemeMode.SYSTEM,
+                dynamicColor = current?.dynamicColorEnabled ?: false,
+            ) {
                 when {
                     // Wait for the first settings read so the lock and theme
                     // are correct before anything is drawn.

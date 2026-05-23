@@ -26,6 +26,12 @@ data class AppSettings(
     val notificationHour: Int = 9,
     val appLockEnabled: Boolean = false,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
+    /**
+     * When true on Android 12+, the OS wallpaper-derived palette wins over the
+     * app's hand-tuned warm palette. Default is false — the bundled palette is
+     * the intended look.
+     */
+    val dynamicColorEnabled: Boolean = false,
     val defaultCadenceDays: Int = 30,
     /** Epoch millis of the most recent successful export, null if there isn't one yet. */
     val lastSuccessfulBackupAt: Long? = null,
@@ -57,6 +63,8 @@ class SettingsRepository @Inject constructor(
                 notificationHour = prefs[Keys.HOUR] ?: DEFAULTS.notificationHour,
                 appLockEnabled = prefs[Keys.APP_LOCK] ?: DEFAULTS.appLockEnabled,
                 themeMode = prefs[Keys.THEME]?.let(::themeModeOf) ?: DEFAULTS.themeMode,
+                dynamicColorEnabled = prefs[Keys.DYNAMIC_COLOR]
+                    ?: DEFAULTS.dynamicColorEnabled,
                 defaultCadenceDays = prefs[Keys.DEFAULT_CADENCE]
                     ?: DEFAULTS.defaultCadenceDays,
                 lastSuccessfulBackupAt = prefs[Keys.LAST_BACKUP]?.takeIf { it > 0L },
@@ -80,6 +88,10 @@ class SettingsRepository @Inject constructor(
 
     suspend fun setThemeMode(mode: ThemeMode) {
         dataStore.edit { it[Keys.THEME] = mode.name }
+    }
+
+    suspend fun setDynamicColorEnabled(enabled: Boolean) {
+        dataStore.edit { it[Keys.DYNAMIC_COLOR] = enabled }
     }
 
     suspend fun setDefaultCadenceDays(days: Int) {
@@ -111,6 +123,7 @@ class SettingsRepository @Inject constructor(
             put(Snapshot.HOUR, current.notificationHour.toString())
             put(Snapshot.APP_LOCK, current.appLockEnabled.toString())
             put(Snapshot.THEME, current.themeMode.name)
+            put(Snapshot.DYNAMIC_COLOR, current.dynamicColorEnabled.toString())
             put(Snapshot.DEFAULT_CADENCE, current.defaultCadenceDays.toString())
             current.lastSuccessfulBackupAt?.let {
                 put(Snapshot.LAST_BACKUP, it.toString())
@@ -127,6 +140,8 @@ class SettingsRepository @Inject constructor(
             snapshot[Snapshot.APP_LOCK]?.toBooleanStrictOrNull()
                 ?.let { prefs[Keys.APP_LOCK] = it }
             snapshot[Snapshot.THEME]?.let { prefs[Keys.THEME] = it }
+            snapshot[Snapshot.DYNAMIC_COLOR]?.toBooleanStrictOrNull()
+                ?.let { prefs[Keys.DYNAMIC_COLOR] = it }
             snapshot[Snapshot.DEFAULT_CADENCE]?.toIntOrNull()
                 ?.let { prefs[Keys.DEFAULT_CADENCE] = it }
             snapshot[Snapshot.LAST_BACKUP]?.toLongOrNull()
@@ -144,6 +159,7 @@ class SettingsRepository @Inject constructor(
         val HOUR = intPreferencesKey("notification_hour")
         val APP_LOCK = booleanPreferencesKey("app_lock_enabled")
         val THEME = stringPreferencesKey("theme_mode")
+        val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color_enabled")
         val DEFAULT_CADENCE = intPreferencesKey("default_cadence_days")
         val LAST_BACKUP = longPreferencesKey("last_successful_backup_at")
         val NUDGE_INTERVAL = intPreferencesKey("backup_nudge_interval_days")
@@ -155,6 +171,7 @@ class SettingsRepository @Inject constructor(
         const val HOUR = "notification_hour"
         const val APP_LOCK = "app_lock_enabled"
         const val THEME = "theme_mode"
+        const val DYNAMIC_COLOR = "dynamic_color_enabled"
         const val DEFAULT_CADENCE = "default_cadence_days"
         const val LAST_BACKUP = "last_successful_backup_at"
         const val NUDGE_INTERVAL = "backup_nudge_interval_days"

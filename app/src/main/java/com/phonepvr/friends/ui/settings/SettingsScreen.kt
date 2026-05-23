@@ -1,5 +1,6 @@
 package com.phonepvr.friends.ui.settings
 
+import android.os.Build
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -89,6 +90,29 @@ fun SettingsScreen(
                 supportingContent = { Text(themeLabel(settings.themeMode)) },
                 modifier = Modifier.clickable { activeDialog = SettingsDialog.THEME },
             )
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                ListItem(
+                    headlineContent = { Text("Match my wallpaper's colours") },
+                    supportingContent = {
+                        Text(
+                            if (settings.dynamicColorEnabled) {
+                                "Using Android's wallpaper-derived palette"
+                            } else {
+                                "Using Friends' warm palette"
+                            },
+                        )
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = settings.dynamicColorEnabled,
+                            onCheckedChange = viewModel::setDynamicColorEnabled,
+                        )
+                    },
+                    modifier = Modifier.clickable {
+                        viewModel.setDynamicColorEnabled(!settings.dynamicColorEnabled)
+                    },
+                )
+            }
 
             HorizontalDivider()
             SectionHeader("Reminders")

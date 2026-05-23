@@ -28,6 +28,10 @@ class SettingsViewModel @Inject constructor(
         settingsRepository.setThemeMode(mode)
     }
 
+    fun setDynamicColorEnabled(enabled: Boolean) = runUpdate {
+        settingsRepository.setDynamicColorEnabled(enabled)
+    }
+
     fun setNotificationLeadDays(days: Int) = runUpdate {
         settingsRepository.setNotificationLeadDays(days)
     }

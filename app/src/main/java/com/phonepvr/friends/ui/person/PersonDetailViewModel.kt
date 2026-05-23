@@ -317,10 +317,14 @@ class PersonDetailViewModel @Inject constructor(
                 type = InteractionType.CALL,
                 note = null,
                 source = EntrySource.CALL_LOG,
-                // Missed / rejected calls don't count toward cadence — same
-                // rule the old global confirm() used.
-                countsAsContact = call.type == CallType.INCOMING ||
-                    call.type == CallType.OUTGOING,
+                // Auto-imported calls only count toward cadence when both
+                // direction (incoming / outgoing) AND duration (> 0s) indicate
+                // a real conversation happened. Missed / rejected calls and
+                // ring-and-hang-up entries are excluded. Manual calls go
+                // through a different path with no such filter — if the user
+                // logs a call by hand we trust them.
+                countsAsContact = (call.type == CallType.INCOMING ||
+                    call.type == CallType.OUTGOING) && call.durationSeconds > 0L,
                 callDedupKey = candidate.callDedupKey,
                 callDirection = call.type,
                 callDurationSeconds = call.durationSeconds,

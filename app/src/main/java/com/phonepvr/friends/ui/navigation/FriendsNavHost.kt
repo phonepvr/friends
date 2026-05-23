@@ -14,6 +14,7 @@ import com.phonepvr.friends.ui.contacts.ImportContactsScreen
 import com.phonepvr.friends.ui.people.AddEditPersonScreen
 import com.phonepvr.friends.ui.people.PeopleListScreen
 import com.phonepvr.friends.ui.person.PersonDetailScreen
+import com.phonepvr.friends.ui.review.YearInReviewScreen
 import com.phonepvr.friends.ui.settings.SettingsScreen
 import com.phonepvr.friends.ui.timeline.LogInteractionScreen
 import com.phonepvr.friends.ui.timeline.TimelineScreen
@@ -29,6 +30,7 @@ object Routes {
     const val IMPORT_CONTACTS = "contacts/import"
     const val BACKUP = "backup"
     const val SETTINGS = "settings"
+    const val YEAR_IN_REVIEW = "year-in-review"
     const val PERSON_ID_ARG = "personId"
 
     fun editPerson(personId: Long): String = "person/edit/$personId"
@@ -113,10 +115,14 @@ fun FriendsNavHost(
             SettingsScreen(
                 onBack = { navController.popBackStack() },
                 onOpenBackup = { navController.navigate(Routes.BACKUP) },
+                onOpenYearInReview = { navController.navigate(Routes.YEAR_IN_REVIEW) },
             )
         }
         composable(Routes.BACKUP) {
             BackupScreen(onBack = { navController.popBackStack() })
+        }
+        composable(Routes.YEAR_IN_REVIEW) {
+            YearInReviewScreen(onBack = { navController.popBackStack() })
         }
     }
 }

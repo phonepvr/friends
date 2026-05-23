@@ -54,6 +54,7 @@ private enum class SettingsDialog { THEME, LEAD_DAYS, HOUR, CADENCE, BACKUP_NUDG
 fun SettingsScreen(
     onBack: () -> Unit,
     onOpenBackup: () -> Unit,
+    onOpenYearInReview: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
@@ -150,6 +151,16 @@ fun SettingsScreen(
                     Text("Nudge me every ${daysLabel(settings.backupNudgeIntervalDays)}")
                 },
                 modifier = Modifier.clickable { activeDialog = SettingsDialog.BACKUP_NUDGE },
+            )
+
+            HorizontalDivider()
+            SectionHeader("Insights")
+            ListItem(
+                headlineContent = { Text("Year in review") },
+                supportingContent = {
+                    Text("A look back at how often you stayed in touch")
+                },
+                modifier = Modifier.clickable { onOpenYearInReview() },
             )
         }
     }

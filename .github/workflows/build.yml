@@ -50,11 +50,10 @@ jobs:
           set -euo pipefail
           # versionCode is monotonic across re-runs of the same run_number:
           # run #50 attempt 1 -> 5001, attempt 2 -> 5002, etc.
-          VERSION_CODE=$(( ${{ github.run_number }} * 100 + ${{ github.run_attempt }} ))
-          ./gradlew testDebugUnitTest assembleDebug \
-            -PversionCode="$VERSION_CODE" \
-            -PversionName="1.0.${{ github.run_number }}" \
-            --stacktrace
+          export APP_VERSION_CODE=$(( ${{ github.run_number }} * 100 + ${{ github.run_attempt }} ))
+          export APP_VERSION_NAME="1.0.${{ github.run_number }}"
+          echo "APP_VERSION_CODE=$APP_VERSION_CODE  APP_VERSION_NAME=$APP_VERSION_NAME"
+          ./gradlew testDebugUnitTest assembleDebug --stacktrace
 
       - name: Verify APK declares no network permissions
         run: |

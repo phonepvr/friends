@@ -15,8 +15,10 @@ android {
         applicationId = "com.phonepvr.friends"
         minSdk = 26
         targetSdk = 35
-        versionCode = project.findProperty("versionCode")?.toString()?.toIntOrNull() ?: 1
-        versionName = project.findProperty("versionName")?.toString() ?: "1.0.0"
+        // CI sets APP_VERSION_CODE/APP_VERSION_NAME via env so each build
+        // installs as a distinct version. Local builds use the defaults.
+        versionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: 1
+        versionName = System.getenv("APP_VERSION_NAME") ?: "1.0.0"
     }
 
     signingConfigs {
@@ -40,14 +42,6 @@ android {
                 keyAlias = alias
                 keyPassword = keyPass
             }
-        }
-    }
-
-    buildTypes {
-        getByName("debug") {
-            // Explicit: shipping APK keeps R8 off so stack traces match
-            // source lines and the build stays reproducible.
-            isMinifyEnabled = false
         }
     }
 

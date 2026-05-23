@@ -48,7 +48,7 @@ class CallLogRepository @Inject constructor(
             .toSet()
         if (matchKeys.isEmpty()) return emptyList()
 
-        return deviceCalls
+        val matched = deviceCalls
             .asSequence()
             .filter { PhoneNumberMatcher.matchKey(it.number) in matchKeys }
             .filter { call ->
@@ -65,8 +65,16 @@ class CallLogRepository @Inject constructor(
                     ),
                 )
             }
-            .filter { !timelineDao.existsByCallDedupKey(it.callDedupKey) }
-            .sortedByDescending { it.deviceCall.timestampMillis }
             .toList()
+        // Dedupe against the timeline. The DAO call is suspend, so it has to
+        // live outside any Sequence/List functional pipeline (those don't
+        // propagate suspend through their lambdas).
+        val notYetLogged = mutableListOf<PersonCallCandidate>()
+        for (candidate in matched) {
+            if (!timelineDao.existsByCallDedupKey(candidate.callDedupKey)) {
+                notYetLogged.add(candidate)
+            }
+        }
+        return notYetLogged.sortedByDescending { it.deviceCall.timestampMillis }
     }
 }

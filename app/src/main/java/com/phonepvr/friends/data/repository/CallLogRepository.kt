@@ -39,7 +39,15 @@ class CallLogRepository @Inject constructor(
         if (phones.isEmpty()) return emptyList()
         val sinceMillis =
             System.currentTimeMillis() - windowDays.toLong() * 24L * 60L * 60L * 1000L
-        val deviceCalls = callLogReader.recentCalls(sinceMillis)
+        // READ_CALL_LOG is requested at the call site, but a denied permission
+        // would still let the suspend coroutine throw — catch it here so the
+        // VM treats a missing permission as "no calls to show" instead of
+        // crashing the process.
+        val deviceCalls = try {
+            callLogReader.recentCalls(sinceMillis)
+        } catch (e: SecurityException) {
+            return emptyList()
+        }
         if (deviceCalls.isEmpty()) return emptyList()
 
         // Prefilter: index this person's phones by their last 7 digits.

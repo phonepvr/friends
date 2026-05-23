@@ -1,5 +1,9 @@
 package com.phonepvr.friends.ui.person
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -44,7 +48,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.phonepvr.friends.data.db.entity.EventEntity
@@ -83,6 +89,24 @@ fun PersonDetailScreen(
     val callScan by viewModel.callScan.collectAsStateWithLifecycle()
     val today = remember { LocalDate.now() }
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
+
+    val callLogPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) viewModel.scanCalls()
+    }
+    val onTriggerScan: () -> Unit = {
+        val granted = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.READ_CALL_LOG,
+        ) == PackageManager.PERMISSION_GRANTED
+        if (granted) {
+            viewModel.scanCalls()
+        } else {
+            callLogPermissionLauncher.launch(Manifest.permission.READ_CALL_LOG)
+        }
+    }
 
     LaunchedEffect(pendingLogPrompt) {
         val method = pendingLogPrompt ?: return@LaunchedEffect
@@ -160,7 +184,7 @@ fun PersonDetailScreen(
                     item {
                         CallScanSection(
                             state = callScan,
-                            onScan = viewModel::scanCalls,
+                            onScan = onTriggerScan,
                             onAddAll = viewModel::addAllScannedCalls,
                             onAddOne = viewModel::addScannedCall,
                         )

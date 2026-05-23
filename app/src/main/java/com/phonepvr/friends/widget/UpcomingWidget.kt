@@ -17,11 +17,13 @@ import androidx.glance.appwidget.lazy.items
 import androidx.glance.appwidget.provideContent
 import androidx.glance.background
 import androidx.glance.layout.Column
+import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
 import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
+import androidx.glance.layout.width
 import androidx.glance.text.FontStyle
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
@@ -53,24 +55,38 @@ interface UpcomingWidgetEntryPoint {
     fun quoteRepository(): QuoteRepository
 }
 
-private data class WidgetItem(
-    val id: Long,
-    val days: Long,
-    val line: String,
+/** One occasion (birthday OR anniversary) belonging to a person row. */
+private data class WidgetOccasion(val type: EventType, val days: Long, val whenText: String)
+
+/**
+ * One row on the widget — a person with their (up to two) upcoming events
+ * shown side-by-side. Each row gets a recency line beneath, coloured by the
+ * person's cadence.
+ */
+private data class WidgetPersonRow(
+    val personId: Long,
+    val name: String,
+    val soonest: Long,
+    val occasions: List<WidgetOccasion>,
     val recencyText: String,
     val cadenceState: CadenceState,
 )
 
-private data class WidgetData(val quote: Quote?, val items: List<WidgetItem>)
+private data class WidgetData(val quote: Quote?, val rows: List<WidgetPersonRow>)
 
 // Soft cap on the lazy list. Glance LazyColumn is fine with this many on
 // stock launchers; OEM hosts occasionally jank past a few hundred entries.
-private const val MAX_WIDGET_ITEMS = 80
+private const val MAX_WIDGET_ROWS = 80
 
 /**
- * Home-screen widget showing today's quote and every upcoming birthday +
- * anniversary, sorted by days-until and colour-coded by the person's
- * cadence. Glance LazyColumn makes the list scrollable.
+ * Home-screen widget showing today's quote and every upcoming birthday /
+ * anniversary, grouped one person per row (so the same contact's two events
+ * sit side-by-side), sorted by soonest-upcoming-event, and colour-coded by
+ * the person's cadence. Glance LazyColumn makes the list scrollable.
+ *
+ * Auto-refreshes on app data changes via WidgetRefreshObserver (kicked off
+ * from FriendsApplication.onCreate) — the daily worker stays as a belt-and-
+ * braces backstop.
  */
 class UpcomingWidget : GlanceAppWidget() {
 
@@ -89,8 +105,25 @@ class UpcomingWidget : GlanceAppWidget() {
         val people = deps.peopleRepository().observeActiveWithDetails().first()
         val timelineDao = deps.timelineDao()
         val today = LocalDate.now()
-        val items = people
-            .flatMap { personWithDetails ->
+
+        val rows = people
+            .mapNotNull { personWithDetails ->
+                val occasions = personWithDetails.events.mapNotNull { event ->
+                    val days = AnnualDate(event.month, event.day, event.year)
+                        .daysUntilNextOccurrence(today)
+                    if (event.type != EventType.BIRTHDAY &&
+                        event.type != EventType.WEDDING_ANNIVERSARY
+                    ) {
+                        null
+                    } else {
+                        WidgetOccasion(
+                            type = event.type,
+                            days = days,
+                            whenText = whenLabel(event.type, days),
+                        )
+                    }
+                }
+                if (occasions.isEmpty()) return@mapNotNull null
                 val lastContactDate = timelineDao
                     .latestContactAt(personWithDetails.person.id)
                     ?.let { Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate() }
@@ -101,28 +134,22 @@ class UpcomingWidget : GlanceAppWidget() {
                     cadenceTargetDays = personWithDetails.person.cadenceTargetDays,
                     today = today,
                 ).state
-                personWithDetails.events.map { event ->
-                    val days = AnnualDate(event.month, event.day, event.year)
-                        .daysUntilNextOccurrence(today)
-                    WidgetItem(
-                        id = event.id,
-                        days = days,
-                        line = widgetLine(
-                            personWithDetails.person.displayName,
-                            event.type,
-                            days,
-                        ),
-                        recencyText = recencyText(daysSinceContact),
-                        cadenceState = cadenceState,
-                    )
-                }
+                // Birthday on the left when both exist; otherwise whichever
+                // one the person has.
+                val ordered = occasions.sortedBy { if (it.type == EventType.BIRTHDAY) 0 else 1 }
+                WidgetPersonRow(
+                    personId = personWithDetails.person.id,
+                    name = personWithDetails.person.displayName,
+                    soonest = occasions.minOf { it.days },
+                    occasions = ordered,
+                    recencyText = recencyText(daysSinceContact),
+                    cadenceState = cadenceState,
+                )
             }
-            .sortedBy { it.days }
-            .take(MAX_WIDGET_ITEMS)
-        // Same call the app makes — the cache keeps both in sync across the
-        // day, including the in-app shuffle (which invalidates the cache).
+            .sortedBy { it.soonest }
+            .take(MAX_WIDGET_ROWS)
         val quote = runCatching { deps.quoteRepository().quoteOfTheDay(today) }.getOrNull()
-        return WidgetData(quote = quote, items = items)
+        return WidgetData(quote = quote, rows = rows)
     }
 }
 
@@ -137,8 +164,6 @@ private fun WidgetContent(data: WidgetData) {
             .padding(12.dp),
     ) {
         item {
-            // Quote header + a tight inline header label for "Upcoming". The
-            // entire block is tappable so the widget still launches the app.
             Column(modifier = GlanceModifier.fillMaxWidth().clickable(launchActivity)) {
                 data.quote?.let { quote ->
                     Text(
@@ -173,7 +198,7 @@ private fun WidgetContent(data: WidgetData) {
                 Spacer(GlanceModifier.height(4.dp))
             }
         }
-        if (data.items.isEmpty()) {
+        if (data.rows.isEmpty()) {
             item {
                 Column(modifier = GlanceModifier.fillMaxWidth().clickable(launchActivity)) {
                     Text(
@@ -183,29 +208,45 @@ private fun WidgetContent(data: WidgetData) {
                 }
             }
         } else {
-            items(items = data.items, itemId = { it.id }) { item ->
-                WidgetEventRow(item = item, onClick = launchActivity)
+            items(items = data.rows, itemId = { it.personId }) { row ->
+                WidgetPersonCard(row = row, onClick = launchActivity)
             }
         }
     }
 }
 
 @Composable
-private fun WidgetEventRow(item: WidgetItem, onClick: androidx.glance.action.Action) {
+private fun WidgetPersonCard(row: WidgetPersonRow, onClick: androidx.glance.action.Action) {
     Column(
         modifier = GlanceModifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp)
+            .padding(vertical = 6.dp)
             .clickable(onClick),
     ) {
         Text(
-            text = item.line,
-            style = TextStyle(color = GlanceTheme.colors.onBackground),
-        )
-        Text(
-            text = item.recencyText,
+            text = row.name,
             style = TextStyle(
-                color = when (item.cadenceState) {
+                color = GlanceTheme.colors.onBackground,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+            ),
+        )
+        Row(modifier = GlanceModifier.fillMaxWidth().padding(top = 2.dp)) {
+            row.occasions.forEachIndexed { index, occasion ->
+                if (index > 0) Spacer(GlanceModifier.width(12.dp))
+                Text(
+                    text = "${occasionLabel(occasion.type)} ${occasion.whenText}",
+                    style = TextStyle(
+                        color = GlanceTheme.colors.onBackground,
+                        fontSize = 12.sp,
+                    ),
+                )
+            }
+        }
+        Text(
+            text = row.recencyText,
+            style = TextStyle(
+                color = when (row.cadenceState) {
                     CadenceState.OVERDUE ->
                         GlanceTheme.colors.error
                     CadenceState.DUE_SOON, CadenceState.NEVER_CONTACTED ->
@@ -213,25 +254,24 @@ private fun WidgetEventRow(item: WidgetItem, onClick: androidx.glance.action.Act
                     CadenceState.ON_TRACK, CadenceState.NOT_TRACKED ->
                         GlanceTheme.colors.onBackground
                 },
-                fontSize = 12.sp,
+                fontSize = 11.sp,
             ),
         )
     }
 }
 
-private fun widgetLine(name: String, type: EventType, days: Long): String {
-    val occasion = when (type) {
-        EventType.BIRTHDAY -> "birthday"
-        EventType.WEDDING_ANNIVERSARY -> "anniversary"
-        EventType.CUSTOM -> "date"
-    }
-    val whenText = when (days) {
+private fun occasionLabel(type: EventType): String = when (type) {
+    EventType.BIRTHDAY -> "🎂 Birthday"
+    EventType.WEDDING_ANNIVERSARY -> "💞 Anniversary"
+    EventType.CUSTOM -> "Date"
+}
+
+private fun whenLabel(@Suppress("UNUSED_PARAMETER") type: EventType, days: Long): String =
+    when (days) {
         0L -> "today"
         1L -> "tomorrow"
-        else -> "in $days days"
+        else -> "in ${days}d"
     }
-    return "$name — $occasion $whenText"
-}
 
 private fun recencyText(daysSinceContact: Long?): String = when {
     daysSinceContact == null -> "never logged"

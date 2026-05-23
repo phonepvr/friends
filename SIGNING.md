@@ -1,6 +1,6 @@
-# Signing the Friends APK
+# Signing the Bondwidth APK
 
-Friends is built and released entirely from GitHub Actions. To install each
+Bondwidth is built and released entirely from GitHub Actions. To install each
 new build as a normal update of the previous one, every APK must be signed
 with the **same** key. This document is the one-time setup and the recovery
 procedure.
@@ -17,9 +17,8 @@ The build is also wired so that `versionCode` auto-increments from
 
 ## A) Generate the keystore on GitHub Actions
 
-1. Merge the new `generate-keystore.yml` workflow to the working branch.
-2. Go to **Actions → "Generate signing keystore" → Run workflow → Run**.
-3. After the run completes, open the run page and:
+1. Go to **Actions → "Generate signing keystore" → Run workflow → Run**.
+2. After the run completes, open the run page and:
    - Download the keystore artifact **`signing-keystore`** (a zip containing
      `signing-keystore.b64` and `credentials.txt`).
    - Open `signing-keystore.b64`: it contains exactly one line of base64 —
@@ -39,7 +38,7 @@ repository secrets. Names must match exactly:
 - `SIGNING_STORE_PASSWORD` — paste from `credentials.txt`.
 - `SIGNING_KEY_PASSWORD` — paste from `credentials.txt` (same value as the
   store password, by convention).
-- `SIGNING_KEY_ALIAS` — paste from `credentials.txt` (`friends`).
+- `SIGNING_KEY_ALIAS` — paste from `credentials.txt` (`bondwidth`).
 
 The artifact auto-deletes after 7 days. Once the secrets are saved, you can
 also re-run the workflow at any time to download the credentials again.
@@ -56,14 +55,14 @@ every time you wanted a new build.
 Existing builds were signed with ephemeral debug keys, so the first
 properly-signed build will not install over them. Do this once:
 
-1. Open the currently-installed Friends app and export a backup
+1. Open the currently-installed Bondwidth app and export a backup
    (**Settings → Backup & restore → Export…**) to a safe location
    (USB drive, encrypted email to yourself, etc.).
-2. Uninstall Friends.
+2. Uninstall Bondwidth.
 3. Wait for the next CI build to publish a Release (tagged
    `v1.0.0-build.N.1` for some new `N`).
 4. Install the new signed APK.
-5. Open Friends and import the backup file.
+5. Open Bondwidth and import the backup file.
 
 From this point on, every CI build installs as a normal update with no data
 loss.

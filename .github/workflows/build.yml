@@ -50,10 +50,22 @@ jobs:
           set -euo pipefail
           # versionCode is monotonic across re-runs of the same run_number:
           # run #50 attempt 1 -> 5001, attempt 2 -> 5002, etc.
-          export APP_VERSION_CODE=$(( ${{ github.run_number }} * 100 + ${{ github.run_attempt }} ))
-          export APP_VERSION_NAME="1.0.${{ github.run_number }}"
+          APP_VERSION_CODE=$(( ${{ github.run_number }} * 100 + ${{ github.run_attempt }} ))
+          APP_VERSION_NAME="1.0.${{ github.run_number }}"
+          export APP_VERSION_CODE APP_VERSION_NAME
+          # Expose to later steps (release rename, body, file path).
+          echo "APP_VERSION_CODE=$APP_VERSION_CODE" >> "$GITHUB_ENV"
+          echo "APP_VERSION_NAME=$APP_VERSION_NAME" >> "$GITHUB_ENV"
           echo "APP_VERSION_CODE=$APP_VERSION_CODE  APP_VERSION_NAME=$APP_VERSION_NAME"
           ./gradlew testDebugUnitTest assembleDebug --stacktrace
+
+      - name: Rename APK with Bondwidth branding
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          cp app/build/outputs/apk/debug/app-debug.apk \
+             "release/Bondwidth-v${APP_VERSION_NAME}.apk"
+          ls -la release/
 
       - name: Verify APK declares no network permissions
         run: |
@@ -79,6 +91,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.0-build.${{ github.run_number }}.${{ github.run_attempt }}
-          name: Build ${{ github.run_number }}
-          body: "Debug build ${{ github.run_number }}."
-          files: app/build/outputs/apk/debug/app-debug.apk
+          name: Bondwidth v${{ env.APP_VERSION_NAME }}
+          body: "Bondwidth build ${{ github.run_number }} (v${{ env.APP_VERSION_NAME }})."
+          files: release/Bondwidth-v${{ env.APP_VERSION_NAME }}.apk

@@ -19,7 +19,7 @@ import javax.inject.Inject
  */
 @HiltViewModel
 class MainViewModel @Inject constructor(
-    settingsRepository: SettingsRepository,
+    private val settingsRepository: SettingsRepository,
 ) : ViewModel() {
 
     /** Null until the first settings read completes, so theming waits for it. */
@@ -45,5 +45,12 @@ class MainViewModel @Inject constructor(
 
     fun onMovedToBackground() {
         _authenticated.value = false
+    }
+
+    /** Called once when the user finishes / skips first-run onboarding. */
+    fun markOnboardingSeen() {
+        viewModelScope.launch {
+            settingsRepository.setHasSeenOnboarding(true)
+        }
     }
 }

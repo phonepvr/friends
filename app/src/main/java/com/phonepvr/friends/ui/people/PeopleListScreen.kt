@@ -8,10 +8,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
@@ -32,11 +34,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.phonepvr.friends.data.db.relation.PersonWithDetails
+import com.phonepvr.friends.domain.quotes.Quote
 import com.phonepvr.friends.ui.components.PersonAvatar
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -53,6 +57,7 @@ fun PeopleListScreen(
     val people by viewModel.people.collectAsStateWithLifecycle()
     val query by viewModel.searchQuery.collectAsStateWithLifecycle()
     val showBackupNudge by viewModel.showBackupNudge.collectAsStateWithLifecycle()
+    val todayQuote by viewModel.todayQuote.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -94,16 +99,28 @@ fun PeopleListScreen(
                 leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
                 singleLine = true,
             )
-            if (people.isEmpty()) {
-                EmptyState(modifier = Modifier.fillMaxSize())
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                todayQuote?.let { quote ->
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        QuoteCard(quote)
+                    }
+                }
+                if (people.isEmpty()) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        EmptyState()
+                    }
+                } else {
                     items(people, key = { it.person.id }) { item ->
-                        PersonRow(item = item, onClick = { onOpenPerson(item.person.id) })
+                        PersonCard(
+                            item = item,
+                            onClick = { onOpenPerson(item.person.id) },
+                        )
                     }
                 }
             }
@@ -112,41 +129,62 @@ fun PeopleListScreen(
 }
 
 @Composable
-private fun PersonRow(item: PersonWithDetails, onClick: () -> Unit) {
+private fun QuoteCard(quote: Quote) {
+    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = quote.text,
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            quote.attribution?.let { attribution ->
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = "— $attribution",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PersonCard(item: PersonWithDetails, onClick: () -> Unit) {
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() },
     ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             PersonAvatar(
                 photoRelativePath = item.person.photoRelativePath,
                 displayName = item.person.displayName,
+                diameter = 56.dp,
             )
-            Spacer(Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(item.person.displayName, style = MaterialTheme.typography.titleMedium)
-                val parts = buildList {
-                    item.person.relationshipTag
-                        ?.takeIf { it.isNotBlank() }
-                        ?.let { add(it) }
-                    if (item.phoneNumbers.isNotEmpty()) {
-                        val count = item.phoneNumbers.size
-                        add(if (count == 1) "1 number" else "$count numbers")
-                    }
-                }
-                if (parts.isNotEmpty()) {
-                    Text(
-                        text = parts.joinToString("  ·  "),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
+            Text(
+                text = item.person.displayName,
+                style = MaterialTheme.typography.titleSmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+            )
+            val subtitle = item.person.relationshipTag?.takeIf { it.isNotBlank() }
+                ?: item.phoneNumbers.firstOrNull()?.rawNumber
+            if (subtitle != null) {
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                )
             }
         }
     }
@@ -185,18 +223,20 @@ private fun BackupNudgeBanner(
 }
 
 @Composable
-private fun EmptyState(modifier: Modifier = Modifier) {
+private fun EmptyState() {
     Column(
-        modifier = modifier,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 48.dp, horizontal = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
     ) {
         Text("No people yet", style = MaterialTheme.typography.titleMedium)
         Text(
             text = "Tap + to add someone you want to stay in touch with.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 8.dp, start = 32.dp, end = 32.dp),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = 8.dp),
         )
     }
 }

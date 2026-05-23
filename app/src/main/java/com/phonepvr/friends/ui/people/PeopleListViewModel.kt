@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.phonepvr.friends.data.db.relation.PersonWithDetails
 import com.phonepvr.friends.data.repository.PeopleRepository
 import com.phonepvr.friends.data.settings.SettingsRepository
+import com.phonepvr.friends.domain.quotes.Quote
+import com.phonepvr.friends.domain.quotes.QuoteRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,11 +26,22 @@ private const val DAY_MILLIS = 24L * 60L * 60L * 1000L
 class PeopleListViewModel @Inject constructor(
     repository: PeopleRepository,
     private val settingsRepository: SettingsRepository,
+    private val quoteRepository: QuoteRepository,
     @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
+    private val _todayQuote = MutableStateFlow<Quote?>(null)
+    /** Today's quote-of-the-day, surfaced above the people list. */
+    val todayQuote: StateFlow<Quote?> = _todayQuote.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            _todayQuote.value = quoteRepository.quoteOfTheDay()
+        }
+    }
 
     val people: StateFlow<List<PersonWithDetails>> =
         combine(repository.observeActiveWithDetails(), _searchQuery) { people, query ->

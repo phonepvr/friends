@@ -22,6 +22,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.phonepvr.friends.domain.model.ThemeMode
 import com.phonepvr.friends.ui.lock.LockScreen
 import com.phonepvr.friends.ui.navigation.FriendsNavHost
+import com.phonepvr.friends.ui.onboarding.OnboardingScreen
 import com.phonepvr.friends.ui.theme.FriendsTheme
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -50,6 +51,9 @@ class MainActivity : FragmentActivity() {
                     // Wait for the first settings read so the lock and theme
                     // are correct before anything is drawn.
                     current == null -> Surface(modifier = Modifier.fillMaxSize()) {}
+
+                    !current.hasSeenOnboarding ->
+                        OnboardingScreen(onDone = viewModel::markOnboardingSeen)
 
                     current.appLockEnabled && !authenticated ->
                         LockScreen(onUnlocked = viewModel::onAuthenticated)

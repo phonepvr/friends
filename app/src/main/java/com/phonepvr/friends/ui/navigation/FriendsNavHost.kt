@@ -10,6 +10,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.phonepvr.friends.ui.backup.BackupScreen
 import com.phonepvr.friends.ui.contacts.ImportContactsScreen
+import com.phonepvr.friends.ui.onboarding.OnboardingScreen
 import com.phonepvr.friends.ui.people.AddEditPersonScreen
 import com.phonepvr.friends.ui.people.PeopleListScreen
 import com.phonepvr.friends.ui.person.PersonDetailScreen
@@ -31,6 +32,7 @@ object Routes {
     const val SETTINGS = "settings"
     const val YEAR_IN_REVIEW = "year-in-review"
     const val MY_QUOTES = "quotes/my"
+    const val ONBOARDING = "onboarding"
     const val PERSON_ID_ARG = "personId"
 
     fun editPerson(personId: Long): String = "person/edit/$personId"
@@ -120,6 +122,7 @@ fun FriendsNavHost(
                 onOpenBackup = { navController.navigate(Routes.BACKUP) },
                 onOpenYearInReview = { navController.navigate(Routes.YEAR_IN_REVIEW) },
                 onOpenMyQuotes = { navController.navigate(Routes.MY_QUOTES) },
+                onReplayOnboarding = { navController.navigate(Routes.ONBOARDING) },
             )
         }
         composable(Routes.BACKUP) {
@@ -130,6 +133,11 @@ fun FriendsNavHost(
         }
         composable(Routes.MY_QUOTES) {
             MyQuotesScreen(onBack = { navController.popBackStack() })
+        }
+        composable(Routes.ONBOARDING) {
+            // Replay path — just pop back when the user finishes / skips. The
+            // hasSeenOnboarding flag stays as-is.
+            OnboardingScreen(onDone = { navController.popBackStack() })
         }
     }
 }

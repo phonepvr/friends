@@ -57,6 +57,7 @@ fun SettingsScreen(
     onOpenBackup: () -> Unit,
     onOpenYearInReview: () -> Unit,
     onOpenMyQuotes: () -> Unit,
+    onReplayOnboarding: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
@@ -196,6 +197,13 @@ fun SettingsScreen(
                     Text("See today's quote and add your own")
                 },
                 modifier = Modifier.clickable { onOpenMyQuotes() },
+            )
+            ListItem(
+                headlineContent = { Text("Replay intro") },
+                supportingContent = {
+                    Text("See the welcome screens again")
+                },
+                modifier = Modifier.clickable { onReplayOnboarding() },
             )
         }
     }

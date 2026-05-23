@@ -197,13 +197,34 @@ fun PersonDetailScreen(
             ) {
                 item { PersonHeader(current) }
                 item {
-                    CadenceCard(
-                        cadence = cadence,
-                        onTap = viewModel::openCadenceSheet,
-                    )
-                }
-                if (summary.interactionCount > 0 || summary.totalCallSeconds > 0L) {
-                    item { SummaryCard(summary) }
+                    val hasSummary = summary.interactionCount > 0 ||
+                        summary.totalCallSeconds > 0L
+                    if (hasSummary) {
+                        // Side-by-side cards keep the most-glanced info on one
+                        // screen-height; the row uses IntrinsicSize.Min so the
+                        // shorter card stretches to match its neighbour.
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(IntrinsicSize.Min),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            CadenceCard(
+                                cadence = cadence,
+                                onTap = viewModel::openCadenceSheet,
+                                modifier = Modifier.weight(1f).fillMaxHeight(),
+                            )
+                            SummaryCard(
+                                summary = summary,
+                                modifier = Modifier.weight(1f).fillMaxHeight(),
+                            )
+                        }
+                    } else {
+                        CadenceCard(
+                            cadence = cadence,
+                            onTap = viewModel::openCadenceSheet,
+                        )
+                    }
                 }
                 if (current.phoneNumbers.isNotEmpty() && availableMethods.isNotEmpty()) {
                     item {
@@ -465,17 +486,21 @@ private fun PersonHeader(person: PersonWithDetails) {
 }
 
 @Composable
-private fun CadenceCard(cadence: CadenceStatus, onTap: () -> Unit) {
+private fun CadenceCard(
+    cadence: CadenceStatus,
+    onTap: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val text = when (cadence.state) {
-        CadenceState.NOT_TRACKED -> "No contact cadence set"
-        CadenceState.NEVER_CONTACTED -> "No interactions logged yet"
+        CadenceState.NOT_TRACKED -> "No cadence set"
+        CadenceState.NEVER_CONTACTED -> "No interactions yet"
         CadenceState.ON_TRACK ->
-            "On track" + (cadence.daysSinceLastContact?.let { " · last contact $it days ago" }
+            "On track" + (cadence.daysSinceLastContact?.let { " · ${it}d ago" }
                 ?: "")
         CadenceState.DUE_SOON ->
-            "Due soon" + (cadence.daysUntilDue?.let { " · $it days left" } ?: "")
+            "Due soon" + (cadence.daysUntilDue?.let { " · ${it}d left" } ?: "")
         CadenceState.OVERDUE ->
-            "Overdue" + (cadence.daysUntilDue?.let { " by ${-it} days" } ?: "")
+            "Overdue" + (cadence.daysUntilDue?.let { " by ${-it}d" } ?: "")
     }
     val containerColor = when (cadence.state) {
         CadenceState.OVERDUE -> MaterialTheme.colorScheme.errorContainer
@@ -485,7 +510,7 @@ private fun CadenceCard(cadence: CadenceStatus, onTap: () -> Unit) {
     Surface(
         color = containerColor,
         shape = MaterialTheme.shapes.medium,
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onTap),
     ) {
@@ -505,8 +530,8 @@ private fun CadenceCard(cadence: CadenceStatus, onTap: () -> Unit) {
 }
 
 @Composable
-private fun SummaryCard(summary: InteractionSummary) {
-    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+private fun SummaryCard(summary: InteractionSummary, modifier: Modifier = Modifier) {
+    ElevatedCard(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
                 text = "Last 365 days",

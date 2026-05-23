@@ -51,6 +51,12 @@ data class AppSettings(
     /** Text of the most recently picked quote, used to keep the choice stable
      *  through the day and to avoid back-to-back repeats. Device-local. */
     val lastQuoteText: String = "",
+    /**
+     * Set to true once the user has skipped or completed first-run onboarding.
+     * Local to the install — restoring a backup on a new device still runs
+     * onboarding so the new user sees the privacy and permissions story.
+     */
+    val hasSeenOnboarding: Boolean = false,
 )
 
 private val Context.settingsDataStore: DataStore<Preferences> by preferencesDataStore(
@@ -86,6 +92,7 @@ class SettingsRepository @Inject constructor(
                 userQuotes = prefs[Keys.USER_QUOTES]?.toList().orEmpty(),
                 lastQuoteDate = prefs[Keys.LAST_QUOTE_DATE].orEmpty(),
                 lastQuoteText = prefs[Keys.LAST_QUOTE_TEXT].orEmpty(),
+                hasSeenOnboarding = prefs[Keys.HAS_SEEN_ONBOARDING] ?: false,
             )
         }
 
@@ -144,6 +151,10 @@ class SettingsRepository @Inject constructor(
             prefs[Keys.LAST_QUOTE_DATE] = date
             prefs[Keys.LAST_QUOTE_TEXT] = text
         }
+    }
+
+    suspend fun setHasSeenOnboarding(seen: Boolean) {
+        dataStore.edit { it[Keys.HAS_SEEN_ONBOARDING] = seen }
     }
 
     /**
@@ -211,6 +222,7 @@ class SettingsRepository @Inject constructor(
         val USER_QUOTES = stringSetPreferencesKey("user_quotes")
         val LAST_QUOTE_DATE = stringPreferencesKey("last_quote_date")
         val LAST_QUOTE_TEXT = stringPreferencesKey("last_quote_text")
+        val HAS_SEEN_ONBOARDING = booleanPreferencesKey("has_seen_onboarding")
     }
 
     private object Snapshot {

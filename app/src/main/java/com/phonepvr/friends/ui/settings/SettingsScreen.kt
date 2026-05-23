@@ -153,7 +153,7 @@ fun SettingsScreen(
             ListItem(
                 headlineContent = { Text("App lock") },
                 supportingContent = {
-                    Text("Require fingerprint or screen lock to open Friends")
+                    Text("Require fingerprint or screen lock to open Bondwidth")
                 },
                 trailingContent = {
                     Switch(
@@ -162,6 +162,25 @@ fun SettingsScreen(
                     )
                 },
                 modifier = Modifier.clickable { toggleAppLock(!settings.appLockEnabled) },
+            )
+            ListItem(
+                headlineContent = { Text("Hide from screenshots & recents") },
+                supportingContent = {
+                    Text(
+                        "Blocks screenshots, screen recording, casting, and the " +
+                            "preview tile in the recents view. Useful when " +
+                            "lending your phone.",
+                    )
+                },
+                trailingContent = {
+                    Switch(
+                        checked = settings.hideFromScreenshots,
+                        onCheckedChange = viewModel::setHideFromScreenshots,
+                    )
+                },
+                modifier = Modifier.clickable {
+                    viewModel.setHideFromScreenshots(!settings.hideFromScreenshots)
+                },
             )
 
             HorizontalDivider()

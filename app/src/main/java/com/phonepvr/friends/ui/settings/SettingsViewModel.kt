@@ -50,6 +50,10 @@ class SettingsViewModel @Inject constructor(
         settingsRepository.setAppLockEnabled(enabled)
     }
 
+    fun setHideFromScreenshots(enabled: Boolean) = runUpdate {
+        settingsRepository.setHideFromScreenshots(enabled)
+    }
+
     fun setBackupNudgeIntervalDays(days: Int) = runUpdate {
         settingsRepository.setBackupNudgeIntervalDays(days)
     }

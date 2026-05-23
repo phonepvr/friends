@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -43,6 +44,16 @@ class MainActivity : FragmentActivity() {
             val settings by viewModel.settings.collectAsStateWithLifecycle()
             val authenticated by viewModel.authenticated.collectAsStateWithLifecycle()
             val current = settings
+            // Toggle FLAG_SECURE in lockstep with the setting so screenshots,
+            // screen recordings, casts and the recents preview are blocked
+            // whenever the user wants them blocked.
+            LaunchedEffect(current?.hideFromScreenshots) {
+                if (current?.hideFromScreenshots == true) {
+                    window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                } else {
+                    window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                }
+            }
             FriendsTheme(
                 themeMode = current?.themeMode ?: ThemeMode.SYSTEM,
                 dynamicColor = current?.dynamicColorEnabled ?: false,

@@ -1,0 +1,28 @@
+version: 2
+updates:
+  # Gradle (libs.versions.toml) — security + minor updates weekly.
+  - package-ecosystem: gradle
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "gradle"]
+    commit-message:
+      prefix: "deps"
+      include: scope
+
+  # GitHub Actions used in workflows — same cadence so supply-chain bumps
+  # ship as automated PRs the moment upstream publishes them.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "actions"]
+    commit-message:
+      prefix: "deps(actions)"
+      include: scope

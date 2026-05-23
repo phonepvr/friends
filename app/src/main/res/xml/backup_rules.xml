@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Belt-and-braces backup denial for Android 11 and earlier. The
+    application also sets android:allowBackup="false", but defining
+    fullBackupContent makes the intent unambiguous and stops a future
+    library merge from silently flipping the bit.
+-->
+<full-backup-content>
+    <exclude domain="root" path="." />
+    <exclude domain="file" path="." />
+    <exclude domain="database" path="." />
+    <exclude domain="sharedpref" path="." />
+    <exclude domain="external" path="." />
+</full-backup-content>

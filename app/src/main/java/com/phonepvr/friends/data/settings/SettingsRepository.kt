@@ -65,6 +65,12 @@ data class AppSettings(
     val cadenceBackfilled: Boolean = false,
     /** Stable ids of coach-mark tooltips the user has already dismissed. */
     val dismissedTooltipIds: Set<String> = emptySet(),
+    /**
+     * When true, the window carries WindowManager.LayoutParams.FLAG_SECURE so
+     * the app does not appear in screenshots, screen recordings, the recents
+     * card preview, or casts. Off by default so first-run UX isn't affected.
+     */
+    val hideFromScreenshots: Boolean = false,
 )
 
 private val Context.settingsDataStore: DataStore<Preferences> by preferencesDataStore(
@@ -105,6 +111,7 @@ class SettingsRepository @Inject constructor(
                 callLogRationaleShown = prefs[Keys.CALL_LOG_RATIONALE] ?: false,
                 cadenceBackfilled = prefs[Keys.CADENCE_BACKFILLED] ?: false,
                 dismissedTooltipIds = prefs[Keys.DISMISSED_TOOLTIPS].orEmpty(),
+                hideFromScreenshots = prefs[Keys.HIDE_FROM_SCREENSHOTS] ?: false,
             )
         }
 
@@ -188,6 +195,10 @@ class SettingsRepository @Inject constructor(
         }
     }
 
+    suspend fun setHideFromScreenshots(enabled: Boolean) {
+        dataStore.edit { it[Keys.HIDE_FROM_SCREENSHOTS] = enabled }
+    }
+
     /**
      * Serialisable snapshot of all user-configurable settings, used by the
      * backup JSON to round-trip across devices. The transient nudge-dismissed
@@ -258,6 +269,7 @@ class SettingsRepository @Inject constructor(
         val CALL_LOG_RATIONALE = booleanPreferencesKey("call_log_rationale_shown")
         val CADENCE_BACKFILLED = booleanPreferencesKey("cadence_backfilled")
         val DISMISSED_TOOLTIPS = stringSetPreferencesKey("dismissed_tooltips")
+        val HIDE_FROM_SCREENSHOTS = booleanPreferencesKey("hide_from_screenshots")
     }
 
     private object Snapshot {

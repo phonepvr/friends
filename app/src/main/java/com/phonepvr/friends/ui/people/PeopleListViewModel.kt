@@ -12,6 +12,7 @@ import com.phonepvr.friends.domain.cadence.CadenceStatus
 import com.phonepvr.friends.domain.quotes.Quote
 import com.phonepvr.friends.domain.quotes.QuoteRepository
 import com.phonepvr.friends.widget.UpcomingWidget
+import androidx.glance.appwidget.updateAll
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow

@@ -57,6 +57,12 @@ data class AppSettings(
      * onboarding so the new user sees the privacy and permissions story.
      */
     val hasSeenOnboarding: Boolean = false,
+    /** Set to true the first time we've shown the contacts permission explainer. */
+    val contactsRationaleShown: Boolean = false,
+    /** Set to true the first time we've shown the call-log permission explainer. */
+    val callLogRationaleShown: Boolean = false,
+    /** Set to true once existing rows have been backfilled with the default cadence. */
+    val cadenceBackfilled: Boolean = false,
 )
 
 private val Context.settingsDataStore: DataStore<Preferences> by preferencesDataStore(
@@ -93,6 +99,9 @@ class SettingsRepository @Inject constructor(
                 lastQuoteDate = prefs[Keys.LAST_QUOTE_DATE].orEmpty(),
                 lastQuoteText = prefs[Keys.LAST_QUOTE_TEXT].orEmpty(),
                 hasSeenOnboarding = prefs[Keys.HAS_SEEN_ONBOARDING] ?: false,
+                contactsRationaleShown = prefs[Keys.CONTACTS_RATIONALE] ?: false,
+                callLogRationaleShown = prefs[Keys.CALL_LOG_RATIONALE] ?: false,
+                cadenceBackfilled = prefs[Keys.CADENCE_BACKFILLED] ?: false,
             )
         }
 
@@ -155,6 +164,18 @@ class SettingsRepository @Inject constructor(
 
     suspend fun setHasSeenOnboarding(seen: Boolean) {
         dataStore.edit { it[Keys.HAS_SEEN_ONBOARDING] = seen }
+    }
+
+    suspend fun setContactsRationaleShown(shown: Boolean) {
+        dataStore.edit { it[Keys.CONTACTS_RATIONALE] = shown }
+    }
+
+    suspend fun setCallLogRationaleShown(shown: Boolean) {
+        dataStore.edit { it[Keys.CALL_LOG_RATIONALE] = shown }
+    }
+
+    suspend fun setCadenceBackfilled(backfilled: Boolean) {
+        dataStore.edit { it[Keys.CADENCE_BACKFILLED] = backfilled }
     }
 
     /**
@@ -223,6 +244,9 @@ class SettingsRepository @Inject constructor(
         val LAST_QUOTE_DATE = stringPreferencesKey("last_quote_date")
         val LAST_QUOTE_TEXT = stringPreferencesKey("last_quote_text")
         val HAS_SEEN_ONBOARDING = booleanPreferencesKey("has_seen_onboarding")
+        val CONTACTS_RATIONALE = booleanPreferencesKey("contacts_rationale_shown")
+        val CALL_LOG_RATIONALE = booleanPreferencesKey("call_log_rationale_shown")
+        val CADENCE_BACKFILLED = booleanPreferencesKey("cadence_backfilled")
     }
 
     private object Snapshot {

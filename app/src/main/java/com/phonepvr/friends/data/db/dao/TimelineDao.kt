@@ -35,6 +35,9 @@ interface TimelineDao {
     @Query("SELECT * FROM timeline_entries WHERE personId = :personId ORDER BY occurredAt DESC")
     fun observeForPerson(personId: Long): Flow<List<TimelineEntryEntity>>
 
+    @Query("SELECT * FROM timeline_entries WHERE id = :id")
+    suspend fun getById(id: Long): TimelineEntryEntity?
+
     @Query(
         "SELECT MAX(occurredAt) FROM timeline_entries " +
             "WHERE personId = :personId AND countsAsContact = 1",

@@ -13,6 +13,7 @@ import com.phonepvr.friends.data.repository.CallLogRepository
 import com.phonepvr.friends.data.repository.PeopleRepository
 import com.phonepvr.friends.data.repository.PersonCallCandidate
 import com.phonepvr.friends.data.repository.TimelineRepository
+import com.phonepvr.friends.data.settings.SettingsRepository
 import com.phonepvr.friends.domain.cadence.CadenceCalculator
 import com.phonepvr.friends.domain.cadence.CadenceState
 import com.phonepvr.friends.domain.cadence.CadenceStatus
@@ -62,6 +63,7 @@ class PersonDetailViewModel @Inject constructor(
     private val peopleRepository: PeopleRepository,
     private val timelineRepository: TimelineRepository,
     private val callLogRepository: CallLogRepository,
+    private val settingsRepository: SettingsRepository,
     @ApplicationContext private val appContext: Context,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
@@ -224,6 +226,15 @@ class PersonDetailViewModel @Inject constructor(
     private val _callScan = MutableStateFlow<CallScanState>(CallScanState.Idle)
     /** Per-profile call-log scan state. Idle until the user taps "Scan call log". */
     val callScan: StateFlow<CallScanState> = _callScan.asStateFlow()
+
+    /** Whether the call-log permission explainer has already been shown. */
+    val callLogRationaleShown: StateFlow<Boolean> = settingsRepository.settings
+        .map { it.callLogRationaleShown }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    fun markCallLogRationaleShown() {
+        viewModelScope.launch { settingsRepository.setCallLogRationaleShown(true) }
+    }
 
     /**
      * Reads the last 120 days of the device call log and keeps only the

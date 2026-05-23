@@ -40,7 +40,8 @@ import com.phonepvr.friends.ui.common.formatDate
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun YearInReviewScreen(
-    onBack: () -> Unit,
+    onBack: (() -> Unit)? = null,
+    bottomBar: @Composable () -> Unit = {},
     viewModel: YearInReviewViewModel = hiltViewModel(),
 ) {
     val selectedYear by viewModel.selectedYear.collectAsStateWithLifecycle()
@@ -53,15 +54,20 @@ fun YearInReviewScreen(
             TopAppBar(
                 title = { Text("Year in review") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                        )
+                    // Hidden in tab mode (bottom-nav handles navigation); shown
+                    // when launched from inside another flow.
+                    if (onBack != null) {
+                        IconButton(onClick = onBack) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                            )
+                        }
                     }
                 },
             )
         },
+        bottomBar = bottomBar,
     ) { padding ->
         Column(
             modifier = Modifier

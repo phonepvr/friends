@@ -5,7 +5,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.phonepvr.friends.data.db.relation.PersonWithDetails
 import com.phonepvr.friends.data.repository.PeopleRepository
+import com.phonepvr.friends.data.repository.TimelineRepository
 import com.phonepvr.friends.data.settings.SettingsRepository
+import com.phonepvr.friends.domain.cadence.CadenceCalculator
+import com.phonepvr.friends.domain.cadence.CadenceStatus
 import com.phonepvr.friends.domain.quotes.Quote
 import com.phonepvr.friends.domain.quotes.QuoteRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -18,13 +21,23 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 import javax.inject.Inject
+
+/** A person enriched with their cadence status for the People list grid. */
+data class PersonListItem(
+    val person: PersonWithDetails,
+    val cadence: CadenceStatus,
+)
 
 private const val DAY_MILLIS = 24L * 60L * 60L * 1000L
 
 @HiltViewModel
 class PeopleListViewModel @Inject constructor(
     repository: PeopleRepository,
+    timelineRepository: TimelineRepository,
     private val settingsRepository: SettingsRepository,
     private val quoteRepository: QuoteRepository,
     @ApplicationContext private val appContext: Context,
@@ -43,12 +56,36 @@ class PeopleListViewModel @Inject constructor(
         }
     }
 
-    val people: StateFlow<List<PersonWithDetails>> =
-        combine(repository.observeActiveWithDetails(), _searchQuery) { people, query ->
-            if (query.isBlank()) {
+    val people: StateFlow<List<PersonListItem>> =
+        combine(
+            repository.observeActiveWithDetails(),
+            timelineRepository.observeAll(),
+            _searchQuery,
+        ) { people, timeline, query ->
+            val today = LocalDate.now()
+            val zone = ZoneId.systemDefault()
+            // Bucket the timeline by personId once so each row's cadence lookup
+            // is O(1) — the People list re-emits on every timeline change.
+            val lastContactByPerson = timeline
+                .asSequence()
+                .filter { it.countsAsContact }
+                .groupingBy { it.personId }
+                .fold(0L) { acc, entry -> maxOf(acc, entry.occurredAt) }
+            val filtered = if (query.isBlank()) {
                 people
             } else {
                 people.filter { it.person.displayName.contains(query, ignoreCase = true) }
+            }
+            filtered.map { detail ->
+                val lastMs = lastContactByPerson[detail.person.id]?.takeIf { it > 0L }
+                val cadence = CadenceCalculator.status(
+                    lastContact = lastMs?.let {
+                        Instant.ofEpochMilli(it).atZone(zone).toLocalDate()
+                    },
+                    cadenceTargetDays = detail.person.cadenceTargetDays,
+                    today = today,
+                )
+                PersonListItem(detail, cadence)
             }
         }.stateIn(
             scope = viewModelScope,

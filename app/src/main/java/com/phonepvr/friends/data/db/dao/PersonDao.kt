@@ -34,6 +34,12 @@ interface PersonDao {
     @Query("UPDATE people SET cadenceTargetDays = :days, updatedAt = :now WHERE id = :id")
     suspend fun setCadenceTargetDays(id: Long, days: Int?, now: Long)
 
+    @Query(
+        "UPDATE people SET cadenceTargetDays = :days, updatedAt = :now " +
+            "WHERE cadenceTargetDays IS NULL",
+    )
+    suspend fun backfillMissingCadence(days: Int, now: Long): Int
+
     @Query("SELECT * FROM people WHERE id = :id")
     fun observeById(id: Long): Flow<PersonEntity?>
 

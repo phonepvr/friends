@@ -10,12 +10,17 @@ import com.phonepvr.friends.data.db.entity.PersonEntity
 import com.phonepvr.friends.data.db.entity.PhoneNumberEntity
 import com.phonepvr.friends.data.photo.PhotoStorage
 import com.phonepvr.friends.data.repository.PeopleRepository
+import com.phonepvr.friends.data.settings.SettingsRepository
 import com.phonepvr.friends.domain.model.EventType
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
@@ -35,10 +40,20 @@ class ImportContactsViewModel @Inject constructor(
     private val contactsReader: ContactsReader,
     private val repository: PeopleRepository,
     private val photoStorage: PhotoStorage,
+    private val settingsRepository: SettingsRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ImportUiState())
     val state: StateFlow<ImportUiState> = _state.asStateFlow()
+
+    /** Whether we've already shown the contacts permission explainer. */
+    val rationaleAlreadyShown: StateFlow<Boolean> = settingsRepository.settings
+        .map { it.contactsRationaleShown }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    fun markRationaleShown() {
+        viewModelScope.launch { settingsRepository.setContactsRationaleShown(true) }
+    }
 
     fun loadContacts() {
         if (_state.value.loading || _state.value.contacts.isNotEmpty()) return
@@ -88,6 +103,7 @@ class ImportContactsViewModel @Inject constructor(
         if (ids.isEmpty() || _state.value.importing) return
         _state.value = _state.value.copy(importing = true)
         viewModelScope.launch {
+            val defaultCadence = settingsRepository.settings.first().defaultCadenceDays
             withContext(Dispatchers.IO) {
                 val now = System.currentTimeMillis()
                 ids.forEach { contactId ->
@@ -103,6 +119,7 @@ class ImportContactsViewModel @Inject constructor(
                         displayName = details.displayName,
                         contactLookupKey = details.lookupKey.ifBlank { null },
                         photoRelativePath = photoRelativePath,
+                        cadenceTargetDays = defaultCadence,
                         createdAt = now,
                         updatedAt = now,
                     )

@@ -17,6 +17,12 @@ class TimelineRepository @Inject constructor(
 
     suspend fun addEntry(entry: TimelineEntryEntity): Long = timelineDao.insert(entry)
 
+    suspend fun updateEntry(entry: TimelineEntryEntity) {
+        timelineDao.update(entry)
+    }
+
+    suspend fun getById(id: Long): TimelineEntryEntity? = timelineDao.getById(id)
+
     suspend fun deleteEntry(entry: TimelineEntryEntity) {
         timelineDao.delete(entry)
     }

@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
@@ -73,6 +74,7 @@ import com.phonepvr.friends.ui.common.DateTextField
 import com.phonepvr.friends.ui.common.formatDuration
 import com.phonepvr.friends.ui.common.formatTimestamp
 import com.phonepvr.friends.ui.common.parseDateDigits
+import com.phonepvr.friends.ui.permissions.PermissionRationaleSheet
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -89,6 +91,7 @@ fun PersonDetailScreen(
     onBack: () -> Unit,
     onEdit: (Long) -> Unit,
     onLogInteraction: (Long) -> Unit,
+    onEditInteraction: (Long) -> Unit,
     viewModel: PersonDetailViewModel = hiltViewModel(),
 ) {
     val person by viewModel.person.collectAsStateWithLifecycle()
@@ -100,6 +103,7 @@ fun PersonDetailScreen(
     val pendingLogPrompt by viewModel.pendingLogPrompt.collectAsStateWithLifecycle()
     val cadenceSheetOpen by viewModel.cadenceSheetOpen.collectAsStateWithLifecycle()
     val callScan by viewModel.callScan.collectAsStateWithLifecycle()
+    val callLogRationaleShown by viewModel.callLogRationaleShown.collectAsStateWithLifecycle()
     val selectedTimelineIds by viewModel.selectedTimelineIds.collectAsStateWithLifecycle()
     val addEventSheet by viewModel.addEventSheet.collectAsStateWithLifecycle()
     val today = remember { LocalDate.now() }
@@ -108,6 +112,7 @@ fun PersonDetailScreen(
     val isSelectionMode = selectedTimelineIds.isNotEmpty()
     BackHandler(enabled = isSelectionMode) { viewModel.clearTimelineSelection() }
 
+    var showCallLogRationale by remember { mutableStateOf(false) }
     val callLogPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
@@ -118,11 +123,39 @@ fun PersonDetailScreen(
             context,
             Manifest.permission.READ_CALL_LOG,
         ) == PackageManager.PERMISSION_GRANTED
-        if (granted) {
-            viewModel.scanCalls()
-        } else {
-            callLogPermissionLauncher.launch(Manifest.permission.READ_CALL_LOG)
+        when {
+            granted -> viewModel.scanCalls()
+            callLogRationaleShown ->
+                callLogPermissionLauncher.launch(Manifest.permission.READ_CALL_LOG)
+            else -> showCallLogRationale = true
         }
+    }
+
+    if (showCallLogRationale) {
+        PermissionRationaleSheet(
+            title = "Pull recent calls into the timeline",
+            body = "Friends can read the device call log to surface the calls " +
+                "you've had with this person — direction, duration and " +
+                "timestamp — so you can drop them straight into the timeline. " +
+                "Stays on this phone, never goes anywhere.",
+            manualFallback = "If you'd rather, skip this and tap " +
+                "\"Log interaction\" to add calls by hand whenever you like.",
+            grantLabel = "Grant access",
+            manualLabel = "I'll log calls myself",
+            onGrant = {
+                viewModel.markCallLogRationaleShown()
+                showCallLogRationale = false
+                callLogPermissionLauncher.launch(Manifest.permission.READ_CALL_LOG)
+            },
+            onManualFallback = {
+                viewModel.markCallLogRationaleShown()
+                showCallLogRationale = false
+            },
+            onDismiss = {
+                viewModel.markCallLogRationaleShown()
+                showCallLogRationale = false
+            },
+        )
     }
 
     LaunchedEffect(pendingLogPrompt) {
@@ -268,6 +301,7 @@ fun PersonDetailScreen(
                             isSelectionMode = isSelectionMode,
                             isSelected = entry.id in selectedTimelineIds,
                             onToggleSelect = { viewModel.toggleTimelineSelection(entry.id) },
+                            onEdit = { onEditInteraction(entry.id) },
                         )
                     }
                 }
@@ -553,7 +587,7 @@ private fun SummaryCard(summary: InteractionSummary, modifier: Modifier = Modifi
     }
 }
 
-private val CADENCE_PRESETS = listOf(7, 14, 30, 45, 60, 90)
+private val CADENCE_PRESETS = listOf(1, 3, 7, 14, 30, 45, 60, 90, 120, 180, 270, 360)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -663,27 +697,42 @@ private fun InfoSection(
         person.phoneNumbers.forEach { phone ->
             InfoRow(phone.label?.takeIf { it.isNotBlank() } ?: "Phone", phone.rawNumber)
         }
-        person.events.forEach { event ->
-            EventRow(
-                event = event,
+        // Birthday + anniversary share one row so the most-glanced dates stay
+        // on the same screen line; everything else is one-per-row.
+        val birthday = person.events.firstOrNull { it.type == EventType.BIRTHDAY }
+        val anniversary = person.events.firstOrNull { it.type == EventType.WEDDING_ANNIVERSARY }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(IntrinsicSize.Min),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            EventSlot(
+                event = birthday,
+                type = EventType.BIRTHDAY,
                 today = today,
-                onMarkWished = { onMarkWished(eventLabel(event.type).lowercase()) },
+                onMarkWished = onMarkWished,
+                onAddEvent = onAddEvent,
+                modifier = Modifier.weight(1f).fillMaxHeight(),
+            )
+            EventSlot(
+                event = anniversary,
+                type = EventType.WEDDING_ANNIVERSARY,
+                today = today,
+                onMarkWished = onMarkWished,
+                onAddEvent = onAddEvent,
+                modifier = Modifier.weight(1f).fillMaxHeight(),
             )
         }
-        val hasBirthday = person.events.any { it.type == EventType.BIRTHDAY }
-        val hasAnniversary = person.events.any { it.type == EventType.WEDDING_ANNIVERSARY }
-        if (!hasBirthday) {
-            AddEventPrompt(
-                label = "No birthday yet — add one?",
-                onClick = { onAddEvent(EventType.BIRTHDAY) },
-            )
-        }
-        if (!hasAnniversary) {
-            AddEventPrompt(
-                label = "No anniversary yet — add one?",
-                onClick = { onAddEvent(EventType.WEDDING_ANNIVERSARY) },
-            )
-        }
+        person.events
+            .filter { it.type != EventType.BIRTHDAY && it.type != EventType.WEDDING_ANNIVERSARY }
+            .forEach { event ->
+                EventRow(
+                    event = event,
+                    today = today,
+                    onMarkWished = { onMarkWished(eventLabel(event.type).lowercase()) },
+                )
+            }
         person.person.cadenceTargetDays?.let {
             InfoRow("Stay in touch", "every $it days")
         }
@@ -694,20 +743,59 @@ private fun InfoSection(
 }
 
 @Composable
-private fun AddEventPrompt(label: String, onClick: () -> Unit) {
+private fun EventSlot(
+    event: EventEntity?,
+    type: EventType,
+    today: LocalDate,
+    onMarkWished: (String) -> Unit,
+    onAddEvent: (EventType) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (event == null) {
+        val prompt = when (type) {
+            EventType.BIRTHDAY -> "No birthday yet — add one?"
+            EventType.WEDDING_ANNIVERSARY -> "No anniversary yet — add one?"
+            EventType.CUSTOM -> "Add a date?"
+        }
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            shape = MaterialTheme.shapes.medium,
+            modifier = modifier.clickable { onAddEvent(type) },
+        ) {
+            Text(
+                text = prompt,
+                modifier = Modifier.padding(16.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        return
+    }
+    val daysUntil = AnnualDate(event.month, event.day, event.year).daysUntilNextOccurrence(today)
+    val showWishButton = daysUntil <= 7L || daysUntil >= 358L
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant,
         shape = MaterialTheme.shapes.medium,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
+        modifier = modifier,
     ) {
-        Text(
-            text = label,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = eventLabel(type),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(text = formatEventDate(event), style = MaterialTheme.typography.bodyLarge)
+            if (showWishButton) {
+                Spacer(Modifier.height(4.dp))
+                OutlinedButton(
+                    onClick = { onMarkWished(eventLabel(type).lowercase()) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Mark as wished") }
+            }
+        }
     }
 }
 
@@ -760,6 +848,7 @@ private fun TimelineRow(
     isSelectionMode: Boolean,
     isSelected: Boolean,
     onToggleSelect: () -> Unit,
+    onEdit: () -> Unit,
 ) {
     val accent = entryAccentColor(entry)
     val cardColors = if (isSelected) {
@@ -775,14 +864,11 @@ private fun TimelineRow(
             .fillMaxWidth()
             .height(IntrinsicSize.Min)
             .combinedClickable(
-                onClick = { if (isSelectionMode) onToggleSelect() },
+                onClick = { if (isSelectionMode) onToggleSelect() else onEdit() },
                 onLongClick = onToggleSelect,
             ),
     ) {
         Row(modifier = Modifier.fillMaxWidth()) {
-            // 4dp leading bar tints each row by interaction type / call
-            // direction so a scroll glance reveals the shape of someone's
-            // history without reading every line.
             Box(
                 modifier = Modifier
                     .width(4.dp)
@@ -797,10 +883,21 @@ private fun TimelineRow(
                 )
             }
             Column(modifier = Modifier.padding(12.dp).weight(1f)) {
-                Text(
-                    text = "${entryHeadline(entry)} · ${formatTimestamp(entry.occurredAt)}",
-                    style = MaterialTheme.typography.titleSmall,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "${entryHeadline(entry)} · ${formatTimestamp(entry.occurredAt)}",
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (!entry.note.isNullOrBlank()) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Notes,
+                            contentDescription = "Has note",
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
                 val note = entry.note
                 if (!note.isNullOrBlank()) {
                     Text(

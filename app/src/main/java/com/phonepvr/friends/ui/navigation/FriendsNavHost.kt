@@ -18,15 +18,14 @@ import com.phonepvr.friends.ui.quotes.MyQuotesScreen
 import com.phonepvr.friends.ui.review.YearInReviewScreen
 import com.phonepvr.friends.ui.settings.SettingsScreen
 import com.phonepvr.friends.ui.timeline.LogInteractionScreen
-import com.phonepvr.friends.ui.timeline.TimelineScreen
 
 object Routes {
     const val PEOPLE_LIST = "people"
-    const val TIMELINE = "timeline"
     const val ADD_PERSON = "person/add"
     const val EDIT_PERSON = "person/edit/{personId}"
     const val PERSON_DETAIL = "person/detail/{personId}"
     const val LOG_INTERACTION = "interaction/log/{personId}"
+    const val EDIT_INTERACTION = "interaction/edit/{entryId}"
     const val IMPORT_CONTACTS = "contacts/import"
     const val BACKUP = "backup"
     const val SETTINGS = "settings"
@@ -34,10 +33,12 @@ object Routes {
     const val MY_QUOTES = "quotes/my"
     const val ONBOARDING = "onboarding"
     const val PERSON_ID_ARG = "personId"
+    const val ENTRY_ID_ARG = "entryId"
 
     fun editPerson(personId: Long): String = "person/edit/$personId"
     fun personDetail(personId: Long): String = "person/detail/$personId"
     fun logInteraction(personId: Long): String = "interaction/log/$personId"
+    fun editInteraction(entryId: Long): String = "interaction/edit/$entryId"
 }
 
 @Composable
@@ -70,14 +71,6 @@ fun FriendsNavHost(
                 bottomBar = { FriendsBottomBar(TopLevelTab.PEOPLE, onSelectTab) },
             )
         }
-        composable(Routes.TIMELINE) {
-            TimelineScreen(
-                onOpenPerson = { personId ->
-                    navController.navigate(Routes.personDetail(personId))
-                },
-                bottomBar = { FriendsBottomBar(TopLevelTab.TIMELINE, onSelectTab) },
-            )
-        }
         composable(Routes.ADD_PERSON) {
             AddEditPersonScreen(onDone = { navController.popBackStack() })
         }
@@ -105,11 +98,20 @@ fun FriendsNavHost(
                 onLogInteraction = { personId ->
                     navController.navigate(Routes.logInteraction(personId))
                 },
+                onEditInteraction = { entryId ->
+                    navController.navigate(Routes.editInteraction(entryId))
+                },
             )
         }
         composable(
             route = Routes.LOG_INTERACTION,
             arguments = listOf(navArgument(Routes.PERSON_ID_ARG) { type = NavType.LongType }),
+        ) {
+            LogInteractionScreen(onDone = { navController.popBackStack() })
+        }
+        composable(
+            route = Routes.EDIT_INTERACTION,
+            arguments = listOf(navArgument(Routes.ENTRY_ID_ARG) { type = NavType.LongType }),
         ) {
             LogInteractionScreen(onDone = { navController.popBackStack() })
         }
@@ -120,7 +122,6 @@ fun FriendsNavHost(
             SettingsScreen(
                 onBack = { navController.popBackStack() },
                 onOpenBackup = { navController.navigate(Routes.BACKUP) },
-                onOpenYearInReview = { navController.navigate(Routes.YEAR_IN_REVIEW) },
                 onOpenMyQuotes = { navController.navigate(Routes.MY_QUOTES) },
                 onReplayOnboarding = { navController.navigate(Routes.ONBOARDING) },
             )
@@ -129,7 +130,10 @@ fun FriendsNavHost(
             BackupScreen(onBack = { navController.popBackStack() })
         }
         composable(Routes.YEAR_IN_REVIEW) {
-            YearInReviewScreen(onBack = { navController.popBackStack() })
+            YearInReviewScreen(
+                onBack = { navController.popBackStack() },
+                bottomBar = { FriendsBottomBar(TopLevelTab.YEAR_IN_REVIEW, onSelectTab) },
+            )
         }
         composable(Routes.MY_QUOTES) {
             MyQuotesScreen(onBack = { navController.popBackStack() })

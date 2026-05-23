@@ -41,7 +41,9 @@ fun LogInteractionScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Log interaction") },
+                title = {
+                    Text(if (viewModel.isEditing) "Edit interaction" else "Log interaction")
+                },
                 navigationIcon = {
                     IconButton(onClick = onDone) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")

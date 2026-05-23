@@ -2,6 +2,7 @@ package com.phonepvr.friends
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.phonepvr.friends.data.repository.PeopleRepository
 import com.phonepvr.friends.data.settings.AppSettings
 import com.phonepvr.friends.data.settings.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -9,6 +10,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -20,6 +22,7 @@ import javax.inject.Inject
 @HiltViewModel
 class MainViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
+    private val peopleRepository: PeopleRepository,
 ) : ViewModel() {
 
     /** Null until the first settings read completes, so theming waits for it. */
@@ -35,6 +38,16 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             settingsRepository.settings.collect { current ->
                 if (!current.appLockEnabled) _authenticated.value = true
+            }
+        }
+        // One-time backfill: people created before the default-cadence rule
+        // existed have cadenceTargetDays = null. Apply the user's default
+        // once so the People list cadence colours light up.
+        viewModelScope.launch {
+            val settings = settingsRepository.settings.first()
+            if (!settings.cadenceBackfilled) {
+                peopleRepository.backfillMissingCadence(settings.defaultCadenceDays)
+                settingsRepository.setCadenceBackfilled(true)
             }
         }
     }

@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.phonepvr.friends.ui.permissions.PermissionRationaleSheet
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,6 +56,7 @@ fun ImportContactsScreen(
 ) {
     val context = LocalContext.current
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val rationaleAlreadyShown by viewModel.rationaleAlreadyShown.collectAsStateWithLifecycle()
 
     var hasPermission by remember {
         mutableStateOf(
@@ -63,12 +65,47 @@ fun ImportContactsScreen(
         )
     }
     var permissionRequested by remember { mutableStateOf(false) }
+    var showRationale by remember { mutableStateOf(false) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
         hasPermission = granted
         permissionRequested = true
+    }
+
+    val onRequestPermission: () -> Unit = {
+        if (rationaleAlreadyShown) {
+            permissionLauncher.launch(Manifest.permission.READ_CONTACTS)
+        } else {
+            showRationale = true
+        }
+    }
+
+    if (showRationale) {
+        PermissionRationaleSheet(
+            title = "Pull in the people you already know",
+            body = "Friends can read your device contacts to import names, " +
+                "numbers, photos, birthdays and anniversaries — all stays on " +
+                "this phone, nothing leaves.",
+            manualFallback = "If you'd rather, tap the back arrow and add " +
+                "people one at a time with the + button. The app works the same.",
+            grantLabel = "Grant access",
+            manualLabel = "I'll add by hand",
+            onGrant = {
+                viewModel.markRationaleShown()
+                showRationale = false
+                permissionLauncher.launch(Manifest.permission.READ_CONTACTS)
+            },
+            onManualFallback = {
+                viewModel.markRationaleShown()
+                showRationale = false
+            },
+            onDismiss = {
+                viewModel.markRationaleShown()
+                showRationale = false
+            },
+        )
     }
 
     LaunchedEffect(hasPermission) {
@@ -104,9 +141,7 @@ fun ImportContactsScreen(
             when {
                 !hasPermission -> PermissionPrompt(
                     denied = permissionRequested,
-                    onRequest = {
-                        permissionLauncher.launch(Manifest.permission.READ_CONTACTS)
-                    },
+                    onRequest = onRequestPermission,
                 )
 
                 state.loading || state.importing -> Box(

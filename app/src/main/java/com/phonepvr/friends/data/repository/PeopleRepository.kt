@@ -64,4 +64,8 @@ class PeopleRepository @Inject constructor(
     suspend fun addEvent(event: EventEntity) {
         eventDao.insert(event.copy(id = 0))
     }
+
+    /** One-time backfill: any person with a null cadence picks up [days]. */
+    suspend fun backfillMissingCadence(days: Int): Int =
+        personDao.backfillMissingCadence(days, System.currentTimeMillis())
 }

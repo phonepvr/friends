@@ -45,7 +45,7 @@ import com.phonepvr.friends.ui.lock.isAppLockAvailable
 
 private val LEAD_DAY_OPTIONS = listOf(1, 2, 3, 5, 7, 14, 30)
 private val HOUR_OPTIONS = (0..23).toList()
-private val CADENCE_OPTIONS = listOf(7, 14, 30, 45, 60, 90)
+private val CADENCE_OPTIONS = listOf(1, 3, 7, 14, 30, 45, 60, 90, 120, 180, 270, 360)
 private val BACKUP_NUDGE_OPTIONS = listOf(7, 14, 21, 30, 60, 90)
 
 private enum class SettingsDialog { THEME, LEAD_DAYS, HOUR, CADENCE, BACKUP_NUDGE }
@@ -55,7 +55,6 @@ private enum class SettingsDialog { THEME, LEAD_DAYS, HOUR, CADENCE, BACKUP_NUDG
 fun SettingsScreen(
     onBack: () -> Unit,
     onOpenBackup: () -> Unit,
-    onOpenYearInReview: () -> Unit,
     onOpenMyQuotes: () -> Unit,
     onReplayOnboarding: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
@@ -177,16 +176,6 @@ fun SettingsScreen(
                     Text("Nudge me every ${daysLabel(settings.backupNudgeIntervalDays)}")
                 },
                 modifier = Modifier.clickable { activeDialog = SettingsDialog.BACKUP_NUDGE },
-            )
-
-            HorizontalDivider()
-            SectionHeader("Insights")
-            ListItem(
-                headlineContent = { Text("Year in review") },
-                supportingContent = {
-                    Text("A look back at how often you stayed in touch")
-                },
-                modifier = Modifier.clickable { onOpenYearInReview() },
             )
 
             HorizontalDivider()

@@ -39,7 +39,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.phonepvr.friends.data.db.relation.PersonWithDetails
+import com.phonepvr.friends.domain.cadence.CadenceState
+import com.phonepvr.friends.domain.cadence.CadenceStatus
 import com.phonepvr.friends.domain.quotes.Quote
 import com.phonepvr.friends.ui.components.PersonAvatar
 
@@ -116,10 +117,10 @@ fun PeopleListScreen(
                         EmptyState()
                     }
                 } else {
-                    items(people, key = { it.person.id }) { item ->
+                    items(people, key = { it.person.person.id }) { item ->
                         PersonCard(
                             item = item,
-                            onClick = { onOpenPerson(item.person.id) },
+                            onClick = { onOpenPerson(item.person.person.id) },
                         )
                     }
                 }
@@ -149,7 +150,7 @@ private fun QuoteCard(quote: Quote) {
 }
 
 @Composable
-private fun PersonCard(item: PersonWithDetails, onClick: () -> Unit) {
+private fun PersonCard(item: PersonListItem, onClick: () -> Unit) {
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
@@ -160,34 +161,48 @@ private fun PersonCard(item: PersonWithDetails, onClick: () -> Unit) {
                 .fillMaxWidth()
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             PersonAvatar(
-                photoRelativePath = item.person.photoRelativePath,
-                displayName = item.person.displayName,
+                photoRelativePath = item.person.person.photoRelativePath,
+                displayName = item.person.person.displayName,
                 diameter = 56.dp,
             )
             Text(
-                text = item.person.displayName,
+                text = item.person.person.displayName,
                 style = MaterialTheme.typography.titleSmall,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Center,
             )
-            val subtitle = item.person.relationshipTag?.takeIf { it.isNotBlank() }
-                ?: item.phoneNumbers.firstOrNull()?.rawNumber
-            if (subtitle != null) {
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = TextAlign.Center,
-                )
-            }
+            CadenceSubtitle(item.cadence)
         }
     }
+}
+
+@Composable
+private fun CadenceSubtitle(cadence: CadenceStatus) {
+    val (text, color) = when (cadence.state) {
+        CadenceState.OVERDUE ->
+            ("Overdue by ${-(cadence.daysUntilDue ?: 0)}d" to MaterialTheme.colorScheme.error)
+        CadenceState.DUE_SOON ->
+            ("Due in ${cadence.daysUntilDue ?: 0}d" to MaterialTheme.colorScheme.tertiary)
+        CadenceState.ON_TRACK ->
+            ("On track · ${cadence.daysSinceLastContact ?: 0}d ago" to
+                MaterialTheme.colorScheme.primary)
+        CadenceState.NEVER_CONTACTED ->
+            ("Not yet" to MaterialTheme.colorScheme.primary)
+        CadenceState.NOT_TRACKED ->
+            ("No cadence" to MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodySmall,
+        color = color,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        textAlign = TextAlign.Center,
+    )
 }
 
 @Composable

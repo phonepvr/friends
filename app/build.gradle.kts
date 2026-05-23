@@ -22,30 +22,23 @@ android {
     signingConfigs {
         getByName("debug") {
             // Stable signing uses a keystore supplied by CI secrets so each
-            // build installs as an update of the previous one. Local builds
-            // fall through to AGP's auto-generated debug key.
+            // build installs as an update of the previous one. When secrets
+            // are absent (initial bring-up, local dev), fall back to AGP's
+            // auto-generated debug key. See SIGNING.md.
             val keystorePath = System.getenv("SIGNING_KEYSTORE_PATH")
             val storePass = System.getenv("SIGNING_STORE_PASSWORD")
             val alias = System.getenv("SIGNING_KEY_ALIAS")
             val keyPass = System.getenv("SIGNING_KEY_PASSWORD")
-            val hasKeystore = !keystorePath.isNullOrBlank() &&
+            if (!keystorePath.isNullOrBlank() &&
                 !storePass.isNullOrBlank() &&
                 !alias.isNullOrBlank() &&
                 !keyPass.isNullOrBlank() &&
                 file(keystorePath).exists()
-            val isCi = System.getenv("GITHUB_ACTIONS") == "true"
-            if (hasKeystore) {
+            ) {
                 storeFile = file(keystorePath)
                 storePassword = storePass
                 keyAlias = alias
                 keyPassword = keyPass
-            } else if (isCi) {
-                throw GradleException(
-                    "Signing keystore not configured in CI. Set " +
-                        "SIGNING_KEYSTORE_BASE64, SIGNING_STORE_PASSWORD, " +
-                        "SIGNING_KEY_PASSWORD, SIGNING_KEY_ALIAS as repository " +
-                        "secrets. See SIGNING.md.",
-                )
             }
         }
     }

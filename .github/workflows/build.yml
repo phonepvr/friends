@@ -29,26 +29,17 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
-      - name: Prepare signing keystore
+      - name: Prepare signing keystore (optional)
         env:
           SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
-          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
-          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
-          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
         run: |
-          set -euo pipefail
-          missing=""
-          [ -z "${SIGNING_KEYSTORE_BASE64:-}" ] && missing="$missing SIGNING_KEYSTORE_BASE64"
-          [ -z "${SIGNING_STORE_PASSWORD:-}" ] && missing="$missing SIGNING_STORE_PASSWORD"
-          [ -z "${SIGNING_KEY_PASSWORD:-}" ] && missing="$missing SIGNING_KEY_PASSWORD"
-          [ -z "${SIGNING_KEY_ALIAS:-}" ] && missing="$missing SIGNING_KEY_ALIAS"
-          if [ -n "$missing" ]; then
-            echo "::error::Missing signing secrets:$missing. See SIGNING.md to generate the keystore and set secrets."
-            exit 1
+          if [ -n "$SIGNING_KEYSTORE_BASE64" ]; then
+            echo "$SIGNING_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/signing-keystore.jks"
+            echo "SIGNING_KEYSTORE_PATH=$RUNNER_TEMP/signing-keystore.jks" >> "$GITHUB_ENV"
+            echo "Signing keystore configured from a repository secret."
+          else
+            echo "::warning::No signing secret set; APK will use an ephemeral debug key (will not install over a build signed with a different key). See SIGNING.md when ready to enable stable signing."
           fi
-          echo "$SIGNING_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/signing-keystore.jks"
-          echo "SIGNING_KEYSTORE_PATH=$RUNNER_TEMP/signing-keystore.jks" >> "$GITHUB_ENV"
-          echo "Signing keystore decoded; all four signing secrets present."
 
       - name: Run unit tests and assemble debug APK
         env:

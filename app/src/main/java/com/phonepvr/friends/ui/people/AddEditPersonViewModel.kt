@@ -9,6 +9,8 @@ import com.phonepvr.friends.data.db.entity.PhoneNumberEntity
 import com.phonepvr.friends.data.repository.PeopleRepository
 import com.phonepvr.friends.data.settings.SettingsRepository
 import com.phonepvr.friends.domain.model.EventType
+import com.phonepvr.friends.ui.common.packDateDigits
+import com.phonepvr.friends.ui.common.parseDateDigits
 import com.phonepvr.friends.ui.navigation.Routes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,11 +21,12 @@ import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
 
-data class DateFields(
-    val month: String = "",
-    val day: String = "",
-    val year: String = "",
-)
+/**
+ * Raw digit string (0–8 chars) backing the masked DD/MM/YYYY field. A length
+ * of 4 means "year omitted", 8 means full date; anything else is in-progress
+ * input.
+ */
+data class DateFields(val digits: String = "")
 
 data class PersonFormState(
     val displayName: String = "",
@@ -198,21 +201,16 @@ class AddEditPersonViewModel @Inject constructor(
     }
 }
 
-private fun EventEntity.toDateFields(): DateFields = DateFields(
-    month = month.toString(),
-    day = day.toString(),
-    year = year?.toString().orEmpty(),
-)
+private fun EventEntity.toDateFields(): DateFields =
+    DateFields(digits = packDateDigits(day = day, month = month, year = year))
 
 private fun DateFields.toEvent(type: EventType): EventEntity? {
-    val parsedMonth = month.toIntOrNull() ?: return null
-    val parsedDay = day.toIntOrNull() ?: return null
-    if (parsedMonth !in 1..12 || parsedDay !in 1..31) return null
+    val parsed = parseDateDigits(digits) ?: return null
     return EventEntity(
         personId = 0,
         type = type,
-        month = parsedMonth,
-        day = parsedDay,
-        year = year.toIntOrNull(),
+        month = parsed.month,
+        day = parsed.day,
+        year = parsed.year,
     )
 }

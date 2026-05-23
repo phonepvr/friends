@@ -30,6 +30,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.phonepvr.friends.ui.common.DateTextField
+import com.phonepvr.friends.ui.common.parseDateDigits
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -112,14 +114,14 @@ fun AddEditPersonScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            DateEntry(
-                label = "Birthday (year optional)",
-                value = form.birthday,
+            EventDateEntry(
+                label = "Birthday",
+                fields = form.birthday,
                 onChange = viewModel::updateBirthday,
             )
-            DateEntry(
-                label = "Wedding anniversary (year optional)",
-                value = form.anniversary,
+            EventDateEntry(
+                label = "Wedding anniversary",
+                fields = form.anniversary,
                 onChange = viewModel::updateAnniversary,
             )
 
@@ -144,44 +146,30 @@ fun AddEditPersonScreen(
 }
 
 @Composable
-private fun DateEntry(
+private fun EventDateEntry(
     label: String,
-    value: DateFields,
+    fields: DateFields,
     onChange: ((DateFields) -> DateFields) -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(label, style = MaterialTheme.typography.titleSmall)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(
-                value = value.month,
-                onValueChange = { input ->
-                    onChange { it.copy(month = input.filter { c -> c.isDigit() }.take(2)) }
-                },
-                label = { Text("Month") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.weight(1f),
-            )
-            OutlinedTextField(
-                value = value.day,
-                onValueChange = { input ->
-                    onChange { it.copy(day = input.filter { c -> c.isDigit() }.take(2)) }
-                },
-                label = { Text("Day") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.weight(1f),
-            )
-            OutlinedTextField(
-                value = value.year,
-                onValueChange = { input ->
-                    onChange { it.copy(year = input.filter { c -> c.isDigit() }.take(4)) }
-                },
-                label = { Text("Year") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.weight(1.4f),
-            )
-        }
+    val digits = fields.digits
+    val parsed = parseDateDigits(digits)
+    val isCompleteAttempt = digits.length == 4 || digits.length == 8
+    val isError = isCompleteAttempt && parsed == null
+    val supporting = when {
+        digits.isEmpty() -> "DD/MM/YYYY — leave year blank if unknown"
+        digits.length == 4 && parsed != null -> "Year unknown"
+        digits.length == 4 -> "Invalid date"
+        digits.length == 8 && parsed == null -> "Invalid date"
+        digits.length in 5..7 -> "Keep typing or shorten to skip the year"
+        else -> null
     }
+    DateTextField(
+        digits = digits,
+        onDigitsChange = { newDigits -> onChange { it.copy(digits = newDigits) } },
+        label = label,
+        allowYearOptional = true,
+        isError = isError,
+        supportingText = supporting,
+        modifier = Modifier.fillMaxWidth(),
+    )
 }

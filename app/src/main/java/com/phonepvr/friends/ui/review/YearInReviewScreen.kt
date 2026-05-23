@@ -35,7 +35,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.phonepvr.friends.domain.model.InteractionType
 import com.phonepvr.friends.domain.review.GapStat
 import com.phonepvr.friends.domain.review.ReviewYear
-import java.time.format.DateTimeFormatter
+import com.phonepvr.friends.ui.common.formatDate
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -225,7 +225,6 @@ private fun StatCardWithToggle(
 
 @Composable
 private fun LongestGapCard(gap: GapStat) {
-    val format = DateTimeFormatter.ofPattern("MMM d")
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
@@ -235,8 +234,8 @@ private fun LongestGapCard(gap: GapStat) {
             )
             Text("${gap.days} days", style = MaterialTheme.typography.headlineSmall)
             Text(
-                text = "${gap.displayName} — ${format.format(gap.fromDate)}" +
-                    " → ${format.format(gap.toDate)}",
+                text = "${gap.displayName} — ${formatDate(gap.fromDate)}" +
+                    " → ${formatDate(gap.toDate)}",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

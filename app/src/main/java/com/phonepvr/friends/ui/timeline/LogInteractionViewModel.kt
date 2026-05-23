@@ -7,6 +7,8 @@ import com.phonepvr.friends.data.db.entity.TimelineEntryEntity
 import com.phonepvr.friends.data.repository.TimelineRepository
 import com.phonepvr.friends.domain.model.EntrySource
 import com.phonepvr.friends.domain.model.InteractionType
+import com.phonepvr.friends.ui.common.packDateDigits
+import com.phonepvr.friends.ui.common.parseDateDigits
 import com.phonepvr.friends.ui.navigation.Routes
 import com.phonepvr.friends.ui.people.DateFields
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -70,22 +72,11 @@ class LogInteractionViewModel @Inject constructor(
 }
 
 private fun LocalDate.toDateFields(): DateFields = DateFields(
-    month = monthValue.toString(),
-    day = dayOfMonth.toString(),
-    year = year.toString(),
+    digits = packDateDigits(day = dayOfMonth, month = monthValue, year = year),
 )
 
 private fun DateFields.toEpochMillisOrNull(): Long? {
-    val parsedMonth = month.toIntOrNull() ?: return null
-    val parsedDay = day.toIntOrNull() ?: return null
-    val parsedYear = year.toIntOrNull() ?: return null
-    if (parsedMonth !in 1..12 || parsedDay !in 1..31) return null
-    return try {
-        LocalDate.of(parsedYear, parsedMonth, parsedDay)
-            .atStartOfDay(ZoneId.systemDefault())
-            .toInstant()
-            .toEpochMilli()
-    } catch (e: java.time.DateTimeException) {
-        null
-    }
+    val parsed = parseDateDigits(digits) ?: return null
+    val date = parsed.toLocalDateOrNull() ?: return null
+    return date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
 }

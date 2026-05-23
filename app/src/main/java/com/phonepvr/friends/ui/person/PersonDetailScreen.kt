@@ -52,12 +52,9 @@ import com.phonepvr.friends.domain.model.AnnualDate
 import com.phonepvr.friends.domain.model.CallType
 import com.phonepvr.friends.domain.model.EventType
 import com.phonepvr.friends.domain.model.InteractionType
-import java.time.Instant
+import com.phonepvr.friends.ui.common.formatDuration
+import com.phonepvr.friends.ui.common.formatTimestamp
 import java.time.LocalDate
-import java.time.Month
-import java.time.ZoneId
-import java.time.format.TextStyle
-import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -372,18 +369,6 @@ private fun CadenceSheet(
     }
 }
 
-/** Formats seconds as `Xh Ym`, `Ym Zs`, or `Zs`. */
-private fun formatDuration(seconds: Long): String {
-    val s = seconds.coerceAtLeast(0L)
-    val hours = s / 3600
-    val minutes = (s % 3600) / 60
-    val secs = s % 60
-    return when {
-        hours > 0 -> "${hours}h ${minutes}m"
-        minutes > 0 -> "${minutes}m ${secs}s"
-        else -> "${secs}s"
-    }
-}
 
 @Composable
 private fun InfoSection(
@@ -502,18 +487,9 @@ private fun eventLabel(type: EventType): String = when (type) {
     EventType.CUSTOM -> "Date"
 }
 
-private fun formatEventDate(event: EventEntity): String {
-    val monthName = Month.of(event.month).getDisplayName(TextStyle.FULL, Locale.getDefault())
-    return buildString {
-        append(monthName)
-        append(' ')
-        append(event.day)
-        event.year?.let { append(", ").append(it) }
-    }
-}
-
-private fun formatTimestamp(epochMillis: Long): String {
-    val date = Instant.ofEpochMilli(epochMillis).atZone(ZoneId.systemDefault()).toLocalDate()
-    val monthName = date.month.getDisplayName(TextStyle.FULL, Locale.getDefault())
-    return "$monthName ${date.dayOfMonth}, ${date.year}"
+private fun formatEventDate(event: EventEntity): String = buildString {
+    append(event.day.toString().padStart(2, '0'))
+    append('/')
+    append(event.month.toString().padStart(2, '0'))
+    event.year?.let { append('/').append(it) }
 }

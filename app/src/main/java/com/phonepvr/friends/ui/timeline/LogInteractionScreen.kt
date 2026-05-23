@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -24,12 +23,12 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.phonepvr.friends.domain.model.InteractionType
-import com.phonepvr.friends.ui.people.DateFields
+import com.phonepvr.friends.ui.common.DateTextField
+import com.phonepvr.friends.ui.common.parseDateDigits
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -75,30 +74,21 @@ fun LogInteractionScreen(
                 }
             }
 
-            Text("Date", style = MaterialTheme.typography.titleSmall)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                DateField(
-                    label = "Month",
-                    value = form.date.month,
-                    maxLength = 2,
-                    modifier = Modifier.weight(1f),
-                    onValueChange = { input -> viewModel.onDateChange { it.copy(month = input) } },
-                )
-                DateField(
-                    label = "Day",
-                    value = form.date.day,
-                    maxLength = 2,
-                    modifier = Modifier.weight(1f),
-                    onValueChange = { input -> viewModel.onDateChange { it.copy(day = input) } },
-                )
-                DateField(
-                    label = "Year",
-                    value = form.date.year,
-                    maxLength = 4,
-                    modifier = Modifier.weight(1.4f),
-                    onValueChange = { input -> viewModel.onDateChange { it.copy(year = input) } },
-                )
-            }
+            val dateDigits = form.date.digits
+            val parsedDate = parseDateDigits(dateDigits)
+            DateTextField(
+                digits = dateDigits,
+                onDigitsChange = { newDigits -> viewModel.onDateChange { it.copy(digits = newDigits) } },
+                label = "Date",
+                allowYearOptional = false,
+                isError = dateDigits.length == 8 && parsedDate?.year == null,
+                supportingText = when {
+                    dateDigits.length == 8 && parsedDate == null -> "Invalid date"
+                    dateDigits.length in 1..7 -> "Keep typing — DD/MM/YYYY"
+                    else -> null
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
 
             OutlinedTextField(
                 value = form.note,
@@ -109,24 +99,4 @@ fun LogInteractionScreen(
             )
         }
     }
-}
-
-@Composable
-private fun DateField(
-    label: String,
-    value: String,
-    maxLength: Int,
-    modifier: Modifier = Modifier,
-    onValueChange: (String) -> Unit,
-) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = { input ->
-            onValueChange(input.filter { it.isDigit() }.take(maxLength))
-        },
-        label = { Text(label) },
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-        modifier = modifier,
-    )
 }

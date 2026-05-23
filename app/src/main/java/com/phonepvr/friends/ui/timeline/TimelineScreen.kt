@@ -30,10 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.phonepvr.friends.domain.model.InteractionType
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.TextStyle
-import java.util.Locale
+import com.phonepvr.friends.ui.common.formatTimestamp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -139,9 +136,3 @@ private fun TimelineFeedRow(item: TimelineItem, onClick: () -> Unit) {
 
 private fun interactionLabel(type: InteractionType): String =
     type.name.lowercase().replaceFirstChar { it.uppercase() }
-
-private fun formatTimestamp(epochMillis: Long): String {
-    val date = Instant.ofEpochMilli(epochMillis).atZone(ZoneId.systemDefault()).toLocalDate()
-    val monthName = date.month.getDisplayName(TextStyle.FULL, Locale.getDefault())
-    return "$monthName ${date.dayOfMonth}, ${date.year}"
-}

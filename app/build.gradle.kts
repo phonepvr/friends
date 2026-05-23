@@ -15,31 +15,46 @@ android {
         applicationId = "com.phonepvr.friends"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = (project.findProperty("versionCode") as String?)?.toIntOrNull() ?: 1
+        versionName = (project.findProperty("versionName") as String?) ?: "1.0.0"
     }
 
     signingConfigs {
         getByName("debug") {
-            // No keystore is committed to this public repository. Stable
-            // signing is used only when CI supplies a keystore through
-            // repository secrets; otherwise the build falls back to the
-            // auto-generated debug key.
+            // Stable signing uses a keystore supplied by CI secrets so each
+            // build installs as an update of the previous one. Local builds
+            // fall through to AGP's auto-generated debug key.
             val keystorePath = System.getenv("SIGNING_KEYSTORE_PATH")
             val storePass = System.getenv("SIGNING_STORE_PASSWORD")
             val alias = System.getenv("SIGNING_KEY_ALIAS")
             val keyPass = System.getenv("SIGNING_KEY_PASSWORD")
-            if (!keystorePath.isNullOrBlank() &&
+            val hasKeystore = !keystorePath.isNullOrBlank() &&
                 !storePass.isNullOrBlank() &&
                 !alias.isNullOrBlank() &&
                 !keyPass.isNullOrBlank() &&
                 file(keystorePath).exists()
-            ) {
+            val isCi = System.getenv("GITHUB_ACTIONS") == "true"
+            if (hasKeystore) {
                 storeFile = file(keystorePath)
                 storePassword = storePass
                 keyAlias = alias
                 keyPassword = keyPass
+            } else if (isCi) {
+                throw GradleException(
+                    "Signing keystore not configured in CI. Set " +
+                        "SIGNING_KEYSTORE_BASE64, SIGNING_STORE_PASSWORD, " +
+                        "SIGNING_KEY_PASSWORD, SIGNING_KEY_ALIAS as repository " +
+                        "secrets. See SIGNING.md.",
+                )
             }
+        }
+    }
+
+    buildTypes {
+        getByName("debug") {
+            // Explicit: shipping APK keeps R8 off so stack traces match
+            // source lines and the build stays reproducible.
+            isMinifyEnabled = false
         }
     }
 

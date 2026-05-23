@@ -3,7 +3,7 @@ name: Build & Release APK
 on:
   push:
     branches:
-      - "claude/relaxed-lovelace-tUm0M"
+      - "claude/**"
       - "main"
   workflow_dispatch:
 
@@ -29,24 +29,41 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
-      - name: Prepare signing keystore (optional)
+      - name: Prepare signing keystore
         env:
           SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
         run: |
-          if [ -n "$SIGNING_KEYSTORE_BASE64" ]; then
-            echo "$SIGNING_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/signing-keystore.jks"
-            echo "SIGNING_KEYSTORE_PATH=$RUNNER_TEMP/signing-keystore.jks" >> "$GITHUB_ENV"
-            echo "Signing keystore configured from a repository secret."
-          else
-            echo "No signing secret set; the debug APK will use an ephemeral key."
+          set -euo pipefail
+          missing=""
+          [ -z "${SIGNING_KEYSTORE_BASE64:-}" ] && missing="$missing SIGNING_KEYSTORE_BASE64"
+          [ -z "${SIGNING_STORE_PASSWORD:-}" ] && missing="$missing SIGNING_STORE_PASSWORD"
+          [ -z "${SIGNING_KEY_PASSWORD:-}" ] && missing="$missing SIGNING_KEY_PASSWORD"
+          [ -z "${SIGNING_KEY_ALIAS:-}" ] && missing="$missing SIGNING_KEY_ALIAS"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing signing secrets:$missing. See SIGNING.md to generate the keystore and set secrets."
+            exit 1
           fi
+          echo "$SIGNING_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/signing-keystore.jks"
+          echo "SIGNING_KEYSTORE_PATH=$RUNNER_TEMP/signing-keystore.jks" >> "$GITHUB_ENV"
+          echo "Signing keystore decoded; all four signing secrets present."
 
       - name: Run unit tests and assemble debug APK
         env:
           SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
           SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
           SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
-        run: ./gradlew testDebugUnitTest assembleDebug --stacktrace
+        run: |
+          set -euo pipefail
+          # versionCode is monotonic across re-runs of the same run_number:
+          # run #50 attempt 1 -> 5001, attempt 2 -> 5002, etc.
+          VERSION_CODE=$(( ${{ github.run_number }} * 100 + ${{ github.run_attempt }} ))
+          ./gradlew testDebugUnitTest assembleDebug \
+            -PversionCode="$VERSION_CODE" \
+            -PversionName="1.0.${{ github.run_number }}" \
+            --stacktrace
 
       - name: Verify APK declares no network permissions
         run: |

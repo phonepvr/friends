@@ -19,6 +19,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
@@ -27,6 +29,7 @@ import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -120,13 +123,49 @@ fun ImportContactsScreen(
                     Text("No contacts found on this device.")
                 }
 
-                else -> LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    items(state.contacts, key = { it.contactId }) { contact ->
-                        ContactRow(
-                            name = contact.displayName,
-                            selected = contact.contactId in state.selectedIds,
-                            onToggle = { viewModel.toggleSelection(contact.contactId) },
-                        )
+                else -> Column(modifier = Modifier.fillMaxSize()) {
+                    OutlinedTextField(
+                        value = state.query,
+                        onValueChange = viewModel::onQueryChange,
+                        placeholder = { Text("Search by name or phone") },
+                        singleLine = true,
+                        leadingIcon = {
+                            Icon(Icons.Filled.Search, contentDescription = null)
+                        },
+                        trailingIcon = if (state.query.isNotEmpty()) {
+                            {
+                                IconButton(onClick = { viewModel.onQueryChange("") }) {
+                                    Icon(Icons.Filled.Clear, contentDescription = "Clear search")
+                                }
+                            }
+                        } else {
+                            null
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                    )
+                    if (state.filtered.isEmpty()) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = "No contacts match “${state.query}”",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    } else {
+                        LazyColumn(modifier = Modifier.fillMaxSize()) {
+                            items(state.filtered, key = { it.contactId }) { contact ->
+                                ContactRow(
+                                    name = contact.displayName,
+                                    subtitle = contact.phoneNumbers.firstOrNull(),
+                                    selected = contact.contactId in state.selectedIds,
+                                    onToggle = { viewModel.toggleSelection(contact.contactId) },
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -135,7 +174,12 @@ fun ImportContactsScreen(
 }
 
 @Composable
-private fun ContactRow(name: String, selected: Boolean, onToggle: () -> Unit) {
+private fun ContactRow(
+    name: String,
+    subtitle: String?,
+    selected: Boolean,
+    onToggle: () -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -145,7 +189,16 @@ private fun ContactRow(name: String, selected: Boolean, onToggle: () -> Unit) {
     ) {
         Checkbox(checked = selected, onCheckedChange = { onToggle() })
         Spacer(Modifier.width(12.dp))
-        Text(name, style = MaterialTheme.typography.bodyLarge)
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Text(name, style = MaterialTheme.typography.bodyLarge)
+            if (!subtitle.isNullOrBlank()) {
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }
 

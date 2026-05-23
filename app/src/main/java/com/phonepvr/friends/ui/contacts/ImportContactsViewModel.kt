@@ -24,6 +24,8 @@ import javax.inject.Inject
 data class ImportUiState(
     val loading: Boolean = false,
     val contacts: List<DeviceContact> = emptyList(),
+    val filtered: List<DeviceContact> = emptyList(),
+    val query: String = "",
     val selectedIds: Set<Long> = emptySet(),
     val importing: Boolean = false,
 )
@@ -43,8 +45,20 @@ class ImportContactsViewModel @Inject constructor(
         _state.value = _state.value.copy(loading = true)
         viewModelScope.launch {
             val contacts = withContext(Dispatchers.IO) { contactsReader.listContacts() }
-            _state.value = _state.value.copy(loading = false, contacts = contacts)
+            _state.value = _state.value.copy(
+                loading = false,
+                contacts = contacts,
+                filtered = filter(contacts, _state.value.query),
+            )
         }
+    }
+
+    fun onQueryChange(query: String) {
+        val current = _state.value
+        _state.value = current.copy(
+            query = query,
+            filtered = filter(current.contacts, query),
+        )
     }
 
     fun toggleSelection(contactId: Long) {
@@ -53,6 +67,20 @@ class ImportContactsViewModel @Inject constructor(
             selected.remove(contactId)
         }
         _state.value = _state.value.copy(selectedIds = selected)
+    }
+
+    private fun filter(contacts: List<DeviceContact>, query: String): List<DeviceContact> {
+        val trimmed = query.trim()
+        if (trimmed.isEmpty()) return contacts
+        val lowerName = trimmed.lowercase()
+        val digits = trimmed.filter { it.isDigit() }
+        return contacts.filter { contact ->
+            if (contact.displayName.lowercase().contains(lowerName)) return@filter true
+            if (digits.isEmpty()) return@filter false
+            contact.phoneNumbers.any { phone ->
+                phone.filter { it.isDigit() }.contains(digits)
+            }
+        }
     }
 
     fun importSelected(onDone: () -> Unit) {

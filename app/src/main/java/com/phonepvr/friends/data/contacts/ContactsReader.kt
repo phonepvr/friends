@@ -13,6 +13,8 @@ data class DeviceContact(
     val contactId: Long,
     val lookupKey: String,
     val displayName: String,
+    /** Raw phone strings as stored on the device. Empty if the contact has none. */
+    val phoneNumbers: List<String> = emptyList(),
 )
 
 data class ContactDate(
@@ -37,6 +39,9 @@ class ContactsReader @Inject constructor(
     private val resolver: ContentResolver get() = context.contentResolver
 
     fun listContacts(): List<DeviceContact> {
+        // One sweep over Phone.CONTENT_URI is cheaper than N+1 per-contact
+        // queries when the import screen first loads. We then merge by id.
+        val phonesByContact = readPhonesByContactId()
         val contacts = mutableListOf<DeviceContact>()
         resolver.query(
             ContactsContract.Contacts.CONTENT_URI,
@@ -55,16 +60,43 @@ class ContactsReader @Inject constructor(
                 cursor.getColumnIndexOrThrow(ContactsContract.Contacts.DISPLAY_NAME_PRIMARY)
             while (cursor.moveToNext()) {
                 val name = cursor.getString(nameColumn)?.takeIf { it.isNotBlank() } ?: continue
+                val id = cursor.getLong(idColumn)
                 contacts.add(
                     DeviceContact(
-                        contactId = cursor.getLong(idColumn),
+                        contactId = id,
                         lookupKey = cursor.getString(keyColumn).orEmpty(),
                         displayName = name,
+                        phoneNumbers = phonesByContact[id].orEmpty(),
                     ),
                 )
             }
         }
         return contacts
+    }
+
+    private fun readPhonesByContactId(): Map<Long, List<String>> {
+        val map = HashMap<Long, MutableList<String>>()
+        resolver.query(
+            ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+            arrayOf(
+                ContactsContract.CommonDataKinds.Phone.CONTACT_ID,
+                ContactsContract.CommonDataKinds.Phone.NUMBER,
+            ),
+            null,
+            null,
+            null,
+        )?.use { cursor ->
+            val idColumn =
+                cursor.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.CONTACT_ID)
+            val numberColumn =
+                cursor.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.NUMBER)
+            while (cursor.moveToNext()) {
+                val number = cursor.getString(numberColumn)?.trim()?.takeIf { it.isNotBlank() }
+                    ?: continue
+                map.getOrPut(cursor.getLong(idColumn)) { mutableListOf() }.add(number)
+            }
+        }
+        return map
     }
 
     fun readDetails(contactId: Long): ContactDetails? {

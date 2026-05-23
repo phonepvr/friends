@@ -47,10 +47,15 @@ object Routes {
 fun FriendsNavHost(
     navController: NavHostController = rememberNavController(),
     initialDeepLink: String? = null,
+    onDeepLinkConsumed: () -> Unit = {},
 ) {
     LaunchedEffect(initialDeepLink) {
         if (initialDeepLink != null) {
             navController.navigate(initialDeepLink)
+            // Clear the one-shot link so tapping the same widget row a
+            // second time re-fires navigation (StateFlow would dedupe
+            // equal values otherwise).
+            onDeepLinkConsumed()
         }
     }
     val onSelectTab: (TopLevelTab) -> Unit = { tab ->

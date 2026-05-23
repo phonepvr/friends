@@ -1,6 +1,7 @@
 package com.phonepvr.friends
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -23,6 +24,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.phonepvr.friends.domain.model.ThemeMode
 import com.phonepvr.friends.ui.lock.LockScreen
 import com.phonepvr.friends.ui.navigation.FriendsNavHost
+import com.phonepvr.friends.ui.navigation.Routes
 import com.phonepvr.friends.ui.onboarding.OnboardingScreen
 import com.phonepvr.friends.ui.theme.FriendsTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -35,14 +37,11 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        val initialDeepLink = if (intent.getBooleanExtra(EXTRA_OPEN_BACKUP, false)) {
-            com.phonepvr.friends.ui.navigation.Routes.BACKUP
-        } else {
-            null
-        }
+        viewModel.setDeepLink(deepLinkFor(intent))
         setContent {
             val settings by viewModel.settings.collectAsStateWithLifecycle()
             val authenticated by viewModel.authenticated.collectAsStateWithLifecycle()
+            val deepLink by viewModel.deepLink.collectAsStateWithLifecycle()
             val current = settings
             // Toggle FLAG_SECURE in lockstep with the setting so screenshots,
             // screen recordings, casts and the recents preview are blocked
@@ -71,11 +70,24 @@ class MainActivity : FragmentActivity() {
 
                     else -> {
                         NotificationPermissionEffect()
-                        FriendsNavHost(initialDeepLink = initialDeepLink)
+                        FriendsNavHost(
+                            initialDeepLink = deepLink,
+                            onDeepLinkConsumed = { viewModel.setDeepLink(null) },
+                        )
                     }
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        // singleTop launchMode reuses this activity instance for new
+        // launches (e.g. tapping a widget row while the app is alive).
+        // Update the stored intent and push the new deep link through so
+        // the NavHost reacts.
+        setIntent(intent)
+        viewModel.setDeepLink(deepLinkFor(intent))
     }
 
     override fun onStop() {
@@ -87,9 +99,20 @@ class MainActivity : FragmentActivity() {
         }
     }
 
+    private fun deepLinkFor(intent: Intent?): String? {
+        if (intent == null) return null
+        if (intent.getBooleanExtra(EXTRA_OPEN_BACKUP, false)) return Routes.BACKUP
+        val personId = intent.getLongExtra(EXTRA_OPEN_PERSON_ID, -1L)
+        if (personId > 0L) return Routes.personDetail(personId)
+        return null
+    }
+
     companion object {
         /** True on the launch intent when the user tapped a backup-nudge notification. */
         const val EXTRA_OPEN_BACKUP = "com.phonepvr.friends.OPEN_BACKUP"
+
+        /** Person id (Long) carried by widget-row deep links. */
+        const val EXTRA_OPEN_PERSON_ID = "com.phonepvr.friends.OPEN_PERSON_ID"
     }
 }
 

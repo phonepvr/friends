@@ -45,7 +45,10 @@ class WidgetRefreshObserver @Inject constructor(
             .shareIn(scope, SharingStarted.Eagerly, replay = 1)
         combine(people, timeline) { _, _ -> System.currentTimeMillis() }
             .drop(1)
-            .debounce(500)
+            // Short debounce so single-row edits feel instant; bulk
+            // imports still coalesce because Room's InvalidationTracker
+            // fires per-transaction.
+            .debounce(150)
             .onEach { UpcomingWidget().updateAll(context) }
             .launchIn(scope)
     }

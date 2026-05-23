@@ -2,6 +2,7 @@ package com.phonepvr.friends.widget
 
 import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -12,6 +13,7 @@ import androidx.glance.LocalContext
 import androidx.glance.action.actionStartActivity
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
+import androidx.glance.appwidget.action.actionStartActivity as actionStartActivityWithIntent
 import androidx.glance.appwidget.lazy.LazyColumn
 import androidx.glance.appwidget.lazy.items
 import androidx.glance.appwidget.provideContent
@@ -37,6 +39,7 @@ import com.phonepvr.friends.domain.model.AnnualDate
 import com.phonepvr.friends.domain.model.EventType
 import com.phonepvr.friends.domain.quotes.Quote
 import com.phonepvr.friends.domain.quotes.QuoteRepository
+import com.phonepvr.friends.ui.common.formatEventDay
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
@@ -56,7 +59,12 @@ interface UpcomingWidgetEntryPoint {
 }
 
 /** One occasion (birthday OR anniversary) belonging to a person row. */
-private data class WidgetOccasion(val type: EventType, val days: Long, val whenText: String)
+private data class WidgetOccasion(
+    val type: EventType,
+    val days: Long,
+    val whenText: String,
+    val dateText: String,
+)
 
 /**
  * One row on the widget — a person with their (up to two) upcoming events
@@ -120,6 +128,7 @@ class UpcomingWidget : GlanceAppWidget() {
                             type = event.type,
                             days = days,
                             whenText = whenLabel(event.type, days),
+                            dateText = formatEventDay(event.day, event.month, year = null),
                         )
                     }
                 }
@@ -156,7 +165,8 @@ class UpcomingWidget : GlanceAppWidget() {
 @Composable
 private fun WidgetContent(data: WidgetData) {
     val context = LocalContext.current
-    val launchActivity = actionStartActivity(ComponentName(context, MainActivity::class.java))
+    val peopleListAction =
+        actionStartActivity(ComponentName(context, MainActivity::class.java))
     LazyColumn(
         modifier = GlanceModifier
             .fillMaxSize()
@@ -164,7 +174,7 @@ private fun WidgetContent(data: WidgetData) {
             .padding(12.dp),
     ) {
         item {
-            Column(modifier = GlanceModifier.fillMaxWidth().clickable(launchActivity)) {
+            Column(modifier = GlanceModifier.fillMaxWidth().clickable(peopleListAction)) {
                 data.quote?.let { quote ->
                     Text(
                         text = quote.text,
@@ -200,7 +210,7 @@ private fun WidgetContent(data: WidgetData) {
         }
         if (data.rows.isEmpty()) {
             item {
-                Column(modifier = GlanceModifier.fillMaxWidth().clickable(launchActivity)) {
+                Column(modifier = GlanceModifier.fillMaxWidth().clickable(peopleListAction)) {
                     Text(
                         text = "No birthdays or anniversaries lined up.",
                         style = TextStyle(color = GlanceTheme.colors.onBackground),
@@ -209,11 +219,21 @@ private fun WidgetContent(data: WidgetData) {
             }
         } else {
             items(items = data.rows, itemId = { it.personId }) { row ->
-                WidgetPersonCard(row = row, onClick = launchActivity)
+                WidgetPersonCard(row = row, onClick = openPersonAction(context, row.personId))
             }
         }
     }
 }
+
+private fun openPersonAction(context: Context, personId: Long) =
+    actionStartActivityWithIntent(
+        Intent(context, MainActivity::class.java)
+            .setAction(Intent.ACTION_VIEW)
+            .putExtra(MainActivity.EXTRA_OPEN_PERSON_ID, personId)
+            .addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP,
+            ),
+    )
 
 @Composable
 private fun WidgetPersonCard(row: WidgetPersonRow, onClick: androidx.glance.action.Action) {
@@ -235,7 +255,7 @@ private fun WidgetPersonCard(row: WidgetPersonRow, onClick: androidx.glance.acti
             row.occasions.forEachIndexed { index, occasion ->
                 if (index > 0) Spacer(GlanceModifier.width(12.dp))
                 Text(
-                    text = "${occasionLabel(occasion.type)} ${occasion.whenText}",
+                    text = "${occasionLabel(occasion.type)} · ${occasion.dateText} · ${occasion.whenText}",
                     style = TextStyle(
                         color = GlanceTheme.colors.onBackground,
                         fontSize = 12.sp,

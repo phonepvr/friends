@@ -32,6 +32,14 @@ class MainViewModel @Inject constructor(
     private val _authenticated = MutableStateFlow(false)
     val authenticated: StateFlow<Boolean> = _authenticated.asStateFlow()
 
+    /**
+     * The route the NavHost should navigate to on next composition, when
+     * the activity was launched (or re-launched via onNewIntent) from a
+     * deep link. Null means "use the regular start destination".
+     */
+    private val _deepLink = MutableStateFlow<String?>(null)
+    val deepLink: StateFlow<String?> = _deepLink.asStateFlow()
+
     init {
         // When app lock is off the gate is always considered passed. This also
         // means turning the lock on mid-session does not lock the user out.
@@ -54,6 +62,10 @@ class MainViewModel @Inject constructor(
 
     fun onAuthenticated() {
         _authenticated.value = true
+    }
+
+    fun setDeepLink(route: String?) {
+        _deepLink.value = route
     }
 
     fun onMovedToBackground() {

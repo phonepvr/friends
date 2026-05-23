@@ -49,13 +49,13 @@ class YearInReviewTest {
         )
         assertEquals(3, review.totalInteractions)
         assertEquals(3, review.contactInteractions)
-        assertEquals(1, review.mostConnected?.personId)
+        assertEquals(1L, review.mostConnected?.personId)
         assertEquals(2, review.mostConnected?.count)
         // Aanya is tracked and has two interactions; she shows up as least too
         // since she is the only tracked person with a positive count.
-        assertEquals(1, review.leastConnectedTracked?.personId)
+        assertEquals(1L, review.leastConnectedTracked?.personId)
         // Only Aanya has 2+ contacts so her gap is the only candidate.
-        assertEquals(1, review.longestGap?.personId)
+        assertEquals(1L, review.longestGap?.personId)
         assertEquals(LocalDate.parse("2026-01-10"), review.longestGap?.fromDate)
         assertEquals(LocalDate.parse("2026-03-05"), review.longestGap?.toDate)
     }

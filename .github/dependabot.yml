@@ -1,28 +1,33 @@
 version: 2
 updates:
-  # Gradle (libs.versions.toml) — security + minor updates weekly.
+  # Gradle deps: security advisories only. Setting
+  # `open-pull-requests-limit: 0` disables Dependabot's routine
+  # version-bump PRs (which were noisy for a personal app where the
+  # current versions all work) while leaving the door open for
+  # GitHub-issued security alerts — those always create a PR
+  # regardless of the limit.
   - package-ecosystem: gradle
     directory: "/"
     schedule:
       interval: weekly
       day: monday
       time: "06:00"
-    open-pull-requests-limit: 5
-    labels: ["dependencies", "gradle"]
+    open-pull-requests-limit: 0
+    labels: ["dependencies", "gradle", "security"]
     commit-message:
       prefix: "deps"
       include: scope
 
-  # GitHub Actions used in workflows — same cadence so supply-chain bumps
-  # ship as automated PRs the moment upstream publishes them.
+  # Same posture for GitHub Actions — only security advisories make
+  # a PR; major-version bumps require an explicit "go" from us.
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
       interval: weekly
       day: monday
       time: "06:00"
-    open-pull-requests-limit: 5
-    labels: ["dependencies", "actions"]
+    open-pull-requests-limit: 0
+    labels: ["dependencies", "actions", "security"]
     commit-message:
       prefix: "deps(actions)"
       include: scope

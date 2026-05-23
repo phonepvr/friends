@@ -88,7 +88,7 @@ jobs:
           echo "OK: APK declares no INTERNET or ACCESS_NETWORK_STATE permission."
 
       - name: Publish APK to GitHub Releases
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: v1.0.0-build.${{ github.run_number }}.${{ github.run_attempt }}
           name: Bondwidth v${{ env.APP_VERSION_NAME }}

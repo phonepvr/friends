@@ -56,6 +56,7 @@ fun SettingsScreen(
     onBack: () -> Unit,
     onOpenBackup: () -> Unit,
     onOpenYearInReview: () -> Unit,
+    onOpenMyQuotes: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
@@ -185,6 +186,16 @@ fun SettingsScreen(
                     Text("A look back at how often you stayed in touch")
                 },
                 modifier = Modifier.clickable { onOpenYearInReview() },
+            )
+
+            HorizontalDivider()
+            SectionHeader("Personalisation")
+            ListItem(
+                headlineContent = { Text("My quotes") },
+                supportingContent = {
+                    Text("See today's quote and add your own")
+                },
+                modifier = Modifier.clickable { onOpenMyQuotes() },
             )
         }
     }

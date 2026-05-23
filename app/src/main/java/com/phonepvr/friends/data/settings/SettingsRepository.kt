@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.phonepvr.friends.domain.model.ThemeMode
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -39,6 +40,17 @@ data class AppSettings(
     val backupNudgeIntervalDays: Int = 30,
     /** Epoch millis when the user last dismissed the in-app nudge banner. */
     val backupNudgeDismissedAt: Long? = null,
+    /**
+     * User-supplied quotes that mix into the daily rotation alongside the
+     * bundled set. Included in the backup snapshot so they survive a
+     * device move.
+     */
+    val userQuotes: List<String> = emptyList(),
+    /** ISO date (yyyy-MM-dd) when [lastQuoteText] was picked. Device-local. */
+    val lastQuoteDate: String = "",
+    /** Text of the most recently picked quote, used to keep the choice stable
+     *  through the day and to avoid back-to-back repeats. Device-local. */
+    val lastQuoteText: String = "",
 )
 
 private val Context.settingsDataStore: DataStore<Preferences> by preferencesDataStore(
@@ -71,6 +83,9 @@ class SettingsRepository @Inject constructor(
                 backupNudgeIntervalDays = prefs[Keys.NUDGE_INTERVAL]
                     ?: DEFAULTS.backupNudgeIntervalDays,
                 backupNudgeDismissedAt = prefs[Keys.NUDGE_DISMISSED]?.takeIf { it > 0L },
+                userQuotes = prefs[Keys.USER_QUOTES]?.toList().orEmpty(),
+                lastQuoteDate = prefs[Keys.LAST_QUOTE_DATE].orEmpty(),
+                lastQuoteText = prefs[Keys.LAST_QUOTE_TEXT].orEmpty(),
             )
         }
 
@@ -110,6 +125,27 @@ class SettingsRepository @Inject constructor(
         dataStore.edit { it[Keys.NUDGE_DISMISSED] = epochMillis }
     }
 
+    suspend fun addUserQuote(text: String) {
+        dataStore.edit { prefs ->
+            val current = prefs[Keys.USER_QUOTES].orEmpty()
+            prefs[Keys.USER_QUOTES] = current + text
+        }
+    }
+
+    suspend fun removeUserQuote(text: String) {
+        dataStore.edit { prefs ->
+            val current = prefs[Keys.USER_QUOTES].orEmpty()
+            prefs[Keys.USER_QUOTES] = current - text
+        }
+    }
+
+    suspend fun setLastQuote(date: String, text: String) {
+        dataStore.edit { prefs ->
+            prefs[Keys.LAST_QUOTE_DATE] = date
+            prefs[Keys.LAST_QUOTE_TEXT] = text
+        }
+    }
+
     /**
      * Serialisable snapshot of all user-configurable settings, used by the
      * backup JSON to round-trip across devices. The transient nudge-dismissed
@@ -129,6 +165,10 @@ class SettingsRepository @Inject constructor(
                 put(Snapshot.LAST_BACKUP, it.toString())
             }
             put(Snapshot.NUDGE_INTERVAL, current.backupNudgeIntervalDays.toString())
+            if (current.userQuotes.isNotEmpty()) {
+                // Newline-joined; restored quotes are split back on import.
+                put(Snapshot.USER_QUOTES, current.userQuotes.joinToString("\n"))
+            }
         }
     }
 
@@ -148,6 +188,10 @@ class SettingsRepository @Inject constructor(
                 ?.let { prefs[Keys.LAST_BACKUP] = it }
             snapshot[Snapshot.NUDGE_INTERVAL]?.toIntOrNull()
                 ?.let { prefs[Keys.NUDGE_INTERVAL] = it }
+            snapshot[Snapshot.USER_QUOTES]?.let { joined ->
+                val parsed = joined.split("\n").map { it.trim() }.filter { it.isNotEmpty() }
+                if (parsed.isNotEmpty()) prefs[Keys.USER_QUOTES] = parsed.toSet()
+            }
         }
     }
 
@@ -164,6 +208,9 @@ class SettingsRepository @Inject constructor(
         val LAST_BACKUP = longPreferencesKey("last_successful_backup_at")
         val NUDGE_INTERVAL = intPreferencesKey("backup_nudge_interval_days")
         val NUDGE_DISMISSED = longPreferencesKey("backup_nudge_dismissed_at")
+        val USER_QUOTES = stringSetPreferencesKey("user_quotes")
+        val LAST_QUOTE_DATE = stringPreferencesKey("last_quote_date")
+        val LAST_QUOTE_TEXT = stringPreferencesKey("last_quote_text")
     }
 
     private object Snapshot {
@@ -175,6 +222,7 @@ class SettingsRepository @Inject constructor(
         const val DEFAULT_CADENCE = "default_cadence_days"
         const val LAST_BACKUP = "last_successful_backup_at"
         const val NUDGE_INTERVAL = "backup_nudge_interval_days"
+        const val USER_QUOTES = "user_quotes"
     }
 
     private companion object {

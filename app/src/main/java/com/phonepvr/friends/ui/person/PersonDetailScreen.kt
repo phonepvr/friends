@@ -21,7 +21,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
@@ -56,6 +55,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.ui.graphics.Color
 import com.phonepvr.friends.data.db.entity.EventEntity
 import com.phonepvr.friends.data.db.entity.PhoneNumberEntity
@@ -891,7 +891,7 @@ private fun TimelineRow(
                     )
                     if (!entry.note.isNullOrBlank()) {
                         Icon(
-                            imageVector = Icons.AutoMirrored.Filled.Notes,
+                            imageVector = Icons.Filled.Edit,
                             contentDescription = "Has note",
                             modifier = Modifier.size(16.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,

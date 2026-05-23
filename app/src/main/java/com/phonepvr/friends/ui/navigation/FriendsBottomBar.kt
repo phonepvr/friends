@@ -1,7 +1,7 @@
 package com.phonepvr.friends.ui.navigation
 
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -16,7 +16,7 @@ enum class TopLevelTab(
     val icon: ImageVector,
 ) {
     PEOPLE(Routes.PEOPLE_LIST, "People", Icons.Filled.Person),
-    YEAR_IN_REVIEW(Routes.YEAR_IN_REVIEW, "Year", Icons.Filled.BarChart),
+    YEAR_IN_REVIEW(Routes.YEAR_IN_REVIEW, "Year", Icons.Filled.DateRange),
 }
 
 @Composable

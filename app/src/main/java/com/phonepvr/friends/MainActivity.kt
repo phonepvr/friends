@@ -37,7 +37,12 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        viewModel.setDeepLink(deepLinkFor(intent))
+        // Only honour the launch intent on fresh creation. On rotation /
+        // configuration change the activity is rebuilt with the original
+        // intent and we don't want to re-trigger the deep link mid-task.
+        if (savedInstanceState == null) {
+            viewModel.setDeepLink(deepLinkFor(intent))
+        }
         setContent {
             val settings by viewModel.settings.collectAsStateWithLifecycle()
             val authenticated by viewModel.authenticated.collectAsStateWithLifecycle()

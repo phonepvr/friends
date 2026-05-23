@@ -1,9 +1,11 @@
 package com.phonepvr.friends.ui.person
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -16,25 +18,33 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.compose.foundation.layout.Row
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.runtime.remember
 import com.phonepvr.friends.data.db.entity.EventEntity
+import com.phonepvr.friends.data.db.entity.PhoneNumberEntity
 import com.phonepvr.friends.data.db.entity.TimelineEntryEntity
 import com.phonepvr.friends.data.db.relation.PersonWithDetails
+import com.phonepvr.friends.data.reachout.ReachOutMethod
 import com.phonepvr.friends.ui.components.PersonAvatar
 import com.phonepvr.friends.domain.cadence.CadenceState
 import com.phonepvr.friends.domain.cadence.CadenceStatus
@@ -59,9 +69,27 @@ fun PersonDetailScreen(
     val person by viewModel.person.collectAsStateWithLifecycle()
     val timeline by viewModel.timeline.collectAsStateWithLifecycle()
     val cadence by viewModel.cadence.collectAsStateWithLifecycle()
+    val availableMethods by viewModel.availableMethods.collectAsStateWithLifecycle()
+    val pickerMethod by viewModel.pickerMethod.collectAsStateWithLifecycle()
+    val pendingLogPrompt by viewModel.pendingLogPrompt.collectAsStateWithLifecycle()
     val today = remember { LocalDate.now() }
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(pendingLogPrompt) {
+        val method = pendingLogPrompt ?: return@LaunchedEffect
+        val result = snackbarHostState.showSnackbar(
+            message = "Log this ${reachOutMethodLabel(method).lowercase()} as an interaction?",
+            actionLabel = "Log",
+            duration = SnackbarDuration.Long,
+        )
+        when (result) {
+            SnackbarResult.ActionPerformed -> viewModel.logPendingReachOut()
+            SnackbarResult.Dismissed -> viewModel.dismissLogPrompt()
+        }
+    }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text(person?.person?.displayName ?: "") },
@@ -103,6 +131,14 @@ fun PersonDetailScreen(
             ) {
                 item { PersonHeader(current) }
                 item { CadenceCard(cadence) }
+                if (current.phoneNumbers.isNotEmpty() && availableMethods.isNotEmpty()) {
+                    item {
+                        ReachOutRow(
+                            methods = availableMethods,
+                            onMethodTapped = viewModel::onReachOutMethodTapped,
+                        )
+                    }
+                }
                 item {
                     InfoSection(
                         person = current,
@@ -125,6 +161,84 @@ fun PersonDetailScreen(
             }
         }
     }
+
+    val openPicker = pickerMethod
+    val numbers = person?.phoneNumbers.orEmpty()
+    if (openPicker != null && numbers.size >= 2) {
+        NumberPickerSheet(
+            method = openPicker,
+            numbers = numbers,
+            onSelect = { phone -> viewModel.launchReachOut(openPicker, phone.rawNumber) },
+            onDismiss = viewModel::dismissPicker,
+        )
+    }
+}
+
+@Composable
+private fun ReachOutRow(
+    methods: Set<ReachOutMethod>,
+    onMethodTapped: (ReachOutMethod) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        ReachOutMethod.entries.forEach { method ->
+            if (method in methods) {
+                OutlinedButton(
+                    onClick = { onMethodTapped(method) },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(reachOutMethodLabel(method))
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun NumberPickerSheet(
+    method: ReachOutMethod,
+    numbers: List<PhoneNumberEntity>,
+    onSelect: (PhoneNumberEntity) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    // Default focus: a phone explicitly labelled "mobile", else the first one.
+    // The bottom sheet doesn't pre-select a row in the UI — it just orders so
+    // mobile bubbles to the top.
+    val ordered = remember(numbers) {
+        val mobile = numbers.firstOrNull { it.label?.equals("mobile", ignoreCase = true) == true }
+        if (mobile != null) listOf(mobile) + numbers.filter { it.id != mobile.id } else numbers
+    }
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(modifier = Modifier.padding(bottom = 24.dp)) {
+            Text(
+                text = "${reachOutMethodLabel(method)} via",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+            ordered.forEach { phone ->
+                val label = phone.label?.takeIf { it.isNotBlank() }
+                ListItem(
+                    headlineContent = { Text(phone.rawNumber) },
+                    supportingContent = if (label != null) {
+                        { Text(label) }
+                    } else {
+                        null
+                    },
+                    modifier = Modifier.clickable { onSelect(phone) },
+                )
+            }
+        }
+    }
+}
+
+private fun reachOutMethodLabel(method: ReachOutMethod): String = when (method) {
+    ReachOutMethod.CALL -> "Call"
+    ReachOutMethod.SMS -> "SMS"
+    ReachOutMethod.WHATSAPP -> "WhatsApp"
+    ReachOutMethod.SIGNAL -> "Signal"
 }
 
 @Composable

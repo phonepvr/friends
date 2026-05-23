@@ -1,10 +1,13 @@
 package com.phonepvr.friends.ui.person
 
+import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.phonepvr.friends.data.db.entity.TimelineEntryEntity
 import com.phonepvr.friends.data.db.relation.PersonWithDetails
+import com.phonepvr.friends.data.reachout.ReachOutLauncher
+import com.phonepvr.friends.data.reachout.ReachOutMethod
 import com.phonepvr.friends.data.repository.PeopleRepository
 import com.phonepvr.friends.data.repository.TimelineRepository
 import com.phonepvr.friends.domain.cadence.CadenceCalculator
@@ -14,8 +17,11 @@ import com.phonepvr.friends.domain.model.EntrySource
 import com.phonepvr.friends.domain.model.InteractionType
 import com.phonepvr.friends.ui.navigation.Routes
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -28,6 +34,7 @@ import javax.inject.Inject
 class PersonDetailViewModel @Inject constructor(
     peopleRepository: PeopleRepository,
     private val timelineRepository: TimelineRepository,
+    @ApplicationContext private val appContext: Context,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -76,5 +83,79 @@ class PersonDetailViewModel @Inject constructor(
                 ),
             )
         }
+    }
+
+    /** Which reach-out methods can target an installed app on this device. */
+    val availableMethods: StateFlow<Set<ReachOutMethod>> =
+        MutableStateFlow(
+            ReachOutMethod.entries
+                .filter { ReachOutLauncher.isAvailable(appContext, it) }
+                .toSet(),
+        ).asStateFlow()
+
+    private val _pickerMethod = MutableStateFlow<ReachOutMethod?>(null)
+    /** Non-null when the multi-number picker should be shown for that method. */
+    val pickerMethod: StateFlow<ReachOutMethod?> = _pickerMethod.asStateFlow()
+
+    private val _pendingLogPrompt = MutableStateFlow<ReachOutMethod?>(null)
+    /**
+     * Non-null when the user just launched a reach-out and we want to prompt
+     * "Log this interaction?" on their return.
+     */
+    val pendingLogPrompt: StateFlow<ReachOutMethod?> = _pendingLogPrompt.asStateFlow()
+
+    /**
+     * Called when the user taps one of the reach-out buttons. If the person
+     * has more than one phone, opens the number picker; otherwise launches
+     * the method against the only number.
+     */
+    fun onReachOutMethodTapped(method: ReachOutMethod) {
+        val phones = person.value?.phoneNumbers.orEmpty()
+        when {
+            phones.isEmpty() -> Unit
+            phones.size == 1 -> launchReachOut(method, phones.first().rawNumber)
+            else -> _pickerMethod.value = method
+        }
+    }
+
+    /** Dismiss the number picker without launching anything. */
+    fun dismissPicker() {
+        _pickerMethod.value = null
+    }
+
+    /**
+     * Launch [method] against [rawNumber]. Picker is closed and the
+     * "Log this interaction?" prompt is armed for when the user returns.
+     */
+    fun launchReachOut(method: ReachOutMethod, rawNumber: String) {
+        _pickerMethod.value = null
+        val launched = ReachOutLauncher.launch(appContext, method, rawNumber)
+        if (launched) {
+            _pendingLogPrompt.value = method
+        }
+    }
+
+    fun logPendingReachOut() {
+        val method = _pendingLogPrompt.value ?: return
+        _pendingLogPrompt.value = null
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            timelineRepository.addEntry(
+                TimelineEntryEntity(
+                    personId = personId,
+                    occurredAt = now,
+                    type = method.interactionType,
+                    note = null,
+                    source = EntrySource.MANUAL,
+                    countsAsContact = true,
+                    callDedupKey = null,
+                    createdAt = now,
+                ),
+            )
+        }
+    }
+
+    fun dismissLogPrompt() {
+        _pendingLogPrompt.value = null
     }
 }

@@ -22,6 +22,29 @@
     <!-- Post reminder notifications (runtime permission on Android 13+). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!--
+      Android 11+ requires explicit <queries> for PackageManager.getPackageInfo
+      and Intent resolution against other apps. We only check for WhatsApp and
+      Signal, and we only ever launch tel: / sms: / https://wa.me / signal.me
+      schemes — no broad QUERY_ALL_PACKAGES.
+    -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.DIAL" />
+            <data android:scheme="tel" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="sms" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" android:host="wa.me" />
+        </intent>
+        <package android:name="com.whatsapp" />
+        <package android:name="org.thoughtcrime.securesms" />
+    </queries>
+
     <application
         android:name=".FriendsApplication"
         android:allowBackup="false"

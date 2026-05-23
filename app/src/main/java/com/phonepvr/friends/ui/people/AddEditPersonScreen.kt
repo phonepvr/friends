@@ -37,6 +37,7 @@ import com.phonepvr.friends.ui.common.parseDateDigits
 @Composable
 fun AddEditPersonScreen(
     onDone: () -> Unit,
+    onDeleted: () -> Unit = onDone,
     viewModel: AddEditPersonViewModel = hiltViewModel(),
 ) {
     val form by viewModel.form.collectAsStateWithLifecycle()
@@ -135,7 +136,7 @@ fun AddEditPersonScreen(
 
             if (viewModel.isEditing) {
                 OutlinedButton(
-                    onClick = { viewModel.delete(onDone) },
+                    onClick = { viewModel.delete(onDeleted) },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text("Delete person")

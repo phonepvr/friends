@@ -5,12 +5,10 @@ import android.net.Uri
 import androidx.room.withTransaction
 import com.phonepvr.friends.data.db.FriendsDatabase
 import com.phonepvr.friends.data.db.dao.EventDao
-import com.phonepvr.friends.data.db.dao.PendingConfirmationDao
 import com.phonepvr.friends.data.db.dao.PersonDao
 import com.phonepvr.friends.data.db.dao.PhoneNumberDao
 import com.phonepvr.friends.data.db.dao.TimelineDao
 import com.phonepvr.friends.data.db.entity.EventEntity
-import com.phonepvr.friends.data.db.entity.PendingConfirmationEntity
 import com.phonepvr.friends.data.db.entity.PersonEntity
 import com.phonepvr.friends.data.db.entity.PhoneNumberEntity
 import com.phonepvr.friends.data.db.entity.TimelineEntryEntity
@@ -39,7 +37,6 @@ data class BackupCounts(
     val phoneNumbers: Int,
     val events: Int,
     val timelineEntries: Int,
-    val pendingConfirmations: Int,
 )
 
 /** The chosen file is not a usable Friends backup. */
@@ -66,7 +63,6 @@ class BackupManager @Inject constructor(
     private val phoneNumberDao: PhoneNumberDao,
     private val eventDao: EventDao,
     private val timelineDao: TimelineDao,
-    private val pendingConfirmationDao: PendingConfirmationDao,
     private val photoStorage: PhotoStorage,
     private val settingsRepository: SettingsRepository,
 ) {
@@ -87,7 +83,9 @@ class BackupManager @Inject constructor(
             phoneNumbers = phoneNumberDao.getAll().map { it.toBackup() },
             events = eventDao.getAll().map { it.toBackup() },
             timelineEntries = timelineDao.getAll().map { it.toBackup() },
-            pendingConfirmations = pendingConfirmationDao.getAll().map { it.toBackup() },
+            // pendingConfirmations is retained for backwards-compat parsing
+            // only; new exports always write an empty list.
+            pendingConfirmations = emptyList(),
             settings = settingsRepository.snapshot(),
         )
         val zipBytes = buildZip(
@@ -129,7 +127,8 @@ class BackupManager @Inject constructor(
                 phoneNumberDao.insertAll(entities.phoneNumbers)
                 eventDao.insertAll(entities.events)
                 timelineDao.insertAll(entities.timelineEntries)
-                pendingConfirmationDao.insertAll(entities.pendingConfirmations)
+                // BackupFile.pendingConfirmations is parsed but no longer
+                // materialised — the table was dropped in MIGRATION_2_3.
             }
             // Photos are files, not database rows; a photo failure must not
             // undo the (already committed) restore of the data itself.
@@ -175,7 +174,6 @@ class BackupManager @Inject constructor(
             phoneNumbers = backup.phoneNumbers.map { it.toEntity() },
             events = backup.events.map { it.toEntity() },
             timelineEntries = backup.timelineEntries.map { it.toEntity() },
-            pendingConfirmations = backup.pendingConfirmations.map { it.toEntity() },
         )
     } catch (e: IllegalArgumentException) {
         throw InvalidBackupException("The backup contains an unrecognised value.")
@@ -244,14 +242,12 @@ class BackupManager @Inject constructor(
         val phoneNumbers: List<PhoneNumberEntity>,
         val events: List<EventEntity>,
         val timelineEntries: List<TimelineEntryEntity>,
-        val pendingConfirmations: List<PendingConfirmationEntity>,
     ) {
         fun counts(): BackupCounts = BackupCounts(
             people = people.size,
             phoneNumbers = phoneNumbers.size,
             events = events.size,
             timelineEntries = timelineEntries.size,
-            pendingConfirmations = pendingConfirmations.size,
         )
     }
 

@@ -1,12 +1,10 @@
 package com.phonepvr.friends.data.backup
 
 import com.phonepvr.friends.data.db.entity.EventEntity
-import com.phonepvr.friends.data.db.entity.PendingConfirmationEntity
 import com.phonepvr.friends.data.db.entity.PersonEntity
 import com.phonepvr.friends.data.db.entity.PhoneNumberEntity
 import com.phonepvr.friends.data.db.entity.TimelineEntryEntity
 import com.phonepvr.friends.domain.model.CallType
-import com.phonepvr.friends.domain.model.ConfirmationStatus
 import com.phonepvr.friends.domain.model.EntrySource
 import com.phonepvr.friends.domain.model.EventType
 import com.phonepvr.friends.domain.model.InteractionType
@@ -38,7 +36,12 @@ data class BackupFile(
     val phoneNumbers: List<BackupPhoneNumber>,
     val events: List<BackupEvent>,
     val timelineEntries: List<BackupTimelineEntry>,
-    val pendingConfirmations: List<BackupPendingConfirmation>,
+    /**
+     * Retained on the shape (with an empty default) so v1 / v2 backups still
+     * deserialise. The pending-confirmations table itself is gone — new
+     * exports always write an empty list and imports ignore it.
+     */
+    val pendingConfirmations: List<BackupPendingConfirmation> = emptyList(),
     /** Added in v2; null when restoring a v1 backup. */
     val settings: Map<String, String>? = null,
 )
@@ -202,28 +205,7 @@ fun BackupTimelineEntry.toEntity(): TimelineEntryEntity = TimelineEntryEntity(
     createdAt = createdAt,
 )
 
-fun PendingConfirmationEntity.toBackup(): BackupPendingConfirmation = BackupPendingConfirmation(
-    id = id,
-    personId = personId,
-    phoneNumber = phoneNumber,
-    callTimestamp = callTimestamp,
-    callType = callType.name,
-    callDedupKey = callDedupKey,
-    status = status.name,
-    candidatePersonIds = candidatePersonIds,
-    durationSeconds = durationSeconds,
-    createdAt = createdAt,
-)
-
-fun BackupPendingConfirmation.toEntity(): PendingConfirmationEntity = PendingConfirmationEntity(
-    id = id,
-    personId = personId,
-    phoneNumber = phoneNumber,
-    callTimestamp = callTimestamp,
-    callType = CallType.valueOf(callType),
-    callDedupKey = callDedupKey,
-    status = ConfirmationStatus.valueOf(status),
-    candidatePersonIds = candidatePersonIds,
-    durationSeconds = durationSeconds,
-    createdAt = createdAt,
-)
+// PendingConfirmationEntity ⇄ BackupPendingConfirmation mappers were removed
+// when the global Calls queue was retired. The BackupPendingConfirmation data
+// class above stays so existing backups still parse, but its values are no
+// longer materialised into the database on restore.

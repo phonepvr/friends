@@ -6,16 +6,23 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
@@ -45,6 +52,7 @@ import com.phonepvr.friends.data.db.entity.PhoneNumberEntity
 import com.phonepvr.friends.data.db.entity.TimelineEntryEntity
 import com.phonepvr.friends.data.db.relation.PersonWithDetails
 import com.phonepvr.friends.data.reachout.ReachOutMethod
+import com.phonepvr.friends.data.repository.PersonCallCandidate
 import com.phonepvr.friends.ui.components.PersonAvatar
 import com.phonepvr.friends.domain.cadence.CadenceState
 import com.phonepvr.friends.domain.cadence.CadenceStatus
@@ -72,6 +80,7 @@ fun PersonDetailScreen(
     val pickerMethod by viewModel.pickerMethod.collectAsStateWithLifecycle()
     val pendingLogPrompt by viewModel.pendingLogPrompt.collectAsStateWithLifecycle()
     val cadenceSheetOpen by viewModel.cadenceSheetOpen.collectAsStateWithLifecycle()
+    val callScan by viewModel.callScan.collectAsStateWithLifecycle()
     val today = remember { LocalDate.now() }
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -147,6 +156,16 @@ fun PersonDetailScreen(
                         )
                     }
                 }
+                if (current.phoneNumbers.isNotEmpty()) {
+                    item {
+                        CallScanSection(
+                            state = callScan,
+                            onScan = viewModel::scanCalls,
+                            onAddAll = viewModel::addAllScannedCalls,
+                            onAddOne = viewModel::addScannedCall,
+                        )
+                    }
+                }
                 item {
                     InfoSection(
                         person = current,
@@ -209,6 +228,110 @@ private fun ReachOutRow(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun CallScanSection(
+    state: CallScanState,
+    onScan: () -> Unit,
+    onAddAll: () -> Unit,
+    onAddOne: (PersonCallCandidate) -> Unit,
+) {
+    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("Call log", style = MaterialTheme.typography.titleSmall)
+            Spacer(Modifier.height(8.dp))
+            when (state) {
+                CallScanState.Idle -> {
+                    Text(
+                        text = "Pull recent calls with this person from your call log.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedButton(onClick = onScan) { Text("Scan call log") }
+                }
+                CallScanState.Scanning -> {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Text("Scanning…", style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+                is CallScanState.Ready -> {
+                    if (state.candidates.isEmpty()) {
+                        Text(
+                            text = "Nothing new to add — every call is already in the timeline.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedButton(onClick = onScan) { Text("Scan again") }
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = "${state.candidates.size} not yet logged",
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Button(onClick = onAddAll) { Text("Add all") }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        state.candidates.forEachIndexed { index, candidate ->
+                            if (index > 0) HorizontalDivider()
+                            CallCandidateRow(
+                                candidate = candidate,
+                                onAdd = { onAddOne(candidate) },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CallCandidateRow(
+    candidate: PersonCallCandidate,
+    onAdd: () -> Unit,
+) {
+    val call = candidate.deviceCall
+    val direction = when (call.type) {
+        CallType.INCOMING -> "Incoming"
+        CallType.OUTGOING -> "Outgoing"
+        CallType.MISSED -> "Missed"
+        CallType.REJECTED -> "Rejected"
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = if (call.durationSeconds > 0L) {
+                    "$direction · ${formatDuration(call.durationSeconds)}"
+                } else {
+                    direction
+                },
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                text = formatTimestamp(call.timestampMillis),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        TextButton(onClick = onAdd) { Text("Add") }
     }
 }
 

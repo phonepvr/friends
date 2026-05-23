@@ -231,7 +231,6 @@ private fun RestoreCounts(counts: BackupCounts) {
         CountRow("Phone numbers", counts.phoneNumbers)
         CountRow("Important dates", counts.events)
         CountRow("Timeline entries", counts.timelineEntries)
-        CountRow("Calls to review", counts.pendingConfirmations)
     }
 }
 

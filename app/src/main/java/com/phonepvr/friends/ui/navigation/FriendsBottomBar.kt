@@ -1,7 +1,6 @@
 package com.phonepvr.friends.ui.navigation
 
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Icon
@@ -18,7 +17,6 @@ enum class TopLevelTab(
 ) {
     PEOPLE(Routes.PEOPLE_LIST, "People", Icons.Filled.Person),
     TIMELINE(Routes.TIMELINE, "Timeline", Icons.Filled.DateRange),
-    CALLS(Routes.CALLS, "Calls", Icons.Filled.Call),
 }
 
 @Composable

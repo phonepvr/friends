@@ -9,7 +9,6 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.phonepvr.friends.ui.backup.BackupScreen
-import com.phonepvr.friends.ui.calls.ConfirmationQueueScreen
 import com.phonepvr.friends.ui.contacts.ImportContactsScreen
 import com.phonepvr.friends.ui.people.AddEditPersonScreen
 import com.phonepvr.friends.ui.people.PeopleListScreen
@@ -22,7 +21,6 @@ import com.phonepvr.friends.ui.timeline.TimelineScreen
 object Routes {
     const val PEOPLE_LIST = "people"
     const val TIMELINE = "timeline"
-    const val CALLS = "calls"
     const val ADD_PERSON = "person/add"
     const val EDIT_PERSON = "person/edit/{personId}"
     const val PERSON_DETAIL = "person/detail/{personId}"
@@ -76,11 +74,6 @@ fun FriendsNavHost(
                 bottomBar = { FriendsBottomBar(TopLevelTab.TIMELINE, onSelectTab) },
             )
         }
-        composable(Routes.CALLS) {
-            ConfirmationQueueScreen(
-                bottomBar = { FriendsBottomBar(TopLevelTab.CALLS, onSelectTab) },
-            )
-        }
         composable(Routes.ADD_PERSON) {
             AddEditPersonScreen(onDone = { navController.popBackStack() })
         }
@@ -88,7 +81,15 @@ fun FriendsNavHost(
             route = Routes.EDIT_PERSON,
             arguments = listOf(navArgument(Routes.PERSON_ID_ARG) { type = NavType.LongType }),
         ) {
-            AddEditPersonScreen(onDone = { navController.popBackStack() })
+            AddEditPersonScreen(
+                onDone = { navController.popBackStack() },
+                onDeleted = {
+                    // Skip past the now-stale PersonDetail screen so its
+                    // observePersonWithDetails flow doesn't surface "Loading…"
+                    // for a row that just got deleted.
+                    navController.popBackStack(Routes.PEOPLE_LIST, inclusive = false)
+                },
+            )
         }
         composable(
             route = Routes.PERSON_DETAIL,

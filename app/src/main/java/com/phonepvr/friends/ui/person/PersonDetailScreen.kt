@@ -49,6 +49,7 @@ import com.phonepvr.friends.ui.components.PersonAvatar
 import com.phonepvr.friends.domain.cadence.CadenceState
 import com.phonepvr.friends.domain.cadence.CadenceStatus
 import com.phonepvr.friends.domain.model.AnnualDate
+import com.phonepvr.friends.domain.model.CallType
 import com.phonepvr.friends.domain.model.EventType
 import com.phonepvr.friends.domain.model.InteractionType
 import java.time.Instant
@@ -69,9 +70,11 @@ fun PersonDetailScreen(
     val person by viewModel.person.collectAsStateWithLifecycle()
     val timeline by viewModel.timeline.collectAsStateWithLifecycle()
     val cadence by viewModel.cadence.collectAsStateWithLifecycle()
+    val summary by viewModel.summary120d.collectAsStateWithLifecycle()
     val availableMethods by viewModel.availableMethods.collectAsStateWithLifecycle()
     val pickerMethod by viewModel.pickerMethod.collectAsStateWithLifecycle()
     val pendingLogPrompt by viewModel.pendingLogPrompt.collectAsStateWithLifecycle()
+    val cadenceSheetOpen by viewModel.cadenceSheetOpen.collectAsStateWithLifecycle()
     val today = remember { LocalDate.now() }
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -130,7 +133,15 @@ fun PersonDetailScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 item { PersonHeader(current) }
-                item { CadenceCard(cadence) }
+                item {
+                    CadenceCard(
+                        cadence = cadence,
+                        onTap = viewModel::openCadenceSheet,
+                    )
+                }
+                if (summary.interactionCount > 0 || summary.totalCallSeconds > 0L) {
+                    item { SummaryCard(summary) }
+                }
                 if (current.phoneNumbers.isNotEmpty() && availableMethods.isNotEmpty()) {
                     item {
                         ReachOutRow(
@@ -170,6 +181,14 @@ fun PersonDetailScreen(
             numbers = numbers,
             onSelect = { phone -> viewModel.launchReachOut(openPicker, phone.rawNumber) },
             onDismiss = viewModel::dismissPicker,
+        )
+    }
+
+    if (cadenceSheetOpen) {
+        CadenceSheet(
+            current = person?.person?.cadenceTargetDays,
+            onSelect = viewModel::setCadenceTargetDays,
+            onDismiss = viewModel::dismissCadenceSheet,
         )
     }
 }
@@ -253,7 +272,7 @@ private fun PersonHeader(person: PersonWithDetails) {
 }
 
 @Composable
-private fun CadenceCard(cadence: CadenceStatus) {
+private fun CadenceCard(cadence: CadenceStatus, onTap: () -> Unit) {
     val text = when (cadence.state) {
         CadenceState.NOT_TRACKED -> "No contact cadence set"
         CadenceState.NEVER_CONTACTED -> "No interactions logged yet"
@@ -273,13 +292,96 @@ private fun CadenceCard(cadence: CadenceStatus) {
     Surface(
         color = containerColor,
         shape = MaterialTheme.shapes.medium,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onTap),
     ) {
-        Text(
-            text = text,
-            modifier = Modifier.padding(16.dp),
-            style = MaterialTheme.typography.bodyLarge,
-        )
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(text = text, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                text = if (cadence.state == CadenceState.NOT_TRACKED) {
+                    "Tap to start tracking"
+                } else {
+                    "Tap to change cadence"
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SummaryCard(summary: InteractionSummary) {
+    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "Last 120 days",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = "${summary.interactionCount} interactions",
+                style = MaterialTheme.typography.titleMedium,
+            )
+            if (summary.totalCallSeconds > 0L) {
+                Text(
+                    text = "${formatDuration(summary.totalCallSeconds)} on calls",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+private val CADENCE_PRESETS = listOf(7, 14, 30, 45, 60, 90)
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CadenceSheet(
+    current: Int?,
+    onSelect: (Int?) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(modifier = Modifier.padding(bottom = 24.dp)) {
+            Text(
+                text = "Stay in touch every…",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+            CADENCE_PRESETS.forEach { days ->
+                val checked = current == days
+                ListItem(
+                    headlineContent = { Text("$days days") },
+                    trailingContent = if (checked) {
+                        { Text("Current", style = MaterialTheme.typography.labelMedium) }
+                    } else {
+                        null
+                    },
+                    modifier = Modifier.clickable { onSelect(days) },
+                )
+            }
+            ListItem(
+                headlineContent = { Text("Clear cadence") },
+                supportingContent = { Text("Stop tracking how often you stay in touch") },
+                modifier = Modifier.clickable { onSelect(null) },
+            )
+        }
+    }
+}
+
+/** Formats seconds as `Xh Ym`, `Ym Zs`, or `Zs`. */
+private fun formatDuration(seconds: Long): String {
+    val s = seconds.coerceAtLeast(0L)
+    val hours = s / 3600
+    val minutes = (s % 3600) / 60
+    val secs = s % 60
+    return when {
+        hours > 0 -> "${hours}h ${minutes}m"
+        minutes > 0 -> "${minutes}m ${secs}s"
+        else -> "${secs}s"
     }
 }
 
@@ -359,7 +461,7 @@ private fun TimelineRow(entry: TimelineEntryEntity) {
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text(
-                text = "${interactionLabel(entry.type)} · ${formatTimestamp(entry.occurredAt)}",
+                text = "${entryHeadline(entry)} · ${formatTimestamp(entry.occurredAt)}",
                 style = MaterialTheme.typography.titleSmall,
             )
             val note = entry.note
@@ -371,6 +473,23 @@ private fun TimelineRow(entry: TimelineEntryEntity) {
                 )
             }
         }
+    }
+}
+
+private fun entryHeadline(entry: TimelineEntryEntity): String {
+    if (entry.type != InteractionType.CALL) return interactionLabel(entry.type)
+    val base = when (entry.callDirection) {
+        CallType.INCOMING -> "Incoming call"
+        CallType.OUTGOING -> "Outgoing call"
+        CallType.MISSED -> "Missed call"
+        CallType.REJECTED -> "Rejected call"
+        null -> "Call"
+    }
+    val duration = entry.callDurationSeconds
+    return if (duration != null && duration > 0L) {
+        "$base · ${formatDuration(duration)}"
+    } else {
+        base
     }
 }
 

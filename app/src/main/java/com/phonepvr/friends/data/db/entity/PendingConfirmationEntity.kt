@@ -37,5 +37,7 @@ data class PendingConfirmationEntity(
     val status: ConfirmationStatus = ConfirmationStatus.PENDING,
     /** Comma-separated person ids when the number matched several people. */
     val candidatePersonIds: String? = null,
+    /** Call length in seconds, captured at scan time; null for pre-v2 rows. */
+    val durationSeconds: Long? = null,
     val createdAt: Long,
 )

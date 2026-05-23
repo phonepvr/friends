@@ -11,6 +11,8 @@ data class DeviceCall(
     val number: String,
     val type: CallType,
     val timestampMillis: Long,
+    /** Call length in seconds; 0 for missed/rejected. */
+    val durationSeconds: Long,
 )
 
 /** Read-only access to the device call log via the CallLog content provider. */
@@ -22,7 +24,12 @@ class CallLogReader @Inject constructor(
         val calls = mutableListOf<DeviceCall>()
         context.contentResolver.query(
             CallLog.Calls.CONTENT_URI,
-            arrayOf(CallLog.Calls.NUMBER, CallLog.Calls.TYPE, CallLog.Calls.DATE),
+            arrayOf(
+                CallLog.Calls.NUMBER,
+                CallLog.Calls.TYPE,
+                CallLog.Calls.DATE,
+                CallLog.Calls.DURATION,
+            ),
             "${CallLog.Calls.DATE} >= ?",
             arrayOf(sinceMillis.toString()),
             "${CallLog.Calls.DATE} DESC",
@@ -30,6 +37,7 @@ class CallLogReader @Inject constructor(
             val numberColumn = cursor.getColumnIndexOrThrow(CallLog.Calls.NUMBER)
             val typeColumn = cursor.getColumnIndexOrThrow(CallLog.Calls.TYPE)
             val dateColumn = cursor.getColumnIndexOrThrow(CallLog.Calls.DATE)
+            val durationColumn = cursor.getColumnIndexOrThrow(CallLog.Calls.DURATION)
             while (cursor.moveToNext()) {
                 val type = mapCallType(cursor.getInt(typeColumn)) ?: continue
                 calls.add(
@@ -37,6 +45,7 @@ class CallLogReader @Inject constructor(
                         number = cursor.getString(numberColumn).orEmpty(),
                         type = type,
                         timestampMillis = cursor.getLong(dateColumn),
+                        durationSeconds = cursor.getLong(durationColumn).coerceAtLeast(0L),
                     ),
                 )
             }

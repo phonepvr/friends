@@ -88,6 +88,7 @@ class CallLogRepository @Inject constructor(
                         } else {
                             null
                         },
+                    durationSeconds = call.durationSeconds,
                     createdAt = now,
                 ),
             )
@@ -106,6 +107,8 @@ class CallLogRepository @Inject constructor(
                     countsAsContact = confirmation.callType == CallType.INCOMING ||
                         confirmation.callType == CallType.OUTGOING,
                     callDedupKey = confirmation.callDedupKey,
+                    callDirection = confirmation.callType,
+                    callDurationSeconds = confirmation.durationSeconds,
                     createdAt = System.currentTimeMillis(),
                 ),
             )

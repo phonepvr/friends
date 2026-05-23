@@ -16,6 +16,15 @@ import com.phonepvr.friends.domain.cadence.CadenceStatus
 import com.phonepvr.friends.domain.model.EntrySource
 import com.phonepvr.friends.domain.model.InteractionType
 import com.phonepvr.friends.ui.navigation.Routes
+
+/** Interactions logged + total call time over the recent window the screen shows. */
+data class InteractionSummary(
+    val interactionCount: Int,
+    val totalCallSeconds: Long,
+)
+
+private const val SUMMARY_WINDOW_DAYS = 120L
+private const val SUMMARY_WINDOW_MILLIS = SUMMARY_WINDOW_DAYS * 24L * 60L * 60L * 1000L
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,6 +32,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -32,7 +42,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class PersonDetailViewModel @Inject constructor(
-    peopleRepository: PeopleRepository,
+    private val peopleRepository: PeopleRepository,
     private val timelineRepository: TimelineRepository,
     @ApplicationContext private val appContext: Context,
     savedStateHandle: SavedStateHandle,
@@ -64,6 +74,22 @@ class PersonDetailViewModel @Inject constructor(
             viewModelScope,
             SharingStarted.WhileSubscribed(5_000),
             CadenceStatus(CadenceState.NOT_TRACKED, null, null),
+        )
+
+    /** Interactions logged in the last 120 days and total call time over the same window. */
+    val summary120d: StateFlow<InteractionSummary> = timeline
+        .map { entries ->
+            val cutoff = System.currentTimeMillis() - SUMMARY_WINDOW_MILLIS
+            val inWindow = entries.filter { it.occurredAt >= cutoff }
+            val callSeconds = inWindow
+                .filter { it.type == InteractionType.CALL }
+                .sumOf { it.callDurationSeconds ?: 0L }
+            InteractionSummary(inWindow.size, callSeconds)
+        }
+        .stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5_000),
+            InteractionSummary(0, 0L),
         )
 
     /** Logs a `Wished – <label>` interaction so the cadence timer resets. */
@@ -157,5 +183,23 @@ class PersonDetailViewModel @Inject constructor(
 
     fun dismissLogPrompt() {
         _pendingLogPrompt.value = null
+    }
+
+    private val _cadenceSheetOpen = MutableStateFlow(false)
+    /** When true, the Person Detail screen renders the cadence-set bottom sheet. */
+    val cadenceSheetOpen: StateFlow<Boolean> = _cadenceSheetOpen.asStateFlow()
+
+    fun openCadenceSheet() { _cadenceSheetOpen.value = true }
+    fun dismissCadenceSheet() { _cadenceSheetOpen.value = false }
+
+    /**
+     * Writes [days] to the person's cadenceTargetDays (null clears it) and
+     * closes the sheet. Touches only the cadence column, not phones or events.
+     */
+    fun setCadenceTargetDays(days: Int?) {
+        _cadenceSheetOpen.value = false
+        viewModelScope.launch {
+            peopleRepository.setCadenceTargetDays(personId, days)
+        }
     }
 }

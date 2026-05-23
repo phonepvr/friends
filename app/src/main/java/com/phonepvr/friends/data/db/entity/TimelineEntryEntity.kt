@@ -4,6 +4,7 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import com.phonepvr.friends.domain.model.CallType
 import com.phonepvr.friends.domain.model.EntrySource
 import com.phonepvr.friends.domain.model.InteractionType
 
@@ -35,5 +36,9 @@ data class TimelineEntryEntity(
     val countsAsContact: Boolean = true,
     /** Set for call-log entries to prevent importing the same call twice. */
     val callDedupKey: String? = null,
+    /** Incoming/outgoing/missed/rejected; null for manual and pre-v2 entries. */
+    val callDirection: CallType? = null,
+    /** Call length in seconds; null for non-call entries and pre-v2 entries. */
+    val callDurationSeconds: Long? = null,
     val createdAt: Long,
 )

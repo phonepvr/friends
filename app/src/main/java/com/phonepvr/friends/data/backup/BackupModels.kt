@@ -18,8 +18,12 @@ import kotlinx.serialization.Serializable
  *
  * v2 added the optional [BackupFile.settings] map; v1 backups still import,
  * with restored devices keeping their current preference values.
+ *
+ * v3 added optional call direction + duration on [BackupTimelineEntry] and
+ * [BackupPendingConfirmation]. v1 and v2 backups still import, with the new
+ * fields restored as null.
  */
-const val BACKUP_SCHEMA_VERSION = 2
+const val BACKUP_SCHEMA_VERSION = 3
 
 /**
  * The complete, self-contained contents of a backup. Enum fields are stored
@@ -84,6 +88,10 @@ data class BackupTimelineEntry(
     val source: String,
     val countsAsContact: Boolean = true,
     val callDedupKey: String? = null,
+    /** Added in v3. CallType name string; null for non-calls and pre-v3 entries. */
+    val callDirection: String? = null,
+    /** Added in v3. Seconds; null for non-calls and pre-v3 entries. */
+    val callDurationSeconds: Long? = null,
     val createdAt: Long,
 )
 
@@ -97,6 +105,8 @@ data class BackupPendingConfirmation(
     val callDedupKey: String,
     val status: String,
     val candidatePersonIds: String? = null,
+    /** Added in v3. Seconds; null for pre-v3 backups. */
+    val durationSeconds: Long? = null,
     val createdAt: Long,
 )
 
@@ -173,6 +183,8 @@ fun TimelineEntryEntity.toBackup(): BackupTimelineEntry = BackupTimelineEntry(
     source = source.name,
     countsAsContact = countsAsContact,
     callDedupKey = callDedupKey,
+    callDirection = callDirection?.name,
+    callDurationSeconds = callDurationSeconds,
     createdAt = createdAt,
 )
 
@@ -185,6 +197,8 @@ fun BackupTimelineEntry.toEntity(): TimelineEntryEntity = TimelineEntryEntity(
     source = EntrySource.valueOf(source),
     countsAsContact = countsAsContact,
     callDedupKey = callDedupKey,
+    callDirection = callDirection?.let { CallType.valueOf(it) },
+    callDurationSeconds = callDurationSeconds,
     createdAt = createdAt,
 )
 
@@ -197,6 +211,7 @@ fun PendingConfirmationEntity.toBackup(): BackupPendingConfirmation = BackupPend
     callDedupKey = callDedupKey,
     status = status.name,
     candidatePersonIds = candidatePersonIds,
+    durationSeconds = durationSeconds,
     createdAt = createdAt,
 )
 
@@ -209,5 +224,6 @@ fun BackupPendingConfirmation.toEntity(): PendingConfirmationEntity = PendingCon
     callDedupKey = callDedupKey,
     status = ConfirmationStatus.valueOf(status),
     candidatePersonIds = candidatePersonIds,
+    durationSeconds = durationSeconds,
     createdAt = createdAt,
 )

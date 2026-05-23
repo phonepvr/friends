@@ -31,6 +31,9 @@ interface PersonDao {
     @Query("SELECT * FROM people")
     suspend fun getAll(): List<PersonEntity>
 
+    @Query("UPDATE people SET cadenceTargetDays = :days, updatedAt = :now WHERE id = :id")
+    suspend fun setCadenceTargetDays(id: Long, days: Int?, now: Long)
+
     @Query("SELECT * FROM people WHERE id = :id")
     fun observeById(id: Long): Flow<PersonEntity?>
 

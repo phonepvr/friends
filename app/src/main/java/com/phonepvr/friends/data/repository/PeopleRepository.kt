@@ -54,4 +54,9 @@ class PeopleRepository @Inject constructor(
     suspend fun deletePerson(person: PersonEntity) {
         personDao.delete(person)
     }
+
+    /** Inline cadence update used by the Person Detail tap-the-card flow. */
+    suspend fun setCadenceTargetDays(personId: Long, days: Int?) {
+        personDao.setCadenceTargetDays(personId, days, System.currentTimeMillis())
+    }
 }

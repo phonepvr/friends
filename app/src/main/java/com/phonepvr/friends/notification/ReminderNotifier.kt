@@ -66,6 +66,11 @@ object ReminderNotifier {
             .setContentTitle(upcomingLine(reminder.personName, reminder.type, reminder.daysUntil))
             .setContentIntent(openPi)
             .setAutoCancel(true)
+            // Don't surface person names on the lockscreen unless the device is
+            // already unlocked, and don't mirror to companion devices (Wear etc.)
+            // — Friends data should stay on this phone.
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setLocalOnly(true)
             .addAction(0, "Mark as wished", wishedPi)
             .build()
 
@@ -99,6 +104,8 @@ object ReminderNotifier {
             .setStyle(style)
             .setContentIntent(pi)
             .setAutoCancel(true)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setLocalOnly(true)
             .build()
 
         try {

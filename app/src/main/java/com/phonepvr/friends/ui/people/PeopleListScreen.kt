@@ -269,9 +269,10 @@ private fun EmptyState() {
             .padding(vertical = 48.dp, horizontal = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text("No people yet", style = MaterialTheme.typography.titleMedium)
+        Text("Your circle is empty.", style = MaterialTheme.typography.titleMedium)
         Text(
-            text = "Tap + to add someone you want to stay in touch with.",
+            text = "Tap + to add the first friend you'd like to stay in touch with — " +
+                "or pull them in from contacts via the Import button up top.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,

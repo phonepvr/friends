@@ -1,0 +1,11 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Signal-style speech bubble with a notch at the bottom-left. Brand
+         blue — kept untinted via Color.Unspecified at the call site. -->
+    <path
+        android:fillColor="#3A76F0"
+        android:pathData="M12,2C6.48,2 2,6.48 2,12c0,1.85 0.5,3.58 1.36,5.06L2.27,21.72l4.77,-1.03c1.46,0.81 3.14,1.31 4.96,1.31 5.52,0 10,-4.48 10,-10S17.52,2 12,2zM12,20c-1.61,0 -3.09,-0.46 -4.36,-1.26l-0.3,-0.18 -2.95,0.64 0.65,-2.88 -0.21,-0.32C4.06,14.78 3.6,13.4 3.6,12c0,-4.63 3.77,-8.4 8.4,-8.4 4.63,0 8.4,3.77 8.4,8.4S16.63,20 12,20z" />
+</vector>

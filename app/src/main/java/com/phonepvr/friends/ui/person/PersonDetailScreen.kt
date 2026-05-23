@@ -21,6 +21,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
@@ -57,6 +59,8 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
+import com.phonepvr.friends.R
 import com.phonepvr.friends.data.db.entity.EventEntity
 import com.phonepvr.friends.data.db.entity.PhoneNumberEntity
 import com.phonepvr.friends.data.db.entity.TimelineEntryEntity
@@ -242,9 +246,6 @@ fun PersonDetailScreen(
                     val hasSummary = summary.interactionCount > 0 ||
                         summary.totalCallSeconds > 0L
                     if (hasSummary) {
-                        // Side-by-side cards keep the most-glanced info on one
-                        // screen-height; the row uses IntrinsicSize.Min so the
-                        // shorter card stretches to match its neighbour.
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -254,7 +255,6 @@ fun PersonDetailScreen(
                             CadenceCard(
                                 cadence = cadence,
                                 lastContactAt = lastContactAt,
-                                onTap = viewModel::openCadenceSheet,
                                 modifier = Modifier.weight(1f).fillMaxHeight(),
                             )
                             SummaryCard(
@@ -266,7 +266,6 @@ fun PersonDetailScreen(
                         CadenceCard(
                             cadence = cadence,
                             lastContactAt = lastContactAt,
-                            onTap = viewModel::openCadenceSheet,
                         )
                     }
                 }
@@ -276,8 +275,8 @@ fun PersonDetailScreen(
                     item {
                         CoachMarkBanner(
                             tipId = Tooltips.CADENCE_TAP,
-                            text = "Tap the cadence card to set how often you " +
-                                "want to stay in touch.",
+                            text = "Tap the \"Stay in touch\" card below to set " +
+                                "how often you want to check in.",
                             dismissed = dismissedTooltips,
                             onDismiss = viewModel::dismissTooltip,
                         )
@@ -315,35 +314,34 @@ fun PersonDetailScreen(
                         )
                     }
                 }
-                if (hasScan || cadenceTargetDays != null) {
-                    item {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(IntrinsicSize.Min),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            if (hasScan) {
-                                CallScanSection(
-                                    state = callScan,
-                                    onScan = onTriggerScan,
-                                    onAddAll = viewModel::addAllScannedCalls,
-                                    onAddOne = viewModel::addScannedCall,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .fillMaxHeight(),
-                                )
-                            }
-                            if (cadenceTargetDays != null) {
-                                StayInTouchCard(
-                                    days = cadenceTargetDays,
-                                    onTap = viewModel::openCadenceSheet,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .fillMaxHeight(),
-                                )
-                            }
+                // Stay-in-touch card always renders so the user has one place
+                // to set or change cadence; the call-scan card joins it on
+                // the same row when the person has a phone number.
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(IntrinsicSize.Min),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        if (hasScan) {
+                            CallScanSection(
+                                state = callScan,
+                                onScan = onTriggerScan,
+                                onAddAll = viewModel::addAllScannedCalls,
+                                onAddOne = viewModel::addScannedCall,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight(),
+                            )
                         }
+                        StayInTouchCard(
+                            days = cadenceTargetDays,
+                            onTap = viewModel::openCadenceSheet,
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight(),
+                        )
                     }
                 }
                 item {
@@ -370,7 +368,7 @@ fun PersonDetailScreen(
                     }
                     item {
                         Text(
-                            text = "No interactions logged yet.",
+                            text = "Nothing here yet. Even a Tuesday \"thinking of you\" counts.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -433,8 +431,9 @@ private fun ReachOutRow(
                 OutlinedButton(
                     onClick = { onMethodTapped(method) },
                     modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(vertical = 12.dp),
                 ) {
-                    Text(reachOutMethodLabel(method))
+                    ReachOutIcon(method)
                 }
             }
         }
@@ -442,8 +441,33 @@ private fun ReachOutRow(
 }
 
 @Composable
+private fun ReachOutIcon(method: ReachOutMethod) {
+    when (method) {
+        ReachOutMethod.CALL -> Icon(
+            imageVector = Icons.Filled.Call,
+            contentDescription = "Call",
+        )
+        ReachOutMethod.SMS -> Icon(
+            imageVector = Icons.AutoMirrored.Filled.Send,
+            contentDescription = "SMS",
+        )
+        ReachOutMethod.WHATSAPP -> Icon(
+            painter = painterResource(R.drawable.ic_brand_whatsapp),
+            contentDescription = "WhatsApp",
+            // Keep the brand green / blue glyphs untinted.
+            tint = Color.Unspecified,
+        )
+        ReachOutMethod.SIGNAL -> Icon(
+            painter = painterResource(R.drawable.ic_brand_signal),
+            contentDescription = "Signal",
+            tint = Color.Unspecified,
+        )
+    }
+}
+
+@Composable
 private fun StayInTouchCard(
-    days: Int,
+    days: Int?,
     onTap: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -456,12 +480,12 @@ private fun StayInTouchCard(
             Text("Stay in touch", style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(8.dp))
             Text(
-                text = "Every $days days",
+                text = if (days == null) "Not set" else "Every $days days",
                 style = MaterialTheme.typography.bodyMedium,
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                text = "Tap to change",
+                text = if (days == null) "Tap to set" else "Tap to change",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -634,7 +658,6 @@ private fun PersonHeader(person: PersonWithDetails) {
 private fun CadenceCard(
     cadence: CadenceStatus,
     lastContactAt: Long?,
-    onTap: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val text = when (cadence.state) {
@@ -659,9 +682,7 @@ private fun CadenceCard(
     Surface(
         color = containerColor,
         shape = MaterialTheme.shapes.medium,
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable(onClick = onTap),
+        modifier = modifier.fillMaxWidth(),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(text = text, style = MaterialTheme.typography.bodyLarge)
@@ -676,15 +697,6 @@ private fun CadenceCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Text(
-                text = if (cadence.state == CadenceState.NOT_TRACKED) {
-                    "Tap to start tracking"
-                } else {
-                    "Tap to change cadence"
-                },
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
     }
 }

@@ -48,9 +48,9 @@ class FriendsApplication : Application() {
             scheduleBackupNudgeWork(this@FriendsApplication)
             scheduleCallLogSyncWork(this@FriendsApplication)
         }
-        // Live widget refresh: pings UpcomingWidget.updateAll() whenever
-        // people or the timeline change, debounced. Daily worker still runs
-        // for midnight rollovers.
+        // Live widget refresh: broadcasts an APPWIDGET_UPDATE to the
+        // receiver whenever people or the timeline change, debounced.
+        // Daily worker still runs for midnight rollovers.
         widgetRefreshObserver.start(appScope)
         // Watch the system call log so calls placed while the process is
         // alive land in the timeline without waiting for a cold launch.

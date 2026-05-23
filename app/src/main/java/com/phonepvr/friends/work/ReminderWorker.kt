@@ -1,7 +1,6 @@
 package com.phonepvr.friends.work
 
 import android.content.Context
-import androidx.glance.appwidget.updateAll
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
@@ -14,7 +13,7 @@ import com.phonepvr.friends.domain.cadence.CadenceCalculator
 import com.phonepvr.friends.domain.cadence.CadenceState
 import com.phonepvr.friends.domain.model.AnnualDate
 import com.phonepvr.friends.notification.ReminderNotifier
-import com.phonepvr.friends.widget.UpcomingWidget
+import com.phonepvr.friends.widget.refreshUpcomingWidgets
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
@@ -93,7 +92,7 @@ class ReminderWorker(
 
         eventReminders.forEach { ReminderNotifier.postEventReminder(applicationContext, it) }
         ReminderNotifier.postOverdueSummary(applicationContext, overdueLines)
-        UpcomingWidget().updateAll(applicationContext)
+        refreshUpcomingWidgets(applicationContext)
         return Result.success()
     }
 }

@@ -11,8 +11,7 @@ import com.phonepvr.friends.domain.cadence.CadenceCalculator
 import com.phonepvr.friends.domain.cadence.CadenceStatus
 import com.phonepvr.friends.domain.quotes.Quote
 import com.phonepvr.friends.domain.quotes.QuoteRepository
-import com.phonepvr.friends.widget.UpcomingWidget
-import androidx.glance.appwidget.updateAll
+import com.phonepvr.friends.widget.refreshUpcomingWidgets
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -63,7 +62,7 @@ class PeopleListViewModel @Inject constructor(
         viewModelScope.launch {
             _todayQuote.value = quoteRepository.quoteOfTheDay(ignoreCache = true)
             // Keep the widget aligned with the in-app quote.
-            UpcomingWidget().updateAll(appContext)
+            refreshUpcomingWidgets(appContext)
         }
     }
 

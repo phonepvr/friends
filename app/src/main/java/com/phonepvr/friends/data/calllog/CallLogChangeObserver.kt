@@ -9,6 +9,7 @@ import android.os.Looper
 import android.provider.CallLog
 import androidx.core.content.ContextCompat
 import com.phonepvr.friends.data.repository.CallLogAutoSync
+import com.phonepvr.friends.widget.refreshUpcomingWidgets
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -56,7 +57,13 @@ class CallLogChangeObserver @Inject constructor(
         ) return
         triggers
             .debounce(1_000)
-            .onEach { runCatching { callLogAutoSync.syncAllPeople() } }
+            .onEach {
+                runCatching { callLogAutoSync.syncAllPeople() }
+                // Belt-and-braces: WidgetRefreshObserver already redraws on
+                // the timeline write, but force a refresh here too in case
+                // the observer is somehow stuck.
+                runCatching { refreshUpcomingWidgets(context) }
+            }
             .flowOn(Dispatchers.IO)
             .launchIn(scope)
         val obs = object : ContentObserver(handler) {

@@ -65,6 +65,11 @@ class PeopleRepository @Inject constructor(
         eventDao.insert(event.copy(id = 0))
     }
 
+    /** Used by the inline tap-to-edit flow on Person Detail event slots. */
+    suspend fun updateEvent(event: EventEntity) {
+        eventDao.update(event)
+    }
+
     /** One-time backfill: any person with a null cadence picks up [days]. */
     suspend fun backfillMissingCadence(days: Int): Int =
         personDao.backfillMissingCadence(days, System.currentTimeMillis())

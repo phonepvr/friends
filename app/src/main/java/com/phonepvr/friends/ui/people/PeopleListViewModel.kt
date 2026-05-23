@@ -56,6 +56,15 @@ class PeopleListViewModel @Inject constructor(
         }
     }
 
+    /** Stable ids of coach-mark tooltips the user has already dismissed. */
+    val dismissedTooltips: StateFlow<Set<String>> = settingsRepository.settings
+        .map { it.dismissedTooltipIds }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
+
+    fun dismissTooltip(id: String) {
+        viewModelScope.launch { settingsRepository.dismissTooltip(id) }
+    }
+
     val people: StateFlow<List<PersonListItem>> =
         combine(
             repository.observeActiveWithDetails(),

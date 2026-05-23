@@ -236,6 +236,15 @@ class PersonDetailViewModel @Inject constructor(
         viewModelScope.launch { settingsRepository.setCallLogRationaleShown(true) }
     }
 
+    /** Stable ids of coach-mark tooltips the user has already dismissed. */
+    val dismissedTooltips: StateFlow<Set<String>> = settingsRepository.settings
+        .map { it.dismissedTooltipIds }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
+
+    fun dismissTooltip(id: String) {
+        viewModelScope.launch { settingsRepository.dismissTooltip(id) }
+    }
+
     /**
      * Reads the last 120 days of the device call log and keeps only the
      * entries matching this person's phones that haven't already been logged
@@ -300,22 +309,48 @@ class PersonDetailViewModel @Inject constructor(
     /** Non-null when the inline "Add birthday / anniversary" sheet is showing. */
     val addEventSheet: StateFlow<EventType?> = _addEventSheet.asStateFlow()
 
-    fun openAddEventSheet(type: EventType) { _addEventSheet.value = type }
-    fun dismissAddEventSheet() { _addEventSheet.value = null }
-
-    /** Inserts a new EventEntity for [type] and closes the sheet. */
-    fun addEvent(type: EventType, day: Int, month: Int, year: Int?) {
+    fun openAddEventSheet(type: EventType) {
+        _editEventTarget.value = null
+        _addEventSheet.value = type
+    }
+    fun dismissAddEventSheet() {
         _addEventSheet.value = null
+        _editEventTarget.value = null
+    }
+
+    private val _editEventTarget = MutableStateFlow<EventEntity?>(null)
+    /** Non-null when the sheet is editing an existing event. */
+    val editEventTarget: StateFlow<EventEntity?> = _editEventTarget.asStateFlow()
+
+    fun openEditEventSheet(event: EventEntity) {
+        _editEventTarget.value = event
+        _addEventSheet.value = event.type
+    }
+
+    /**
+     * Inserts a new EventEntity for [type] (or updates the one in
+     * [editEventTarget] when set) and closes the sheet.
+     */
+    fun saveEvent(type: EventType, day: Int, month: Int, year: Int?) {
+        val target = _editEventTarget.value
+        _addEventSheet.value = null
+        _editEventTarget.value = null
         viewModelScope.launch {
-            peopleRepository.addEvent(
-                EventEntity(
-                    personId = personId,
-                    type = type,
-                    month = month,
-                    day = day,
-                    year = year,
-                ),
-            )
+            if (target != null) {
+                peopleRepository.updateEvent(
+                    target.copy(type = type, month = month, day = day, year = year),
+                )
+            } else {
+                peopleRepository.addEvent(
+                    EventEntity(
+                        personId = personId,
+                        type = type,
+                        month = month,
+                        day = day,
+                        year = year,
+                    ),
+                )
+            }
         }
     }
 

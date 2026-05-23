@@ -72,9 +72,13 @@ import com.phonepvr.friends.domain.model.EventType
 import com.phonepvr.friends.domain.model.InteractionType
 import com.phonepvr.friends.ui.common.DateTextField
 import com.phonepvr.friends.ui.common.formatDuration
+import com.phonepvr.friends.ui.common.formatEventDay
 import com.phonepvr.friends.ui.common.formatTimestamp
+import com.phonepvr.friends.ui.common.packDateDigits
 import com.phonepvr.friends.ui.common.parseDateDigits
 import com.phonepvr.friends.ui.permissions.PermissionRationaleSheet
+import com.phonepvr.friends.ui.tooltips.CoachMarkBanner
+import com.phonepvr.friends.ui.tooltips.Tooltips
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -104,8 +108,10 @@ fun PersonDetailScreen(
     val cadenceSheetOpen by viewModel.cadenceSheetOpen.collectAsStateWithLifecycle()
     val callScan by viewModel.callScan.collectAsStateWithLifecycle()
     val callLogRationaleShown by viewModel.callLogRationaleShown.collectAsStateWithLifecycle()
+    val dismissedTooltips by viewModel.dismissedTooltips.collectAsStateWithLifecycle()
     val selectedTimelineIds by viewModel.selectedTimelineIds.collectAsStateWithLifecycle()
     val addEventSheet by viewModel.addEventSheet.collectAsStateWithLifecycle()
+    val editEventTarget by viewModel.editEventTarget.collectAsStateWithLifecycle()
     val today = remember { LocalDate.now() }
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
@@ -259,7 +265,31 @@ fun PersonDetailScreen(
                         )
                     }
                 }
+                if (cadence.state == CadenceState.NOT_TRACKED &&
+                    Tooltips.CADENCE_TAP !in dismissedTooltips
+                ) {
+                    item {
+                        CoachMarkBanner(
+                            tipId = Tooltips.CADENCE_TAP,
+                            text = "Tap the cadence card to set how often you " +
+                                "want to stay in touch.",
+                            dismissed = dismissedTooltips,
+                            onDismiss = viewModel::dismissTooltip,
+                        )
+                    }
+                }
                 if (current.phoneNumbers.isNotEmpty() && availableMethods.isNotEmpty()) {
+                    if (Tooltips.REACH_OUT !in dismissedTooltips) {
+                        item {
+                            CoachMarkBanner(
+                                tipId = Tooltips.REACH_OUT,
+                                text = "Quick reach-out. Friends will offer to log it " +
+                                    "after you return.",
+                                dismissed = dismissedTooltips,
+                                onDismiss = viewModel::dismissTooltip,
+                            )
+                        }
+                    }
                     item {
                         ReachOutRow(
                             methods = availableMethods,
@@ -268,6 +298,17 @@ fun PersonDetailScreen(
                     }
                 }
                 if (current.phoneNumbers.isNotEmpty()) {
+                    if (Tooltips.SCAN_CALLS !in dismissedTooltips) {
+                        item {
+                            CoachMarkBanner(
+                                tipId = Tooltips.SCAN_CALLS,
+                                text = "Friends can pull recent calls with this person " +
+                                    "into the timeline. Tap below to scan.",
+                                dismissed = dismissedTooltips,
+                                onDismiss = viewModel::dismissTooltip,
+                            )
+                        }
+                    }
                     item {
                         CallScanSection(
                             state = callScan,
@@ -283,10 +324,22 @@ fun PersonDetailScreen(
                         today = today,
                         onMarkWished = viewModel::markAsWished,
                         onAddEvent = viewModel::openAddEventSheet,
+                        onEditEvent = viewModel::openEditEventSheet,
                     )
                 }
                 item { Text("History", style = MaterialTheme.typography.titleMedium) }
                 if (timeline.isEmpty()) {
+                    if (Tooltips.TIMELINE_LOG !in dismissedTooltips) {
+                        item {
+                            CoachMarkBanner(
+                                tipId = Tooltips.TIMELINE_LOG,
+                                text = "Tap \"Log interaction\" below to add a check-in " +
+                                    "by hand — call, message, meet-up.",
+                                dismissed = dismissedTooltips,
+                                onDismiss = viewModel::dismissTooltip,
+                            )
+                        }
+                    }
                     item {
                         Text(
                             text = "No interactions logged yet.",
@@ -331,7 +384,8 @@ fun PersonDetailScreen(
     addEventSheet?.let { type ->
         AddEventSheet(
             type = type,
-            onSave = { day, month, year -> viewModel.addEvent(type, day, month, year) },
+            existing = editEventTarget,
+            onSave = { day, month, year -> viewModel.saveEvent(type, day, month, year) },
             onDismiss = viewModel::dismissAddEventSheet,
         )
     }
@@ -628,10 +682,14 @@ private fun CadenceSheet(
 @Composable
 private fun AddEventSheet(
     type: EventType,
+    existing: EventEntity?,
     onSave: (day: Int, month: Int, year: Int?) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var digits by remember { mutableStateOf("") }
+    val initialDigits = existing
+        ?.let { packDateDigits(day = it.day, month = it.month, year = it.year) }
+        .orEmpty()
+    var digits by remember(existing?.id) { mutableStateOf(initialDigits) }
     val parsed = parseDateDigits(digits)
     val isCompleteAttempt = digits.length == 4 || digits.length == 8
     val isError = isCompleteAttempt && parsed == null
@@ -643,10 +701,18 @@ private fun AddEventSheet(
         digits.length in 5..7 -> "Keep typing or shorten to skip the year"
         else -> null
     }
-    val title = when (type) {
-        EventType.BIRTHDAY -> "Add birthday"
-        EventType.WEDDING_ANNIVERSARY -> "Add anniversary"
-        EventType.CUSTOM -> "Add date"
+    val title = if (existing != null) {
+        when (type) {
+            EventType.BIRTHDAY -> "Edit birthday"
+            EventType.WEDDING_ANNIVERSARY -> "Edit anniversary"
+            EventType.CUSTOM -> "Edit date"
+        }
+    } else {
+        when (type) {
+            EventType.BIRTHDAY -> "Add birthday"
+            EventType.WEDDING_ANNIVERSARY -> "Add anniversary"
+            EventType.CUSTOM -> "Add date"
+        }
     }
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
@@ -689,15 +755,13 @@ private fun InfoSection(
     today: LocalDate,
     onMarkWished: (String) -> Unit,
     onAddEvent: (EventType) -> Unit,
+    onEditEvent: (EventEntity) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         person.person.relationshipTag
             ?.takeIf { it.isNotBlank() }
             ?.let { InfoRow("Relationship", it) }
-        person.phoneNumbers.forEach { phone ->
-            InfoRow(phone.label?.takeIf { it.isNotBlank() } ?: "Phone", phone.rawNumber)
-        }
-        // Birthday + anniversary share one row so the most-glanced dates stay
+        // Birthday + anniversary share one Row so the most-glanced dates stay
         // on the same screen line; everything else is one-per-row.
         val birthday = person.events.firstOrNull { it.type == EventType.BIRTHDAY }
         val anniversary = person.events.firstOrNull { it.type == EventType.WEDDING_ANNIVERSARY }
@@ -713,6 +777,7 @@ private fun InfoSection(
                 today = today,
                 onMarkWished = onMarkWished,
                 onAddEvent = onAddEvent,
+                onEditEvent = onEditEvent,
                 modifier = Modifier.weight(1f).fillMaxHeight(),
             )
             EventSlot(
@@ -721,6 +786,7 @@ private fun InfoSection(
                 today = today,
                 onMarkWished = onMarkWished,
                 onAddEvent = onAddEvent,
+                onEditEvent = onEditEvent,
                 modifier = Modifier.weight(1f).fillMaxHeight(),
             )
         }
@@ -749,6 +815,7 @@ private fun EventSlot(
     today: LocalDate,
     onMarkWished: (String) -> Unit,
     onAddEvent: (EventType) -> Unit,
+    onEditEvent: (EventEntity) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (event == null) {
@@ -776,7 +843,8 @@ private fun EventSlot(
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant,
         shape = MaterialTheme.shapes.medium,
-        modifier = modifier,
+        // Tap the slot itself to edit — saves a trip through the Edit screen.
+        modifier = modifier.clickable { onEditEvent(event) },
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -951,9 +1019,5 @@ private fun eventLabel(type: EventType): String = when (type) {
     EventType.CUSTOM -> "Date"
 }
 
-private fun formatEventDate(event: EventEntity): String = buildString {
-    append(event.day.toString().padStart(2, '0'))
-    append('/')
-    append(event.month.toString().padStart(2, '0'))
-    event.year?.let { append('/').append(it) }
-}
+private fun formatEventDate(event: EventEntity): String =
+    formatEventDay(day = event.day, month = event.month, year = event.year)

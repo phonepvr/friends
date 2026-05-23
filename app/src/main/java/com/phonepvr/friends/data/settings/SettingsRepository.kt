@@ -63,6 +63,8 @@ data class AppSettings(
     val callLogRationaleShown: Boolean = false,
     /** Set to true once existing rows have been backfilled with the default cadence. */
     val cadenceBackfilled: Boolean = false,
+    /** Stable ids of coach-mark tooltips the user has already dismissed. */
+    val dismissedTooltipIds: Set<String> = emptySet(),
 )
 
 private val Context.settingsDataStore: DataStore<Preferences> by preferencesDataStore(
@@ -102,6 +104,7 @@ class SettingsRepository @Inject constructor(
                 contactsRationaleShown = prefs[Keys.CONTACTS_RATIONALE] ?: false,
                 callLogRationaleShown = prefs[Keys.CALL_LOG_RATIONALE] ?: false,
                 cadenceBackfilled = prefs[Keys.CADENCE_BACKFILLED] ?: false,
+                dismissedTooltipIds = prefs[Keys.DISMISSED_TOOLTIPS].orEmpty(),
             )
         }
 
@@ -178,6 +181,13 @@ class SettingsRepository @Inject constructor(
         dataStore.edit { it[Keys.CADENCE_BACKFILLED] = backfilled }
     }
 
+    suspend fun dismissTooltip(id: String) {
+        dataStore.edit { prefs ->
+            val current = prefs[Keys.DISMISSED_TOOLTIPS].orEmpty()
+            prefs[Keys.DISMISSED_TOOLTIPS] = current + id
+        }
+    }
+
     /**
      * Serialisable snapshot of all user-configurable settings, used by the
      * backup JSON to round-trip across devices. The transient nudge-dismissed
@@ -247,6 +257,7 @@ class SettingsRepository @Inject constructor(
         val CONTACTS_RATIONALE = booleanPreferencesKey("contacts_rationale_shown")
         val CALL_LOG_RATIONALE = booleanPreferencesKey("call_log_rationale_shown")
         val CADENCE_BACKFILLED = booleanPreferencesKey("cadence_backfilled")
+        val DISMISSED_TOOLTIPS = stringSetPreferencesKey("dismissed_tooltips")
     }
 
     private object Snapshot {

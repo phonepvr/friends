@@ -16,11 +16,27 @@ import java.time.format.DateTimeFormatter
 
 private val DD_MM_YYYY: DateTimeFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy")
 private val DD_MM: DateTimeFormatter = DateTimeFormatter.ofPattern("dd/MM")
+private val DD_MMM_YYYY: DateTimeFormatter = DateTimeFormatter.ofPattern("dd-MMM-yyyy")
+private val DD_MMM: DateTimeFormatter = DateTimeFormatter.ofPattern("dd-MMM")
 
 fun formatDate(date: LocalDate): String = DD_MM_YYYY.format(date)
 
 /** Used by widget rows and any place where the year is implicit (e.g. annual events). */
 fun formatDayMonth(date: LocalDate): String = DD_MM.format(date)
+
+/**
+ * Used by event surfaces (birthday / anniversary) where we want the month
+ * name rather than its number so a glance reveals which month it is.
+ * Falls back to `dd-MMM` when the year is unknown.
+ */
+fun formatEventDay(day: Int, month: Int, year: Int?): String {
+    // Use 2000 as a non-leap-safe stand-in when the year is null; only the
+    // day + month are shown in that case.
+    val safeYear = year ?: 2000
+    val safeDay = minOf(day, java.time.YearMonth.of(safeYear, month).lengthOfMonth())
+    val date = LocalDate.of(safeYear, month, safeDay)
+    return if (year == null) DD_MMM.format(date) else DD_MMM_YYYY.format(date)
+}
 
 /** Epoch millis → dd/MM/yyyy in the system zone. */
 fun formatTimestamp(epochMillis: Long): String =

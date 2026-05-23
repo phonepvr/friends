@@ -43,6 +43,8 @@ import com.phonepvr.friends.domain.cadence.CadenceState
 import com.phonepvr.friends.domain.cadence.CadenceStatus
 import com.phonepvr.friends.domain.quotes.Quote
 import com.phonepvr.friends.ui.components.PersonAvatar
+import com.phonepvr.friends.ui.tooltips.CoachMarkBanner
+import com.phonepvr.friends.ui.tooltips.Tooltips
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -59,6 +61,7 @@ fun PeopleListScreen(
     val query by viewModel.searchQuery.collectAsStateWithLifecycle()
     val showBackupNudge by viewModel.showBackupNudge.collectAsStateWithLifecycle()
     val todayQuote by viewModel.todayQuote.collectAsStateWithLifecycle()
+    val dismissedTooltips by viewModel.dismissedTooltips.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -110,6 +113,17 @@ fun PeopleListScreen(
                 todayQuote?.let { quote ->
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         QuoteCard(quote)
+                    }
+                }
+                if (Tooltips.WIDGET !in dismissedTooltips) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        CoachMarkBanner(
+                            tipId = Tooltips.WIDGET,
+                            text = "Long-press your home screen to drop a Friends widget — " +
+                                "upcoming events and check-ins at a glance.",
+                            dismissed = dismissedTooltips,
+                            onDismiss = viewModel::dismissTooltip,
+                        )
                     }
                 }
                 if (people.isEmpty()) {

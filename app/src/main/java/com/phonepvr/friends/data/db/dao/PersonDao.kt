@@ -46,6 +46,30 @@ interface PersonDao {
     @Query("SELECT * FROM people WHERE isArchived = 0 ORDER BY displayName COLLATE NOCASE")
     fun observeActive(): Flow<List<PersonEntity>>
 
+    /**
+     * Active person matching this contact's lookupKey, or null when the
+     * contact isn't tracked. Drives the Contact detail screen's "Track in
+     * Bondwidth" toggle state.
+     */
+    @Query(
+        "SELECT * FROM people " +
+            "WHERE isArchived = 0 AND contactLookupKey = :lookupKey LIMIT 1",
+    )
+    fun observeActiveByContactLookupKey(lookupKey: String): Flow<PersonEntity?>
+
+    /**
+     * Any person row matching this contact's lookupKey, archived or not.
+     * The tracker uses this to revive an archived row when the user
+     * re-tracks a contact, preserving the existing timeline + events.
+     */
+    @Query("SELECT * FROM people WHERE contactLookupKey = :lookupKey LIMIT 1")
+    suspend fun findAnyByContactLookupKey(lookupKey: String): PersonEntity?
+
+    @Query(
+        "UPDATE people SET isArchived = :archived, updatedAt = :now WHERE id = :id",
+    )
+    suspend fun setArchived(id: Long, archived: Boolean, now: Long)
+
     @Transaction
     @Query("SELECT * FROM people WHERE id = :id")
     fun observeWithDetails(id: Long): Flow<PersonWithDetails?>

@@ -10,6 +10,8 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.phonepvr.friends.ui.about.AboutScreen
 import com.phonepvr.friends.ui.backup.BackupScreen
+import com.phonepvr.friends.ui.contacts.ContactDetailScreen
+import com.phonepvr.friends.ui.contacts.ContactsBrowserScreen
 import com.phonepvr.friends.ui.contacts.ImportContactsScreen
 import com.phonepvr.friends.ui.onboarding.OnboardingScreen
 import com.phonepvr.friends.ui.people.AddEditPersonScreen
@@ -28,6 +30,8 @@ object Routes {
     const val LOG_INTERACTION = "interaction/log/{personId}"
     const val EDIT_INTERACTION = "interaction/edit/{entryId}"
     const val IMPORT_CONTACTS = "contacts/import"
+    const val CONTACTS_BROWSER = "contacts/browse"
+    const val CONTACT_DETAIL = "contacts/detail/{contactId}"
     const val BACKUP = "backup"
     const val SETTINGS = "settings"
     const val YEAR_IN_REVIEW = "year-in-review"
@@ -36,11 +40,13 @@ object Routes {
     const val ABOUT = "about"
     const val PERSON_ID_ARG = "personId"
     const val ENTRY_ID_ARG = "entryId"
+    const val CONTACT_ID_ARG = "contactId"
 
     fun editPerson(personId: Long): String = "person/edit/$personId"
     fun personDetail(personId: Long): String = "person/detail/$personId"
     fun logInteraction(personId: Long): String = "interaction/log/$personId"
     fun editInteraction(entryId: Long): String = "interaction/edit/$entryId"
+    fun contactDetail(contactId: Long): String = "contacts/detail/$contactId"
 }
 
 @Composable
@@ -124,6 +130,25 @@ fun FriendsNavHost(
         }
         composable(Routes.IMPORT_CONTACTS) {
             ImportContactsScreen(onDone = { navController.popBackStack() })
+        }
+        composable(Routes.CONTACTS_BROWSER) {
+            ContactsBrowserScreen(
+                onOpenContact = { contactId, _ ->
+                    navController.navigate(Routes.contactDetail(contactId))
+                },
+                bottomBar = { FriendsBottomBar(TopLevelTab.CONTACTS, onSelectTab) },
+            )
+        }
+        composable(
+            route = Routes.CONTACT_DETAIL,
+            arguments = listOf(navArgument(Routes.CONTACT_ID_ARG) { type = NavType.LongType }),
+        ) {
+            ContactDetailScreen(
+                onBack = { navController.popBackStack() },
+                onOpenPerson = { personId ->
+                    navController.navigate(Routes.personDetail(personId))
+                },
+            )
         }
         composable(Routes.SETTINGS) {
             SettingsScreen(

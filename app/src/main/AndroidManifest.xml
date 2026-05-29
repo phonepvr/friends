@@ -3,7 +3,7 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <!--
-      Friends is offline by design and must never access the network.
+      Bondwidth is offline by design and must never access the network.
       These lines force-remove network permissions even if a merged
       library manifest tries to add them. The CI build fails if the
       final APK declares either permission.
@@ -13,11 +13,36 @@
         android:name="android.permission.ACCESS_NETWORK_STATE"
         tools:node="remove" />
 
-    <!-- Read-only access to contacts, used to import people. -->
+    <!-- Read-only access to contacts, used to import people and to power
+         the all-in-one Contacts browser. -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
+
+    <!-- Write contacts (all-in-one Contacts manager: edit / create /
+         delete entries in the system Contacts provider). Requested at
+         runtime the first time the user edits or creates a contact. -->
+    <uses-permission android:name="android.permission.WRITE_CONTACTS" />
 
     <!-- Read-only access to the call log, used to detect recent calls. -->
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
+
+    <!-- Place phone calls from the in-app dialer (all-in-one). Runtime. -->
+    <uses-permission android:name="android.permission.CALL_PHONE" />
+
+    <!-- Read phone state and SIM info, used to: route outgoing calls
+         through the right SIM, surface call state to the in-call UI,
+         and qualify as a default-dialer app. Runtime. -->
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.READ_PHONE_NUMBERS" />
+
+    <!-- Default-dialer privileged permissions. Auto-granted when
+         Bondwidth holds ROLE_DIALER; declared so the compile-time
+         checks for the InCallService and call-answering flows can
+         compile against them. -->
+    <uses-permission android:name="android.permission.MANAGE_OWN_CALLS" />
+    <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
+
+    <!-- Required for hosting the InCallService while a call is active. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 
     <!-- Post reminder notifications (runtime permission on Android 13+). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />

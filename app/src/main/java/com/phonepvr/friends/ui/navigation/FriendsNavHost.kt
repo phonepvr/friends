@@ -11,6 +11,7 @@ import androidx.navigation.navArgument
 import com.phonepvr.friends.ui.about.AboutScreen
 import com.phonepvr.friends.ui.backup.BackupScreen
 import com.phonepvr.friends.ui.contacts.ContactDetailScreen
+import com.phonepvr.friends.ui.contacts.ContactEditScreen
 import com.phonepvr.friends.ui.contacts.ContactsBrowserScreen
 import com.phonepvr.friends.ui.contacts.ImportContactsScreen
 import com.phonepvr.friends.ui.onboarding.OnboardingScreen
@@ -32,6 +33,8 @@ object Routes {
     const val IMPORT_CONTACTS = "contacts/import"
     const val CONTACTS_BROWSER = "contacts/browse"
     const val CONTACT_DETAIL = "contacts/detail/{contactId}"
+    const val NEW_CONTACT = "contacts/new"
+    const val CONTACT_EDIT = "contacts/edit/{contactId}"
     const val BACKUP = "backup"
     const val SETTINGS = "settings"
     const val YEAR_IN_REVIEW = "year-in-review"
@@ -47,6 +50,7 @@ object Routes {
     fun logInteraction(personId: Long): String = "interaction/log/$personId"
     fun editInteraction(entryId: Long): String = "interaction/edit/$entryId"
     fun contactDetail(contactId: Long): String = "contacts/detail/$contactId"
+    fun contactEdit(contactId: Long): String = "contacts/edit/$contactId"
 }
 
 @Composable
@@ -136,6 +140,7 @@ fun FriendsNavHost(
                 onOpenContact = { contactId, _ ->
                     navController.navigate(Routes.contactDetail(contactId))
                 },
+                onCreateContact = { navController.navigate(Routes.NEW_CONTACT) },
                 bottomBar = { FriendsBottomBar(TopLevelTab.CONTACTS, onSelectTab) },
             )
         }
@@ -148,7 +153,19 @@ fun FriendsNavHost(
                 onOpenPerson = { personId ->
                     navController.navigate(Routes.personDetail(personId))
                 },
+                onEdit = { contactId ->
+                    navController.navigate(Routes.contactEdit(contactId))
+                },
             )
+        }
+        composable(Routes.NEW_CONTACT) {
+            ContactEditScreen(onDone = { navController.popBackStack() })
+        }
+        composable(
+            route = Routes.CONTACT_EDIT,
+            arguments = listOf(navArgument(Routes.CONTACT_ID_ARG) { type = NavType.LongType }),
+        ) {
+            ContactEditScreen(onDone = { navController.popBackStack() })
         }
         composable(Routes.SETTINGS) {
             SettingsScreen(

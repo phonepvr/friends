@@ -27,6 +27,9 @@ data class ContactDetails(
     val lookupKey: String,
     val displayName: String,
     val phoneNumbers: List<String>,
+    val emails: List<String> = emptyList(),
+    val notes: String? = null,
+    val organization: String? = null,
     val birthday: ContactDate?,
     val anniversary: ContactDate?,
 )
@@ -167,13 +170,90 @@ class ContactsReader @Inject constructor(
             }
         }
 
+        val emails = readSingleColumn(
+            uri = ContactsContract.CommonDataKinds.Email.CONTENT_URI,
+            column = ContactsContract.CommonDataKinds.Email.ADDRESS,
+            contactIdColumn = ContactsContract.CommonDataKinds.Email.CONTACT_ID,
+            contactId = contactId,
+        )
+        val notes = readSingleData(
+            contactId = contactId,
+            mimeType = ContactsContract.CommonDataKinds.Note.CONTENT_ITEM_TYPE,
+            column = ContactsContract.CommonDataKinds.Note.NOTE,
+        )
+        val organization = readSingleData(
+            contactId = contactId,
+            mimeType = ContactsContract.CommonDataKinds.Organization.CONTENT_ITEM_TYPE,
+            column = ContactsContract.CommonDataKinds.Organization.COMPANY,
+        )
+
         return ContactDetails(
             lookupKey = lookupKey,
             displayName = displayName,
             phoneNumbers = phoneNumbers.distinct(),
+            emails = emails.distinct(),
+            notes = notes,
+            organization = organization,
             birthday = birthday,
             anniversary = anniversary,
         )
+    }
+
+    /**
+     * Returns the first raw-contact id aggregated under [contactId], or null
+     * if none exists. The writer attaches new Data rows to this raw contact
+     * when editing (i.e. it edits the first raw contact rather than spreading
+     * changes across all of them, which avoids merge conflicts on accounts
+     * that re-sync).
+     */
+    fun firstRawContactId(contactId: Long): Long? {
+        resolver.query(
+            ContactsContract.RawContacts.CONTENT_URI,
+            arrayOf(ContactsContract.RawContacts._ID),
+            "${ContactsContract.RawContacts.CONTACT_ID} = ?",
+            arrayOf(contactId.toString()),
+            "${ContactsContract.RawContacts._ID} ASC",
+        )?.use { cursor ->
+            if (cursor.moveToFirst()) return cursor.getLong(0)
+        }
+        return null
+    }
+
+    private fun readSingleColumn(
+        uri: android.net.Uri,
+        column: String,
+        contactIdColumn: String,
+        contactId: Long,
+    ): List<String> {
+        val list = mutableListOf<String>()
+        resolver.query(
+            uri,
+            arrayOf(column),
+            "$contactIdColumn = ?",
+            arrayOf(contactId.toString()),
+            null,
+        )?.use { cursor ->
+            val col = cursor.getColumnIndexOrThrow(column)
+            while (cursor.moveToNext()) {
+                cursor.getString(col)?.trim()?.takeIf { it.isNotBlank() }?.let { list.add(it) }
+            }
+        }
+        return list
+    }
+
+    private fun readSingleData(contactId: Long, mimeType: String, column: String): String? {
+        resolver.query(
+            ContactsContract.Data.CONTENT_URI,
+            arrayOf(column),
+            "${ContactsContract.Data.CONTACT_ID} = ? AND ${ContactsContract.Data.MIMETYPE} = ?",
+            arrayOf(contactId.toString(), mimeType),
+            null,
+        )?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                return cursor.getString(0)?.trim()?.takeIf { it.isNotBlank() }
+            }
+        }
+        return null
     }
 
     /** Opens the contact's photo for reading, or null when it has none. */

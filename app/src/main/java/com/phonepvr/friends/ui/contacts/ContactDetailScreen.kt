@@ -14,11 +14,17 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Notes
+import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.Cake
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -29,9 +35,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -48,10 +59,41 @@ import com.phonepvr.friends.ui.components.PersonAvatar
 fun ContactDetailScreen(
     onBack: () -> Unit,
     onOpenPerson: (Long) -> Unit,
+    onEdit: (Long) -> Unit,
     viewModel: ContactDetailViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
     val state by viewModel.state.collectAsStateWithLifecycle()
+    var showDeleteDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(state.deleted) {
+        if (state.deleted) onBack()
+    }
+
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Delete contact?") },
+            text = {
+                Text(
+                    "This removes the contact from your phone for good. " +
+                        "If they're tracked in Bondwidth, their cadence " +
+                        "and timeline are archived but kept.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteDialog = false
+                        viewModel.deleteContact()
+                    },
+                ) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel") }
+            },
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -63,6 +105,16 @@ fun ContactDetailScreen(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",
                         )
+                    }
+                },
+                actions = {
+                    if (state.details != null && !state.deleting) {
+                        IconButton(onClick = { onEdit(viewModel.contactId) }) {
+                            Icon(Icons.Filled.Edit, contentDescription = "Edit")
+                        }
+                        IconButton(onClick = { showDeleteDialog = true }) {
+                            Icon(Icons.Filled.Delete, contentDescription = "Delete")
+                        }
                     }
                 },
             )
@@ -120,6 +172,21 @@ fun ContactDetailScreen(
                                 )
                             }
                         }
+                        if (d.emails.isNotEmpty()) {
+                            SectionLabel("Email")
+                            d.emails.forEach { address ->
+                                IconTextRow(
+                                    icon = Icons.Filled.Email,
+                                    text = address,
+                                )
+                            }
+                        }
+                        d.organization?.let { company ->
+                            IconTextRow(
+                                icon = Icons.Filled.Business,
+                                text = company,
+                            )
+                        }
                         d.birthday?.let {
                             DateRow(
                                 label = "Birthday",
@@ -133,6 +200,17 @@ fun ContactDetailScreen(
                                 date = it,
                                 icon = Icons.Filled.CalendarMonth,
                             )
+                        }
+                        d.notes?.let { notes ->
+                            SectionLabel("Notes")
+                            Row(verticalAlignment = Alignment.Top) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.Notes,
+                                    contentDescription = null,
+                                )
+                                Spacer(Modifier.width(16.dp))
+                                Text(notes, style = MaterialTheme.typography.bodyLarge)
+                            }
                         }
                     }
                 }
@@ -214,6 +292,20 @@ private fun PhoneRow(number: String, onCall: () -> Unit) {
         Icon(Icons.Filled.Call, contentDescription = null)
         Spacer(Modifier.width(16.dp))
         Text(number, style = MaterialTheme.typography.bodyLarge)
+    }
+}
+
+@Composable
+private fun IconTextRow(icon: ImageVector, text: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null)
+        Spacer(Modifier.width(16.dp))
+        Text(text, style = MaterialTheme.typography.bodyLarge)
     }
 }
 

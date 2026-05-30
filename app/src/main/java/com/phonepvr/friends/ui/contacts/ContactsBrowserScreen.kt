@@ -21,10 +21,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -54,6 +56,7 @@ import com.phonepvr.friends.ui.permissions.PermissionRationaleSheet
 @Composable
 fun ContactsBrowserScreen(
     onOpenContact: (contactId: Long, lookupKey: String) -> Unit,
+    onCreateContact: () -> Unit,
     bottomBar: @Composable () -> Unit,
     viewModel: ContactsBrowserViewModel = hiltViewModel(),
 ) {
@@ -104,6 +107,13 @@ fun ContactsBrowserScreen(
     Scaffold(
         topBar = { TopAppBar(title = { Text("Contacts") }) },
         bottomBar = bottomBar,
+        floatingActionButton = {
+            if (hasPermission) {
+                FloatingActionButton(onClick = onCreateContact) {
+                    Icon(Icons.Filled.PersonAdd, contentDescription = "New contact")
+                }
+            }
+        },
     ) { padding ->
         Box(
             modifier = Modifier

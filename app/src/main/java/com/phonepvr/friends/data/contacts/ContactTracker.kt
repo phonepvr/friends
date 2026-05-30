@@ -111,6 +111,42 @@ class ContactTracker @Inject constructor(
             )
         }
     }
+
+    /**
+     * After a contact edit, refresh the linked Bondwidth person's editable
+     * fields (displayName + phone numbers + birthday + anniversary) from
+     * the system contact. No-op for untracked contacts and for archived
+     * person rows. The cadence / notes / photo / relationship tag stay
+     * intact — those are Bondwidth-only state.
+     */
+    suspend fun refreshTrackedFields(contactId: Long, lookupKey: String) =
+        withContext(Dispatchers.IO) {
+            if (lookupKey.isBlank()) return@withContext
+            val person = personDao.findAnyByContactLookupKey(lookupKey)
+                ?: return@withContext
+            if (person.isArchived) return@withContext
+            val details = contactsReader.readDetails(contactId)
+                ?: return@withContext
+            val now = System.currentTimeMillis()
+            val updatedPerson = person.copy(
+                displayName = details.displayName.ifBlank { person.displayName },
+                updatedAt = now,
+            )
+            val phones = details.phoneNumbers.map { raw ->
+                PhoneNumberEntity(
+                    personId = person.id,
+                    rawNumber = raw,
+                    normalizedNumber = raw.filter { it.isDigit() },
+                )
+            }
+            val events = buildList {
+                details.birthday?.let { add(it.toEventEntity(EventType.BIRTHDAY)) }
+                details.anniversary?.let {
+                    add(it.toEventEntity(EventType.WEDDING_ANNIVERSARY))
+                }
+            }
+            peopleRepository.updatePerson(updatedPerson, phones, events)
+        }
 }
 
 private fun ContactDate.toEventEntity(type: EventType): EventEntity = EventEntity(

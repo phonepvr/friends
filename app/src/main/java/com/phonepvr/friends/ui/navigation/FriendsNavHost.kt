@@ -14,6 +14,7 @@ import com.phonepvr.friends.ui.contacts.ContactDetailScreen
 import com.phonepvr.friends.ui.contacts.ContactEditScreen
 import com.phonepvr.friends.ui.contacts.ContactsBrowserScreen
 import com.phonepvr.friends.ui.contacts.ImportContactsScreen
+import com.phonepvr.friends.ui.dialer.CallHistoryScreen
 import com.phonepvr.friends.ui.dialer.DialerScreen
 import com.phonepvr.friends.ui.dialer.DialpadScreen
 import com.phonepvr.friends.ui.onboarding.OnboardingScreen
@@ -40,6 +41,7 @@ object Routes {
     const val DIALER = "dialer"
     const val DIALPAD = "dialpad?number={number}"
     const val DIALPAD_PREFILL_ARG = "number"
+    const val CALL_HISTORY = "dialer/history?number={number}"
     const val BACKUP = "backup"
     const val SETTINGS = "settings"
     const val YEAR_IN_REVIEW = "year-in-review"
@@ -62,6 +64,9 @@ object Routes {
         } else {
             "dialpad?number=${android.net.Uri.encode(prefill)}"
         }
+
+    fun callHistory(number: String): String =
+        "dialer/history?number=${android.net.Uri.encode(number)}"
 }
 
 @Composable
@@ -187,6 +192,9 @@ fun FriendsNavHost(
                     navController.navigate(Routes.contactDetail(contactId))
                 },
                 onOpenDialpad = { navController.navigate(Routes.dialpad()) },
+                onOpenHistory = { number ->
+                    navController.navigate(Routes.callHistory(number))
+                },
                 bottomBar = { FriendsBottomBar(TopLevelTab.PHONE, onSelectTab) },
             )
         }
@@ -204,6 +212,26 @@ fun FriendsNavHost(
                 onClose = { navController.popBackStack() },
                 onOpenContact = { contactId ->
                     navController.navigate(Routes.contactDetail(contactId))
+                },
+            )
+        }
+        composable(
+            route = Routes.CALL_HISTORY,
+            arguments = listOf(
+                navArgument(Routes.DIALPAD_PREFILL_ARG) {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+            ),
+        ) {
+            CallHistoryScreen(
+                onBack = { navController.popBackStack() },
+                onOpenContact = { contactId ->
+                    navController.navigate(Routes.contactDetail(contactId))
+                },
+                onOpenPerson = { personId ->
+                    navController.navigate(Routes.personDetail(personId))
                 },
             )
         }

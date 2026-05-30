@@ -84,6 +84,7 @@ import java.util.Date
 fun DialerScreen(
     onOpenContact: (Long) -> Unit,
     onOpenDialpad: () -> Unit,
+    onOpenHistory: (number: String) -> Unit,
     bottomBar: @Composable () -> Unit,
     viewModel: DialerViewModel = hiltViewModel(),
 ) {
@@ -228,6 +229,8 @@ fun DialerScreen(
                 hasPermission = hasCallLog,
                 onRequest = { showRationale = true },
                 onCallNumber = placeCall,
+                onOpenHistory = onOpenHistory,
+                onAddToContacts = { number -> openAddContact(context, number) },
                 onLongPress = { entry -> sheetEntry = entry },
             )
         }
@@ -269,6 +272,8 @@ private fun RecentsContent(
     hasPermission: Boolean,
     onRequest: () -> Unit,
     onCallNumber: (String) -> Unit,
+    onOpenHistory: (String) -> Unit,
+    onAddToContacts: (String) -> Unit,
     onLongPress: (RecentEntry) -> Unit,
 ) {
     if (!hasPermission) {
@@ -296,6 +301,8 @@ private fun RecentsContent(
             RecentRow(
                 entry = entry,
                 onCall = { onCallNumber(entry.number) },
+                onOpenHistory = { onOpenHistory(entry.number) },
+                onAddToContacts = { onAddToContacts(entry.number) },
                 onLongPress = { onLongPress(entry) },
             )
         }
@@ -307,12 +314,16 @@ private fun RecentsContent(
 private fun RecentRow(
     entry: RecentEntry,
     onCall: () -> Unit,
+    onOpenHistory: () -> Unit,
+    onAddToContacts: () -> Unit,
     onLongPress: () -> Unit,
 ) {
+    // Whole row is tap-history / long-press-sheet; the right-side icons
+    // catch their own clicks so the row's onClick doesn't fire for them.
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .combinedClickable(onClick = onCall, onLongClick = onLongPress)
+            .combinedClickable(onClick = onOpenHistory, onLongClick = onLongPress)
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -351,6 +362,16 @@ private fun RecentRow(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+        // Unknown numbers get a quick "+" → system's create-new / save-to-existing
+        // chooser; known numbers don't need it.
+        if (entry.contactId == null) {
+            IconButton(onClick = onAddToContacts) {
+                Icon(
+                    Icons.Filled.PersonAdd,
+                    contentDescription = "Add to contacts",
+                )
+            }
         }
         IconButton(onClick = onCall) {
             Icon(Icons.Filled.Call, contentDescription = "Call back")

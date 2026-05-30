@@ -162,13 +162,11 @@ private fun Call.toSnapshot(): CallSnapshot {
     val isVideo =
         details.videoState != android.telecom.VideoProfile.STATE_AUDIO_ONLY &&
             details.videoState != 0
-    val callId = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-        details.telecomCallId.orEmpty().ifEmpty { number }
-    } else {
-        number
-    }
+    // No public Call ID getter on Call.Details; the number + the Call's
+    // identity hash are unique enough for the UI's Compose key.
+    val callId = number.ifEmpty { "anon-${System.identityHashCode(this)}" }
     return CallSnapshot(
-        callId = callId.ifEmpty { "anon-${System.identityHashCode(this)}" },
+        callId = callId,
         state = state,
         direction = direction,
         number = number,

@@ -139,5 +139,41 @@
         <receiver
             android:name=".notification.MarkAsWishedReceiver"
             android:exported="false" />
+
+        <!--
+          InCallService — bound by the platform's Telecom framework when
+          Bondwidth holds ROLE_DIALER and a call is present. IN_CALL_SERVICE_UI
+          + IN_CALL_SERVICE_RINGING tell the OS that we render BOTH the
+          incoming-ringing UI and the ongoing-call UI. The
+          BondwidthInCallService stub funnels the Call lifecycle into
+          CallSession; the InCallActivity reads it and draws the screen.
+        -->
+        <service
+            android:name=".service.BondwidthInCallService"
+            android:permission="android.permission.BIND_INCALL_SERVICE"
+            android:exported="true">
+            <meta-data
+                android:name="android.telecom.IN_CALL_SERVICE_UI"
+                android:value="true" />
+            <meta-data
+                android:name="android.telecom.IN_CALL_SERVICE_RINGING"
+                android:value="true" />
+            <intent-filter>
+                <action android:name="android.telecom.InCallService" />
+            </intent-filter>
+        </service>
+
+        <!--
+          InCallActivity — separate from MainActivity so it can be launched
+          over the lock screen during an incoming call without colliding
+          with the normal app stack. setShowWhenLocked + setTurnScreenOn
+          are called in onCreate so the screen wakes for ringers.
+        -->
+        <activity
+            android:name=".ui.incall.InCallActivity"
+            android:exported="false"
+            android:launchMode="singleInstance"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.Friends" />
     </application>
 </manifest>

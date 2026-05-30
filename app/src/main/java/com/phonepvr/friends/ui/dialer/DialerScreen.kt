@@ -96,6 +96,7 @@ fun DialerScreen(
     onOpenContact: (Long) -> Unit,
     onOpenDialpad: () -> Unit,
     onOpenHistory: (number: String) -> Unit,
+    onSaveNumber: (number: String) -> Unit,
     bottomBar: @Composable () -> Unit,
     viewModel: DialerViewModel = hiltViewModel(),
 ) {
@@ -213,7 +214,7 @@ fun DialerScreen(
                 { sheetEntry = null; onOpenContact(id) }
             },
             onAddContact = if (entry.contactId == null) {
-                { sheetEntry = null; openAddContact(context, entry.number) }
+                { sheetEntry = null; onSaveNumber(entry.number) }
             } else {
                 null
             },
@@ -259,7 +260,7 @@ fun DialerScreen(
                         state = state,
                         onCallNumber = placeCall,
                         onOpenHistory = onOpenHistory,
-                        onAddToContacts = { number -> openAddContact(context, number) },
+                        onAddToContacts = onSaveNumber,
                         onCallFavourite = { fav -> placeCall(fav.primaryNumber) },
                         onLongPress = { entry -> sheetEntry = entry },
                     )
@@ -277,13 +278,6 @@ private fun openSms(context: Context, number: String) {
 private fun copyToClipboard(context: Context, number: String) {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
     clipboard?.setPrimaryClip(ClipData.newPlainText("Phone number", number))
-}
-
-private fun openAddContact(context: Context, number: String) {
-    val intent = Intent(Intent.ACTION_INSERT_OR_EDIT)
-        .setType("vnd.android.cursor.item/contact")
-        .putExtra(android.provider.ContactsContract.Intents.Insert.PHONE, number)
-    runCatching { context.startActivity(intent) }
 }
 
 private fun tryPlace(

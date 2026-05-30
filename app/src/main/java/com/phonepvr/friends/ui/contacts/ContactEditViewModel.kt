@@ -40,15 +40,19 @@ class ContactEditViewModel @Inject constructor(
     private val mode: ContactEditMode =
         if (contactId == 0L) ContactEditMode.NEW else ContactEditMode.EDIT
 
+    /** Number pre-filled from the Calls/recents "+" save flow, if any. */
+    private val prefillNumber: String? =
+        savedStateHandle.get<String>(Routes.DIALPAD_PREFILL_ARG)?.takeIf { it.isNotBlank() }
+
     private val _state = MutableStateFlow(
         ContactEditUiState(
             mode = mode,
             loading = mode == ContactEditMode.EDIT,
-            // Phones starts with one empty slot for the new-contact case so
-            // the user has somewhere to type without tapping "Add phone"
-            // first.
+            // Phones starts with the pre-fill (or one empty slot) for the
+            // new-contact case so the user has somewhere to type without
+            // tapping "Add phone" first.
             form = if (mode == ContactEditMode.NEW) {
-                ContactForm(phones = listOf(""))
+                ContactForm(phones = listOf(prefillNumber ?: ""))
             } else {
                 ContactForm()
             },
@@ -61,10 +65,29 @@ class ContactEditViewModel @Inject constructor(
             viewModelScope.launch {
                 val details = systemContactsRepository.details(contactId)
                 _state.update {
-                    it.copy(
-                        loading = false,
-                        form = details?.toForm() ?: it.form,
-                    )
+                    val loaded = details?.toForm() ?: it.form
+                    // When saving a number to an existing contact, append it
+                    // to the loaded numbers (unless the contact already has
+                    // it, compared on digits so formatting differences don't
+                    // create a duplicate).
+                    val withPrefill = if (prefillNumber != null) {
+                        val existingDigits = loaded.phones
+                            .map { p -> p.filter(Char::isDigit) }
+                        val incomingDigits = prefillNumber.filter(Char::isDigit)
+                        if (incomingDigits.isNotBlank() &&
+                            existingDigits.none { d -> d == incomingDigits }
+                        ) {
+                            loaded.copy(
+                                phones = loaded.phones.filter { p -> p.isNotBlank() } +
+                                    prefillNumber,
+                            )
+                        } else {
+                            loaded
+                        }
+                    } else {
+                        loaded
+                    }
+                    it.copy(loading = false, form = withPrefill)
                 }
             }
         }

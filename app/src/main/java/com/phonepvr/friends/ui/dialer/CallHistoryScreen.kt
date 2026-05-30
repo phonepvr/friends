@@ -88,6 +88,7 @@ fun CallHistoryScreen(
     onBack: () -> Unit,
     onOpenContact: (Long) -> Unit,
     onOpenPerson: (Long) -> Unit,
+    onSaveNumber: (String) -> Unit,
     viewModel: CallHistoryViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
@@ -188,7 +189,7 @@ fun CallHistoryScreen(
                 },
                 onOpenContact = state.contactId?.let { id -> { onOpenContact(id) } },
                 onAddToContacts = if (state.contactId == null) {
-                    { openAddToContacts(context, state.number) }
+                    { onSaveNumber(state.number) }
                 } else {
                     null
                 },
@@ -436,9 +437,3 @@ private fun copyToClipboard(context: Context, number: String) {
     clipboard?.setPrimaryClip(ClipData.newPlainText("Phone number", number))
 }
 
-private fun openAddToContacts(context: Context, number: String) {
-    val intent = Intent(Intent.ACTION_INSERT_OR_EDIT)
-        .setType("vnd.android.cursor.item/contact")
-        .putExtra(android.provider.ContactsContract.Intents.Insert.PHONE, number)
-    runCatching { context.startActivity(intent) }
-}

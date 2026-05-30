@@ -43,8 +43,9 @@ object Routes {
     const val IMPORT_CONTACTS = "contacts/import"
     const val CONTACTS_BROWSER = "contacts/browse"
     const val CONTACT_DETAIL = "contacts/detail/{contactId}"
-    const val NEW_CONTACT = "contacts/new"
-    const val CONTACT_EDIT = "contacts/edit/{contactId}"
+    const val NEW_CONTACT = "contacts/new?number={number}"
+    const val CONTACT_EDIT = "contacts/edit/{contactId}?number={number}"
+    const val SAVE_NUMBER = "contacts/save?number={number}"
     const val DIALER = "dialer"
     const val DIALPAD = "dialpad?number={number}"
     const val DIALPAD_PREFILL_ARG = "number"
@@ -64,7 +65,20 @@ object Routes {
     fun logInteraction(personId: Long): String = "interaction/log/$personId"
     fun editInteraction(entryId: Long): String = "interaction/edit/$entryId"
     fun contactDetail(contactId: Long): String = "contacts/detail/$contactId"
-    fun contactEdit(contactId: Long): String = "contacts/edit/$contactId"
+    fun contactEdit(contactId: Long, number: String? = null): String =
+        if (number.isNullOrBlank()) {
+            "contacts/edit/$contactId"
+        } else {
+            "contacts/edit/$contactId?number=${android.net.Uri.encode(number)}"
+        }
+    fun newContact(number: String? = null): String =
+        if (number.isNullOrBlank()) {
+            "contacts/new"
+        } else {
+            "contacts/new?number=${android.net.Uri.encode(number)}"
+        }
+    fun saveNumber(number: String): String =
+        "contacts/save?number=${android.net.Uri.encode(number)}"
     fun dialpad(prefill: String? = null): String =
         if (prefill.isNullOrBlank()) {
             "dialpad"
@@ -193,7 +207,7 @@ fun FriendsNavHost(
                 onOpenContact = { contactId, _ ->
                     navController.navigate(Routes.contactDetail(contactId))
                 },
-                onCreateContact = { navController.navigate(Routes.NEW_CONTACT) },
+                onCreateContact = { navController.navigate(Routes.newContact()) },
                 bottomBar = { FriendsBottomBar(TopLevelTab.CONTACTS, onSelectTab) },
             )
         }
@@ -211,14 +225,56 @@ fun FriendsNavHost(
                 },
             )
         }
-        composable(Routes.NEW_CONTACT) {
+        composable(
+            route = Routes.NEW_CONTACT,
+            arguments = listOf(
+                navArgument(Routes.DIALPAD_PREFILL_ARG) {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+            ),
+        ) {
             ContactEditScreen(onDone = { navController.popBackStack() })
         }
         composable(
             route = Routes.CONTACT_EDIT,
-            arguments = listOf(navArgument(Routes.CONTACT_ID_ARG) { type = NavType.LongType }),
+            arguments = listOf(
+                navArgument(Routes.CONTACT_ID_ARG) { type = NavType.LongType },
+                navArgument(Routes.DIALPAD_PREFILL_ARG) {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+            ),
         ) {
             ContactEditScreen(onDone = { navController.popBackStack() })
+        }
+        composable(
+            route = Routes.SAVE_NUMBER,
+            arguments = listOf(
+                navArgument(Routes.DIALPAD_PREFILL_ARG) {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+            ),
+        ) {
+            SaveNumberScreen(
+                onBack = { navController.popBackStack() },
+                onCreateNew = { number ->
+                    navController.navigate(Routes.newContact(number)) {
+                        // Replace the chooser so Back from the editor returns
+                        // to wherever the "+" was tapped, not the chooser.
+                        popUpTo(Routes.SAVE_NUMBER) { inclusive = true }
+                    }
+                },
+                onAddToExisting = { contactId, number ->
+                    navController.navigate(Routes.contactEdit(contactId, number)) {
+                        popUpTo(Routes.SAVE_NUMBER) { inclusive = true }
+                    }
+                },
+            )
         }
         composable(
             route = Routes.DIALER,
@@ -231,6 +287,9 @@ fun FriendsNavHost(
                 onOpenDialpad = { navController.navigate(Routes.dialpad()) },
                 onOpenHistory = { number ->
                     navController.navigate(Routes.callHistory(number))
+                },
+                onSaveNumber = { number ->
+                    navController.navigate(Routes.saveNumber(number))
                 },
                 bottomBar = { FriendsBottomBar(TopLevelTab.PHONE, onSelectTab) },
             )
@@ -269,6 +328,9 @@ fun FriendsNavHost(
                 },
                 onOpenPerson = { personId ->
                     navController.navigate(Routes.personDetail(personId))
+                },
+                onSaveNumber = { number ->
+                    navController.navigate(Routes.saveNumber(number))
                 },
             )
         }

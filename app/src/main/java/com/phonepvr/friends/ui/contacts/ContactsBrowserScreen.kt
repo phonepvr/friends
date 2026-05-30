@@ -176,14 +176,12 @@ private fun ContactList(
             FilterChip(
                 selected = state.filterMode == ContactsFilterMode.ALL,
                 onClick = { onFilterChange(ContactsFilterMode.ALL) },
-                label = { Text("All (${state.contacts.size})") },
+                label = { Text("All (${state.totalCount})") },
             )
             FilterChip(
                 selected = state.filterMode == ContactsFilterMode.TRACKED,
                 onClick = { onFilterChange(ContactsFilterMode.TRACKED) },
-                label = {
-                    Text("Bonded (${state.contacts.count { it.isTracked }})")
-                },
+                label = { Text("Bonded (${state.bondedCount})") },
             )
         }
         Spacer(Modifier.height(8.dp))
@@ -207,8 +205,11 @@ private fun ContactList(
             }
         } else {
             LazyColumn(modifier = Modifier.fillMaxSize()) {
-                items(state.filtered, key = { it.lookupKey.ifBlank { it.contactId.toString() } }) {
-                    contact ->
+                items(
+                    items = state.filtered,
+                    key = { it.lookupKey.ifBlank { it.contactId.toString() } },
+                    contentType = { "contact" },
+                ) { contact ->
                     ContactRow(
                         contact = contact,
                         onClick = { onOpenContact(contact.contactId, contact.lookupKey) },

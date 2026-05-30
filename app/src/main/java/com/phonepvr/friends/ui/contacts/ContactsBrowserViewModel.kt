@@ -33,6 +33,8 @@ data class ContactsBrowserUiState(
     val loading: Boolean = true,
     val contacts: List<BrowseContact> = emptyList(),
     val filtered: List<BrowseContact> = emptyList(),
+    val totalCount: Int = 0,
+    val bondedCount: Int = 0,
     val query: String = "",
     val filterMode: ContactsFilterMode = ContactsFilterMode.ALL,
 )
@@ -76,6 +78,8 @@ class ContactsBrowserViewModel @Inject constructor(
             loading = false,
             contacts = annotated,
             filtered = filter(annotated, q, mode),
+            totalCount = annotated.size,
+            bondedCount = annotated.count { it.isTracked },
             query = q,
             filterMode = mode,
         )

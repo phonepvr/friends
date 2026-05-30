@@ -36,7 +36,8 @@ object Routes {
     const val CONTACT_DETAIL = "contacts/detail/{contactId}"
     const val NEW_CONTACT = "contacts/new"
     const val CONTACT_EDIT = "contacts/edit/{contactId}"
-    const val DIALER = "dialer"
+    const val DIALER = "dialer?number={number}"
+    const val DIALPAD_PREFILL_ARG = "number"
     const val BACKUP = "backup"
     const val SETTINGS = "settings"
     const val YEAR_IN_REVIEW = "year-in-review"
@@ -53,6 +54,12 @@ object Routes {
     fun editInteraction(entryId: Long): String = "interaction/edit/$entryId"
     fun contactDetail(contactId: Long): String = "contacts/detail/$contactId"
     fun contactEdit(contactId: Long): String = "contacts/edit/$contactId"
+    fun dialer(prefill: String? = null): String =
+        if (prefill.isNullOrBlank()) {
+            "dialer"
+        } else {
+            "dialer?number=${android.net.Uri.encode(prefill)}"
+        }
 }
 
 @Composable
@@ -169,7 +176,16 @@ fun FriendsNavHost(
         ) {
             ContactEditScreen(onDone = { navController.popBackStack() })
         }
-        composable(Routes.DIALER) {
+        composable(
+            route = Routes.DIALER,
+            arguments = listOf(
+                navArgument(Routes.DIALPAD_PREFILL_ARG) {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+            ),
+        ) {
             DialerScreen(
                 onOpenContact = { contactId ->
                     navController.navigate(Routes.contactDetail(contactId))

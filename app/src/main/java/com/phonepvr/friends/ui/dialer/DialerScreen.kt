@@ -4,8 +4,10 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -275,6 +277,7 @@ private fun RecentsSegment(
         items(
             items = state.recents,
             key = { "${it.timestampMillis}-${it.number}" },
+            contentType = { "recent" },
         ) { entry ->
             RecentRow(
                 entry = entry,
@@ -354,8 +357,14 @@ private fun CallType.tint(): Color = when (this) {
         MaterialTheme.colorScheme.error
 }
 
-private fun formatTimestamp(millis: Long): String =
-    DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(millis))
+// Cached so we don't allocate a DateFormat per Recents row per recomposition.
+// DateFormat instances aren't thread-safe, but Compose recomposition runs on
+// the main thread so a single shared instance is fine here.
+private val timestampFormat: DateFormat by lazy {
+    DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
+}
+
+private fun formatTimestamp(millis: Long): String = timestampFormat.format(Date(millis))
 
 @Composable
 private fun DialpadSegment(
@@ -371,7 +380,11 @@ private fun DialpadSegment(
         Box(modifier = Modifier.weight(1f)) {
             if (state.matches.isNotEmpty()) {
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    items(state.matches, key = { it.contactId }) { match ->
+                    items(
+                        items = state.matches,
+                        key = { it.contactId },
+                        contentType = { "match" },
+                    ) { match ->
                         MatchRow(
                             match = match,
                             onCall = { onCallMatch(match) },
@@ -458,11 +471,13 @@ private fun MatchRow(
 
 @Composable
 private fun DialpadGrid(onDigit: (Char) -> Unit) {
+    // Long-press '0' enters '+' (international prefix), matching every other
+    // dialer in the world.
     val rows = listOf(
         listOf(KeyDef('1', ""), KeyDef('2', "ABC"), KeyDef('3', "DEF")),
         listOf(KeyDef('4', "GHI"), KeyDef('5', "JKL"), KeyDef('6', "MNO")),
         listOf(KeyDef('7', "PQRS"), KeyDef('8', "TUV"), KeyDef('9', "WXYZ")),
-        listOf(KeyDef('*', ""), KeyDef('0', "+"), KeyDef('#', "")),
+        listOf(KeyDef('*', ""), KeyDef('0', "+", longPressDigit = '+'), KeyDef('#', "")),
     )
     Column(
         modifier = Modifier
@@ -480,6 +495,7 @@ private fun DialpadGrid(onDigit: (Char) -> Unit) {
                         key = key,
                         modifier = Modifier.weight(1f),
                         onClick = { onDigit(key.digit) },
+                        onLongClick = key.longPressDigit?.let { d -> { onDigit(d) } },
                     )
                 }
             }
@@ -487,18 +503,28 @@ private fun DialpadGrid(onDigit: (Char) -> Unit) {
     }
 }
 
-private data class KeyDef(val digit: Char, val letters: String)
+private data class KeyDef(
+    val digit: Char,
+    val letters: String,
+    /** When set, long-pressing the key enters this character instead. */
+    val longPressDigit: Char? = null,
+)
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun DialpadKey(
     key: KeyDef,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
 ) {
     Surface(
         modifier = modifier
             .height(56.dp)
-            .clickable(onClick = onClick),
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick,
+            ),
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceVariant,
     ) {

@@ -1,5 +1,6 @@
 package com.phonepvr.friends.ui.dialer
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.phonepvr.friends.data.calllog.DeviceCall
@@ -11,14 +12,17 @@ import com.phonepvr.friends.data.dialer.CallPlacer
 import com.phonepvr.friends.data.dialer.RecentsRepository
 import com.phonepvr.friends.data.dialer.T9
 import com.phonepvr.friends.domain.model.CallType
+import com.phonepvr.friends.ui.navigation.Routes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import java.util.concurrent.TimeUnit
@@ -54,17 +58,39 @@ data class DialerUiState(
     val placeError: String? = null,
 )
 
+/** Contact + its precomputed T9 forms; cheaper to filter than recomputing. */
+private data class IndexedContact(
+    val contact: DeviceContact,
+    val nameDigits: String,
+    val phoneDigits: List<String>,
+)
+
+private data class ContactsIndex(
+    val entries: List<IndexedContact>,
+    val byPhoneSuffix: Map<String, DeviceContact>,
+)
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class DialerViewModel @Inject constructor(
+    savedStateHandle: SavedStateHandle,
     systemContactsRepository: SystemContactsRepository,
     recentsRepository: RecentsRepository,
     personDao: PersonDao,
     private val callPlacer: CallPlacer,
 ) : ViewModel() {
 
-    private val segment = MutableStateFlow(DialerSegment.RECENTS)
-    private val dialpadInput = MutableStateFlow("")
+    // Pre-filled by the DIALER route when the user lands here from a
+    // tel: intent. The activity-alias forwards the number through
+    // Routes.dialer(number).
+    private val prefill: String =
+        savedStateHandle.get<String>(Routes.DIALPAD_PREFILL_ARG)?.takeIf { it.isNotBlank() }
+            ?: ""
+
+    private val segment = MutableStateFlow(
+        if (prefill.isNotEmpty()) DialerSegment.DIALPAD else DialerSegment.RECENTS,
+    )
+    private val dialpadInput = MutableStateFlow(prefill)
     private val callLogGranted = MutableStateFlow(false)
     private val contactsGranted = MutableStateFlow(false)
     private val placeError = MutableStateFlow<String?>(null)
@@ -79,19 +105,47 @@ class DialerViewModel @Inject constructor(
         if (granted) systemContactsRepository.observeAll() else flowOf(emptyList())
     }
 
+    // Heavy work (T9-encoding 1000+ contact names + building the
+    // phone-suffix lookup map) runs only when the contacts list itself
+    // changes, NOT on every keystroke or recents update.
+    private val contactsIndex: Flow<ContactsIndex> = contactsFlow.map { contacts ->
+        val suffixMap = HashMap<String, DeviceContact>()
+        val entries = ArrayList<IndexedContact>(contacts.size)
+        for (c in contacts) {
+            val phoneDigits = c.phoneNumbers.map { T9.digitsOnly(it) }
+            for (digits in phoneDigits) {
+                val key = digits.takeLast(SUFFIX_DIGITS)
+                if (key.length >= 4 && key !in suffixMap) suffixMap[key] = c
+            }
+            entries.add(
+                IndexedContact(
+                    contact = c,
+                    nameDigits = T9.toDigits(c.displayName),
+                    phoneDigits = phoneDigits,
+                ),
+            )
+        }
+        ContactsIndex(entries, suffixMap)
+    }
+
+    private val trackedByKeyFlow: Flow<Map<String, PersonEntity>> =
+        personDao.observeActive().map { tracked ->
+            tracked.asSequence()
+                .mapNotNull { p ->
+                    p.contactLookupKey?.takeIf { it.isNotBlank() }?.let { it to p }
+                }
+                .toMap()
+        }
+
     val state: StateFlow<DialerUiState> = combine(
         segment,
         dialpadInput,
         recentsFlow,
-        contactsFlow,
-        personDao.observeActive(),
-    ) { seg, input, calls, contacts, tracked ->
-        val trackedByKey = tracked
-            .mapNotNull { p -> p.contactLookupKey?.takeIf { it.isNotBlank() }?.let { it to p } }
-            .toMap()
-        val contactByDigits = buildContactByDigits(contacts)
+        contactsIndex,
+        trackedByKeyFlow,
+    ) { seg, input, calls, idx, trackedByKey ->
         val recents = calls.map { call ->
-            val contact = lookupCallContact(call.number, contactByDigits)
+            val contact = lookupCallContact(call.number, idx.byPhoneSuffix)
             val person = contact?.lookupKey?.let { trackedByKey[it] }
             RecentEntry(
                 number = call.number,
@@ -103,7 +157,7 @@ class DialerViewModel @Inject constructor(
                 durationSeconds = call.durationSeconds,
             )
         }
-        val matches = buildDialpadMatches(input, contacts, trackedByKey)
+        val matches = buildDialpadMatches(input, idx.entries, trackedByKey)
         DialerUiState(
             segment = seg,
             recents = recents,
@@ -115,7 +169,7 @@ class DialerViewModel @Inject constructor(
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
-        initialValue = DialerUiState(),
+        initialValue = DialerUiState(dialpadInput = dialpadInput.value),
     )
 
     fun onPermissionState(callLog: Boolean, contacts: Boolean) {
@@ -129,6 +183,9 @@ class DialerViewModel @Inject constructor(
 
     fun onDigit(c: Char) {
         dialpadInput.update { it + c }
+        if (segment.value != DialerSegment.DIALPAD) {
+            segment.value = DialerSegment.DIALPAD
+        }
     }
 
     fun onBackspace() {
@@ -154,19 +211,6 @@ class DialerViewModel @Inject constructor(
         placeError.value = null
     }
 
-    private fun buildContactByDigits(
-        contacts: List<DeviceContact>,
-    ): Map<String, DeviceContact> {
-        val map = HashMap<String, DeviceContact>()
-        for (c in contacts) {
-            for (number in c.phoneNumbers) {
-                val key = T9.digitsOnly(number).takeLast(SUFFIX_DIGITS)
-                if (key.length >= 4 && key !in map) map[key] = c
-            }
-        }
-        return map
-    }
-
     private fun lookupCallContact(
         number: String,
         byDigits: Map<String, DeviceContact>,
@@ -178,25 +222,28 @@ class DialerViewModel @Inject constructor(
 
     private fun buildDialpadMatches(
         input: String,
-        contacts: List<DeviceContact>,
+        entries: List<IndexedContact>,
         trackedByKey: Map<String, PersonEntity>,
     ): List<DialpadMatch> {
         if (input.length < 2) return emptyList()
         val q = T9.digitsOnly(input)
         if (q.length < 2) return emptyList()
         val results = ArrayList<DialpadMatch>()
-        for (c in contacts) {
-            val nameT9 = T9.toDigits(c.displayName)
-            val nameHit = nameT9.contains(q)
-            val phoneHit = c.phoneNumbers.firstOrNull { T9.digitsOnly(it).contains(q) }
-            if (!nameHit && phoneHit == null) continue
-            val person = trackedByKey[c.lookupKey]
+        for (e in entries) {
+            val nameHit = e.nameDigits.contains(q)
+            val phoneIndex = e.phoneDigits.indexOfFirst { it.contains(q) }
+            if (!nameHit && phoneIndex < 0) continue
+            val person = trackedByKey[e.contact.lookupKey]
             results.add(
                 DialpadMatch(
-                    contactId = c.contactId,
-                    lookupKey = c.lookupKey,
-                    displayName = c.displayName,
-                    matchedNumber = phoneHit ?: c.phoneNumbers.firstOrNull().orEmpty(),
+                    contactId = e.contact.contactId,
+                    lookupKey = e.contact.lookupKey,
+                    displayName = e.contact.displayName,
+                    matchedNumber = if (phoneIndex >= 0) {
+                        e.contact.phoneNumbers[phoneIndex]
+                    } else {
+                        e.contact.phoneNumbers.firstOrNull().orEmpty()
+                    },
                     isTracked = person != null,
                     photoRelativePath = person?.photoRelativePath,
                 ),

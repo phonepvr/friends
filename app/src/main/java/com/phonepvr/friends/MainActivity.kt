@@ -109,13 +109,16 @@ class MainActivity : FragmentActivity() {
         if (intent.getBooleanExtra(EXTRA_OPEN_BACKUP, false)) return Routes.BACKUP
         val personId = intent.getLongExtra(EXTRA_OPEN_PERSON_ID, -1L)
         if (personId > 0L) return Routes.personDetail(personId)
-        // The dialer activity-alias forwards ACTION_DIAL + ACTION_VIEW (tel:)
-        // here. Phase 7 will pre-fill the dialpad with intent.data; for now
-        // we just land on the Calls tab.
-        if (intent.action == Intent.ACTION_DIAL ||
+        // ACTION_DIAL and ACTION_VIEW + tel: land on the Calls tab; if the
+        // intent has a tel: URI, the number pre-fills the dialpad.
+        val isDialerIntent = intent.action == Intent.ACTION_DIAL ||
             (intent.action == Intent.ACTION_VIEW && intent.data?.scheme == "tel")
-        ) {
-            return Routes.DIALER
+        if (isDialerIntent) {
+            val number = intent.data
+                ?.takeIf { it.scheme == "tel" }
+                ?.schemeSpecificPart
+                ?.trim()
+            return Routes.dialer(number)
         }
         return null
     }

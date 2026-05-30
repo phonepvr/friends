@@ -21,7 +21,7 @@ enum class TopLevelTab(
     val gatedByAllInOne: Boolean = false,
 ) {
     PHONE(
-        route = "dialer",
+        route = Routes.DIALER,
         label = "Calls",
         icon = Icons.Filled.Phone,
         gatedByAllInOne = true,

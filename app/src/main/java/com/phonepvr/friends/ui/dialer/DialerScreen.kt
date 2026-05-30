@@ -4,10 +4,8 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,29 +20,24 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Backspace
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CallMade
 import androidx.compose.material.icons.filled.CallMissed
 import androidx.compose.material.icons.filled.CallReceived
+import androidx.compose.material.icons.filled.Dialpad
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -61,7 +54,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -69,6 +61,7 @@ import com.phonepvr.friends.data.dialer.CallPlacer
 import com.phonepvr.friends.domain.model.CallType
 import com.phonepvr.friends.ui.components.PersonAvatar
 import com.phonepvr.friends.ui.permissions.PermissionRationaleSheet
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
@@ -77,6 +70,7 @@ import java.util.Date
 @Composable
 fun DialerScreen(
     onOpenContact: (Long) -> Unit,
+    onOpenDialpad: () -> Unit,
     bottomBar: @Composable () -> Unit,
     viewModel: DialerViewModel = hiltViewModel(),
 ) {
@@ -172,41 +166,27 @@ fun DialerScreen(
     }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Phone") }) },
+        topBar = { TopAppBar(title = { Text("Calls") }) },
         bottomBar = bottomBar,
         snackbarHost = { SnackbarHost(snackbarState) { Snackbar(it) } },
+        floatingActionButton = {
+            FloatingActionButton(onClick = onOpenDialpad) {
+                Icon(Icons.Filled.Dialpad, contentDescription = "Open dialpad")
+            }
+        },
     ) { padding ->
-        Column(
+        Box(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize(),
         ) {
-            SegmentRow(
-                segment = state.segment,
-                onChange = viewModel::onSegmentChange,
+            RecentsContent(
+                state = state,
+                hasPermission = hasCallLog,
+                onRequest = { showRationale = true },
+                onCallNumber = placeCall,
+                onOpenContact = onOpenContact,
             )
-            when (state.segment) {
-                DialerSegment.RECENTS -> RecentsSegment(
-                    state = state,
-                    hasPermissions = hasCallLog,
-                    onRequest = { showRationale = true },
-                    onCallNumber = placeCall,
-                    onOpenContact = onOpenContact,
-                )
-                DialerSegment.DIALPAD -> DialpadSegment(
-                    state = state,
-                    onDigit = viewModel::onDigit,
-                    onBackspace = viewModel::onBackspace,
-                    onCall = {
-                        val target = state.matches.firstOrNull()?.matchedNumber
-                            ?.takeIf { it.isNotBlank() }
-                            ?: state.dialpadInput
-                        placeCall(target)
-                    },
-                    onCallMatch = { match -> placeCall(match.matchedNumber.ifBlank { state.dialpadInput }) },
-                    onOpenContact = onOpenContact,
-                )
-            }
         }
     }
 }
@@ -215,7 +195,7 @@ private fun tryPlace(
     viewModel: DialerViewModel,
     number: String,
     snackbarHostState: SnackbarHostState,
-    scope: kotlinx.coroutines.CoroutineScope,
+    scope: CoroutineScope,
 ) {
     val result = viewModel.place(number)
     if (result == CallPlacer.PlaceResult.NO_PERMISSION) {
@@ -223,41 +203,15 @@ private fun tryPlace(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SegmentRow(segment: DialerSegment, onChange: (DialerSegment) -> Unit) {
-    SingleChoiceSegmentedButtonRow(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-    ) {
-        DialerSegment.entries.forEachIndexed { index, entry ->
-            SegmentedButton(
-                selected = segment == entry,
-                onClick = { onChange(entry) },
-                shape = SegmentedButtonDefaults.itemShape(
-                    index = index,
-                    count = DialerSegment.entries.size,
-                ),
-            ) { Text(entry.label()) }
-        }
-    }
-}
-
-private fun DialerSegment.label(): String = when (this) {
-    DialerSegment.RECENTS -> "Recents"
-    DialerSegment.DIALPAD -> "Dialpad"
-}
-
-@Composable
-private fun RecentsSegment(
+private fun RecentsContent(
     state: DialerUiState,
-    hasPermissions: Boolean,
+    hasPermission: Boolean,
     onRequest: () -> Unit,
     onCallNumber: (String) -> Unit,
     onOpenContact: (Long) -> Unit,
 ) {
-    if (!hasPermissions) {
+    if (!hasPermission) {
         EmptyArea(
             message = "Bondwidth needs the call-log permission to show your recents.",
             actionLabel = "Grant access",
@@ -365,189 +319,6 @@ private val timestampFormat: DateFormat by lazy {
 }
 
 private fun formatTimestamp(millis: Long): String = timestampFormat.format(Date(millis))
-
-@Composable
-private fun DialpadSegment(
-    state: DialerUiState,
-    onDigit: (Char) -> Unit,
-    onBackspace: () -> Unit,
-    onCall: () -> Unit,
-    onCallMatch: (DialpadMatch) -> Unit,
-    onOpenContact: (Long) -> Unit,
-) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        InputBar(input = state.dialpadInput, onBackspace = onBackspace)
-        Box(modifier = Modifier.weight(1f)) {
-            if (state.matches.isNotEmpty()) {
-                LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    items(
-                        items = state.matches,
-                        key = { it.contactId },
-                        contentType = { "match" },
-                    ) { match ->
-                        MatchRow(
-                            match = match,
-                            onCall = { onCallMatch(match) },
-                            onOpen = { onOpenContact(match.contactId) },
-                        )
-                    }
-                }
-            } else if (state.dialpadInput.isNotEmpty()) {
-                EmptyArea(message = "No matching contacts. Hit Call to dial directly.")
-            }
-        }
-        DialpadGrid(onDigit = onDigit)
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.Center,
-        ) {
-            FloatingActionButton(onClick = onCall) {
-                Icon(Icons.Filled.Call, contentDescription = "Call")
-            }
-        }
-    }
-}
-
-@Composable
-private fun InputBar(input: String, onBackspace: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = input.ifEmpty { " " },
-            modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.headlineMedium,
-            textAlign = TextAlign.End,
-        )
-        if (input.isNotEmpty()) {
-            IconButton(onClick = onBackspace) {
-                Icon(
-                    Icons.AutoMirrored.Filled.Backspace,
-                    contentDescription = "Backspace",
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun MatchRow(
-    match: DialpadMatch,
-    onCall: () -> Unit,
-    onOpen: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onOpen)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        PersonAvatar(
-            photoRelativePath = match.photoRelativePath,
-            displayName = match.displayName,
-        )
-        Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(match.displayName, style = MaterialTheme.typography.bodyLarge)
-            if (match.matchedNumber.isNotBlank()) {
-                Text(
-                    text = match.matchedNumber,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-        IconButton(onClick = onCall) {
-            Icon(Icons.Filled.Call, contentDescription = "Call")
-        }
-    }
-}
-
-@Composable
-private fun DialpadGrid(onDigit: (Char) -> Unit) {
-    // Long-press '0' enters '+' (international prefix), matching every other
-    // dialer in the world.
-    val rows = listOf(
-        listOf(KeyDef('1', ""), KeyDef('2', "ABC"), KeyDef('3', "DEF")),
-        listOf(KeyDef('4', "GHI"), KeyDef('5', "JKL"), KeyDef('6', "MNO")),
-        listOf(KeyDef('7', "PQRS"), KeyDef('8', "TUV"), KeyDef('9', "WXYZ")),
-        listOf(KeyDef('*', ""), KeyDef('0', "+", longPressDigit = '+'), KeyDef('#', "")),
-    )
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        for (row in rows) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                for (key in row) {
-                    DialpadKey(
-                        key = key,
-                        modifier = Modifier.weight(1f),
-                        onClick = { onDigit(key.digit) },
-                        onLongClick = key.longPressDigit?.let { d -> { onDigit(d) } },
-                    )
-                }
-            }
-        }
-    }
-}
-
-private data class KeyDef(
-    val digit: Char,
-    val letters: String,
-    /** When set, long-pressing the key enters this character instead. */
-    val longPressDigit: Char? = null,
-)
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun DialpadKey(
-    key: KeyDef,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit,
-    onLongClick: (() -> Unit)? = null,
-) {
-    Surface(
-        modifier = modifier
-            .height(56.dp)
-            .combinedClickable(
-                onClick = onClick,
-                onLongClick = onLongClick,
-            ),
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-    ) {
-        Column(
-            modifier = Modifier.fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-        ) {
-            Text(
-                text = key.digit.toString(),
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Medium,
-            )
-            if (key.letters.isNotEmpty()) {
-                Text(
-                    text = key.letters,
-                    fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
-}
 
 @Composable
 private fun EmptyArea(

@@ -109,8 +109,10 @@ class MainActivity : FragmentActivity() {
         if (intent.getBooleanExtra(EXTRA_OPEN_BACKUP, false)) return Routes.BACKUP
         val personId = intent.getLongExtra(EXTRA_OPEN_PERSON_ID, -1L)
         if (personId > 0L) return Routes.personDetail(personId)
-        // ACTION_DIAL and ACTION_VIEW + tel: land on the Calls tab; if the
-        // intent has a tel: URI, the number pre-fills the dialpad.
+        // ACTION_DIAL / ACTION_VIEW + tel: lands on the full-screen
+        // dialpad with the number pre-filled. We push the dialpad on
+        // top of whatever's already on the stack so backing out
+        // returns the user to where they were.
         val isDialerIntent = intent.action == Intent.ACTION_DIAL ||
             (intent.action == Intent.ACTION_VIEW && intent.data?.scheme == "tel")
         if (isDialerIntent) {
@@ -118,7 +120,7 @@ class MainActivity : FragmentActivity() {
                 ?.takeIf { it.scheme == "tel" }
                 ?.schemeSpecificPart
                 ?.trim()
-            return Routes.dialer(number)
+            return Routes.dialpad(number)
         }
         return null
     }

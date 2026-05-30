@@ -15,6 +15,7 @@ import com.phonepvr.friends.ui.contacts.ContactEditScreen
 import com.phonepvr.friends.ui.contacts.ContactsBrowserScreen
 import com.phonepvr.friends.ui.contacts.ImportContactsScreen
 import com.phonepvr.friends.ui.dialer.DialerScreen
+import com.phonepvr.friends.ui.dialer.DialpadScreen
 import com.phonepvr.friends.ui.onboarding.OnboardingScreen
 import com.phonepvr.friends.ui.people.AddEditPersonScreen
 import com.phonepvr.friends.ui.people.PeopleListScreen
@@ -36,7 +37,8 @@ object Routes {
     const val CONTACT_DETAIL = "contacts/detail/{contactId}"
     const val NEW_CONTACT = "contacts/new"
     const val CONTACT_EDIT = "contacts/edit/{contactId}"
-    const val DIALER = "dialer?number={number}"
+    const val DIALER = "dialer"
+    const val DIALPAD = "dialpad?number={number}"
     const val DIALPAD_PREFILL_ARG = "number"
     const val BACKUP = "backup"
     const val SETTINGS = "settings"
@@ -54,11 +56,11 @@ object Routes {
     fun editInteraction(entryId: Long): String = "interaction/edit/$entryId"
     fun contactDetail(contactId: Long): String = "contacts/detail/$contactId"
     fun contactEdit(contactId: Long): String = "contacts/edit/$contactId"
-    fun dialer(prefill: String? = null): String =
+    fun dialpad(prefill: String? = null): String =
         if (prefill.isNullOrBlank()) {
-            "dialer"
+            "dialpad"
         } else {
-            "dialer?number=${android.net.Uri.encode(prefill)}"
+            "dialpad?number=${android.net.Uri.encode(prefill)}"
         }
 }
 
@@ -178,6 +180,18 @@ fun FriendsNavHost(
         }
         composable(
             route = Routes.DIALER,
+            arguments = emptyList(),
+        ) {
+            DialerScreen(
+                onOpenContact = { contactId ->
+                    navController.navigate(Routes.contactDetail(contactId))
+                },
+                onOpenDialpad = { navController.navigate(Routes.dialpad()) },
+                bottomBar = { FriendsBottomBar(TopLevelTab.PHONE, onSelectTab) },
+            )
+        }
+        composable(
+            route = Routes.DIALPAD,
             arguments = listOf(
                 navArgument(Routes.DIALPAD_PREFILL_ARG) {
                     type = NavType.StringType
@@ -186,11 +200,11 @@ fun FriendsNavHost(
                 },
             ),
         ) {
-            DialerScreen(
+            DialpadScreen(
+                onClose = { navController.popBackStack() },
                 onOpenContact = { contactId ->
                     navController.navigate(Routes.contactDetail(contactId))
                 },
-                bottomBar = { FriendsBottomBar(TopLevelTab.PHONE, onSelectTab) },
             )
         }
         composable(Routes.SETTINGS) {

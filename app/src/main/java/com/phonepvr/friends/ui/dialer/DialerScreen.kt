@@ -192,6 +192,18 @@ fun DialerScreen(
     }
 
     var sheetEntry by remember { mutableStateOf<RecentEntry?>(null) }
+    var numberPicker by remember { mutableStateOf<CallTarget.Pick?>(null) }
+
+    numberPicker?.let { pick ->
+        NumberPickerSheet(
+            pick = pick,
+            onPick = { number ->
+                numberPicker = null
+                placeCall(number)
+            },
+            onDismiss = { numberPicker = null },
+        )
+    }
 
     sheetEntry?.let { entry ->
         RecentActionsSheet(
@@ -258,8 +270,19 @@ fun DialerScreen(
                 } else {
                     RecentsContent(
                         state = state,
-                        onCallNumber = placeCall,
+                        onCallEntry = { entry ->
+                            // Resolve which number to dial; multi-number
+                            // contacts with no default tagged surface a picker.
+                            scope.launch {
+                                val target = viewModel.resolveCallTarget(entry)
+                                when (target) {
+                                    is CallTarget.Direct -> placeCall(target.number)
+                                    is CallTarget.Pick -> numberPicker = target
+                                }
+                            }
+                        },
                         onOpenHistory = onOpenHistory,
+                        onOpenContact = onOpenContact,
                         onAddToContacts = onSaveNumber,
                         onCallFavourite = { fav -> placeCall(fav.primaryNumber) },
                         onLongPress = { entry -> sheetEntry = entry },
@@ -295,8 +318,9 @@ private fun tryPlace(
 @Composable
 private fun RecentsContent(
     state: DialerUiState,
-    onCallNumber: (String) -> Unit,
+    onCallEntry: (RecentEntry) -> Unit,
     onOpenHistory: (String) -> Unit,
+    onOpenContact: (Long) -> Unit,
     onAddToContacts: (String) -> Unit,
     onCallFavourite: (FavouriteContactEntity) -> Unit,
     onLongPress: (RecentEntry) -> Unit,
@@ -325,8 +349,11 @@ private fun RecentsContent(
         ) { entry ->
             RecentRow(
                 entry = entry,
-                onCall = { onCallNumber(entry.number) },
+                onCall = { onCallEntry(entry) },
                 onOpenHistory = { onOpenHistory(entry.number) },
+                onOpenContact = entry.contactId
+                    ?.let { id -> { onOpenContact(id) } }
+                    ?: { onOpenHistory(entry.number) },
                 onAddToContacts = { onAddToContacts(entry.number) },
                 onLongPress = { onLongPress(entry) },
             )
@@ -399,24 +426,35 @@ private fun RecentRow(
     entry: RecentEntry,
     onCall: () -> Unit,
     onOpenHistory: () -> Unit,
+    onOpenContact: () -> Unit,
     onAddToContacts: () -> Unit,
     onLongPress: () -> Unit,
 ) {
-    // Whole row is tap-history / long-press-sheet; the right-side icons
-    // catch their own clicks so the row's onClick doesn't fire for them.
+    // Four touch zones — avatar opens the contact card, the middle column
+    // opens the call history (long-press = action sheet), the "+" saves an
+    // unknown number, and the call button dials with multi-number picker
+    // when the contact has more than one and no default is tagged.
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .combinedClickable(onClick = onOpenHistory, onLongClick = onLongPress)
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        PersonAvatar(
-            photoRelativePath = entry.photoRelativePath,
-            displayName = entry.displayName ?: entry.number,
-        )
+        Box(
+            modifier = Modifier.clickable(onClick = onOpenContact),
+        ) {
+            PersonAvatar(
+                photoRelativePath = entry.photoRelativePath,
+                displayName = entry.displayName ?: entry.number,
+            )
+        }
         Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .combinedClickable(onClick = onOpenHistory, onLongClick = onLongPress)
+                .padding(vertical = 4.dp),
+        ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     imageVector = entry.type.icon(),
@@ -442,7 +480,7 @@ private fun RecentRow(
                 }
             }
             Text(
-                text = formatTimestamp(entry.timestampMillis),
+                text = secondaryLine(entry),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -459,6 +497,48 @@ private fun RecentRow(
         }
         IconButton(onClick = onCall) {
             Icon(Icons.Filled.Call, contentDescription = "Call back")
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun NumberPickerSheet(
+    pick: CallTarget.Pick,
+    onPick: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(modifier = Modifier.padding(bottom = 24.dp)) {
+            Text(
+                text = "Call ${pick.displayName}",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+            )
+            Text(
+                text = "Pick a number — tag one as default on the contact " +
+                    "to skip this step next time.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
+            )
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            pick.phones.forEach { phone ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onPick(phone.number) }
+                        .padding(horizontal = 24.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Filled.Call, contentDescription = null)
+                    Spacer(Modifier.width(20.dp))
+                    Text(
+                        text = phone.number,
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                }
+            }
         }
     }
 }

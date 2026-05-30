@@ -10,6 +10,7 @@ import com.phonepvr.friends.data.contacts.SystemContactsRepository
 import com.phonepvr.friends.data.db.dao.PersonDao
 import com.phonepvr.friends.data.db.entity.PersonEntity
 import com.phonepvr.friends.data.dialer.CallPlacer
+import com.phonepvr.friends.data.repository.FavouritesRepository
 import com.phonepvr.friends.ui.navigation.Routes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -35,6 +36,7 @@ data class ContactDetailUiState(
     val mutating: Boolean = false,
     val deleting: Boolean = false,
     val deleted: Boolean = false,
+    val isFavourite: Boolean = false,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -45,6 +47,7 @@ class ContactDetailViewModel @Inject constructor(
     private val contactTracker: ContactTracker,
     private val contactWriter: ContactWriter,
     private val callPlacer: CallPlacer,
+    private val favouritesRepository: FavouritesRepository,
     personDao: PersonDao,
 ) : ViewModel() {
 
@@ -73,14 +76,30 @@ class ContactDetailViewModel @Inject constructor(
             }
         }
 
+    private val isFavouriteFlow: Flow<Boolean> = details.flatMapLatest { d ->
+        if (d != null && d.lookupKey.isNotBlank()) {
+            favouritesRepository.observeIsFavourite(d.lookupKey)
+        } else {
+            flowOf(false)
+        }
+    }
+
     val state: StateFlow<ContactDetailUiState> = combine(
         details,
         loaded,
         mutating,
         deletionState,
         trackedPerson,
-    ) { d, isLoaded, isMutating, deletion, person ->
-        val (isDeleting, isDeleted) = deletion
+        isFavouriteFlow,
+    ) { values ->
+        @Suppress("UNCHECKED_CAST")
+        val d = values[0] as ContactDetails?
+        val isLoaded = values[1] as Boolean
+        val isMutating = values[2] as Boolean
+        @Suppress("UNCHECKED_CAST")
+        val deletion = values[3] as Pair<Boolean, Boolean>
+        val person = values[4] as PersonEntity?
+        val isFav = values[5] as Boolean
         ContactDetailUiState(
             loading = !isLoaded,
             notFound = isLoaded && d == null,
@@ -89,8 +108,9 @@ class ContactDetailViewModel @Inject constructor(
             trackedPersonId = person?.id,
             photoRelativePath = person?.photoRelativePath,
             mutating = isMutating,
-            deleting = isDeleting,
-            deleted = isDeleted,
+            deleting = deletion.first,
+            deleted = deletion.second,
+            isFavourite = isFav,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -123,6 +143,21 @@ class ContactDetailViewModel @Inject constructor(
      * enough to dial.
      */
     fun placeCall(number: String): CallPlacer.PlaceResult = callPlacer.place(number)
+
+    fun toggleFavourite() {
+        val d = details.value ?: return
+        if (d.lookupKey.isBlank()) return
+        val primaryNumber = d.phoneNumbers.firstOrNull().orEmpty()
+        if (primaryNumber.isBlank()) return
+        viewModelScope.launch {
+            favouritesRepository.toggle(
+                lookupKey = d.lookupKey,
+                displayName = d.displayName,
+                primaryNumber = primaryNumber,
+                photoRelativePath = state.value.photoRelativePath,
+            )
+        }
+    }
 
     fun deleteContact() {
         val d = details.value ?: return

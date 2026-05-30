@@ -28,6 +28,8 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -181,6 +183,29 @@ fun ContactDetailScreen(
                 },
                 actions = {
                     if (state.details != null && !state.deleting) {
+                        // Pinning needs a primary number — hide if the
+                        // contact has none, otherwise the tap silently no-ops.
+                        if (state.details?.phoneNumbers?.isNotEmpty() == true) {
+                            IconButton(onClick = viewModel::toggleFavourite) {
+                                Icon(
+                                    imageVector = if (state.isFavourite) {
+                                        Icons.Filled.Star
+                                    } else {
+                                        Icons.Filled.StarBorder
+                                    },
+                                    contentDescription = if (state.isFavourite) {
+                                        "Unpin from favourites"
+                                    } else {
+                                        "Pin to favourites"
+                                    },
+                                    tint = if (state.isFavourite) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        androidx.compose.ui.graphics.Color.Unspecified
+                                    },
+                                )
+                            }
+                        }
                         IconButton(onClick = { onEdit(viewModel.contactId) }) {
                             Icon(Icons.Filled.Edit, contentDescription = "Edit")
                         }

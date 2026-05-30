@@ -8,6 +8,12 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -15,6 +21,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,8 +31,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Message
 import androidx.compose.material.icons.filled.Call
@@ -70,6 +79,8 @@ import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.text.style.TextOverflow
+import com.phonepvr.friends.data.db.entity.FavouriteContactEntity
 import com.phonepvr.friends.data.dialer.CallPlacer
 import com.phonepvr.friends.domain.model.CallType
 import com.phonepvr.friends.ui.components.PersonAvatar
@@ -214,8 +225,15 @@ fun DialerScreen(
         bottomBar = bottomBar,
         snackbarHost = { SnackbarHost(snackbarState) { Snackbar(it) } },
         floatingActionButton = {
-            FloatingActionButton(onClick = onOpenDialpad) {
-                Icon(Icons.Filled.Dialpad, contentDescription = "Open dialpad")
+            // Scale-in animation on mount makes the FAB feel less abrupt.
+            AnimatedVisibility(
+                visible = true,
+                enter = scaleIn() + fadeIn(),
+                exit = scaleOut() + fadeOut(),
+            ) {
+                FloatingActionButton(onClick = onOpenDialpad) {
+                    Icon(Icons.Filled.Dialpad, contentDescription = "Open dialpad")
+                }
             }
         },
     ) { padding ->
@@ -224,15 +242,29 @@ fun DialerScreen(
                 .padding(padding)
                 .fillMaxSize(),
         ) {
-            RecentsContent(
-                state = state,
-                hasPermission = hasCallLog,
-                onRequest = { showRationale = true },
-                onCallNumber = placeCall,
-                onOpenHistory = onOpenHistory,
-                onAddToContacts = { number -> openAddContact(context, number) },
-                onLongPress = { entry -> sheetEntry = entry },
-            )
+            // Crossfade between the permission gate and the recents list —
+            // smoother than a hard swap after the user grants access.
+            Crossfade(
+                targetState = hasCallLog,
+                label = "calls-permission",
+            ) { granted ->
+                if (!granted) {
+                    EmptyArea(
+                        message = "Bondwidth needs the call-log permission to show your recents.",
+                        actionLabel = "Grant access",
+                        onAction = { showRationale = true },
+                    )
+                } else {
+                    RecentsContent(
+                        state = state,
+                        onCallNumber = placeCall,
+                        onOpenHistory = onOpenHistory,
+                        onAddToContacts = { number -> openAddContact(context, number) },
+                        onCallFavourite = { fav -> placeCall(fav.primaryNumber) },
+                        onLongPress = { entry -> sheetEntry = entry },
+                    )
+                }
+            }
         }
     }
 }
@@ -269,30 +301,29 @@ private fun tryPlace(
 @Composable
 private fun RecentsContent(
     state: DialerUiState,
-    hasPermission: Boolean,
-    onRequest: () -> Unit,
     onCallNumber: (String) -> Unit,
     onOpenHistory: (String) -> Unit,
     onAddToContacts: (String) -> Unit,
+    onCallFavourite: (FavouriteContactEntity) -> Unit,
     onLongPress: (RecentEntry) -> Unit,
 ) {
-    if (!hasPermission) {
-        EmptyArea(
-            message = "Bondwidth needs the call-log permission to show your recents.",
-            actionLabel = "Grant access",
-            onAction = onRequest,
-        )
-        return
-    }
-    if (!state.recentsLoaded) {
+    if (!state.recentsLoaded && state.favourites.isEmpty()) {
         EmptyArea(message = "Loading…")
         return
     }
-    if (state.recents.isEmpty()) {
+    if (state.recents.isEmpty() && state.favourites.isEmpty()) {
         EmptyArea(message = "No calls in the last 30 days.")
         return
     }
     LazyColumn(modifier = Modifier.fillMaxSize()) {
+        if (state.favourites.isNotEmpty()) {
+            item(key = "__favourites_strip", contentType = "favourites") {
+                FavouritesStrip(
+                    favourites = state.favourites,
+                    onCallFavourite = onCallFavourite,
+                )
+            }
+        }
         items(
             items = state.recents,
             key = { "${it.timestampMillis}-${it.number}" },
@@ -306,6 +337,65 @@ private fun RecentsContent(
                 onLongPress = { onLongPress(entry) },
             )
         }
+    }
+}
+
+@Composable
+private fun FavouritesStrip(
+    favourites: List<FavouriteContactEntity>,
+    onCallFavourite: (FavouriteContactEntity) -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = "Favourites",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 6.dp),
+        )
+        LazyRow(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 8.dp),
+            contentPadding = PaddingValues(horizontal = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            items(
+                items = favourites,
+                key = { it.lookupKey },
+                contentType = { "fav" },
+            ) { fav ->
+                FavouriteTile(fav = fav, onClick = { onCallFavourite(fav) })
+            }
+        }
+    }
+}
+
+@Composable
+private fun FavouriteTile(
+    fav: FavouriteContactEntity,
+    onClick: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .width(76.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp, horizontal = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        PersonAvatar(
+            photoRelativePath = fav.photoRelativePath,
+            displayName = fav.displayName,
+            diameter = 56.dp,
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = fav.displayName,
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+        )
     }
 }
 

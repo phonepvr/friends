@@ -5,9 +5,11 @@ import androidx.lifecycle.viewModelScope
 import com.phonepvr.friends.data.contacts.DeviceContact
 import com.phonepvr.friends.data.contacts.SystemContactsRepository
 import com.phonepvr.friends.data.db.dao.PersonDao
+import com.phonepvr.friends.data.db.entity.FavouriteContactEntity
 import com.phonepvr.friends.data.dialer.CallPlacer
 import com.phonepvr.friends.data.dialer.RecentsRepository
 import com.phonepvr.friends.data.dialer.T9
+import com.phonepvr.friends.data.repository.FavouritesRepository
 import com.phonepvr.friends.domain.model.CallType
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -37,6 +39,7 @@ data class RecentEntry(
 data class DialerUiState(
     val recents: List<RecentEntry> = emptyList(),
     val recentsLoaded: Boolean = false,
+    val favourites: List<FavouriteContactEntity> = emptyList(),
     val placeError: String? = null,
 )
 
@@ -46,6 +49,7 @@ class DialerViewModel @Inject constructor(
     systemContactsRepository: SystemContactsRepository,
     recentsRepository: RecentsRepository,
     personDao: PersonDao,
+    favouritesRepository: FavouritesRepository,
     private val callPlacer: CallPlacer,
 ) : ViewModel() {
 
@@ -85,8 +89,9 @@ class DialerViewModel @Inject constructor(
         recentsFlow,
         contactByPhoneSuffix,
         trackedByKeyFlow,
+        favouritesRepository.observeAll(),
         placeError,
-    ) { calls, byDigits, trackedByKey, err ->
+    ) { calls, byDigits, trackedByKey, favourites, err ->
         val recents = calls.map { call ->
             val contact = lookupCallContact(call.number, byDigits)
             val person = contact?.lookupKey?.let { trackedByKey[it] }
@@ -104,6 +109,7 @@ class DialerViewModel @Inject constructor(
         DialerUiState(
             recents = recents,
             recentsLoaded = true,
+            favourites = favourites,
             placeError = err,
         )
     }.stateIn(

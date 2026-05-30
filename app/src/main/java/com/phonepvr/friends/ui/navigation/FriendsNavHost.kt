@@ -1,7 +1,14 @@
 package com.phonepvr.friends.ui.navigation
 
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -91,7 +98,37 @@ fun FriendsNavHost(
             restoreState = true
         }
     }
-    NavHost(navController = navController, startDestination = Routes.PEOPLE_LIST) {
+    // Smoother nav-graph transitions than the Compose Nav defaults: a small
+    // horizontal slide for forward / pop pairs with a quick crossfade, so
+    // screens feel connected rather than slammed in.
+    val slidePushIn: AnimatedContentTransitionScope<NavBackStackEntry>.() -> androidx.compose.animation.EnterTransition =
+        {
+            slideInHorizontally(animationSpec = tween(220)) { it / 10 } +
+                fadeIn(animationSpec = tween(220))
+        }
+    val slidePushOut: AnimatedContentTransitionScope<NavBackStackEntry>.() -> androidx.compose.animation.ExitTransition =
+        {
+            slideOutHorizontally(animationSpec = tween(180)) { -it / 24 } +
+                fadeOut(animationSpec = tween(180))
+        }
+    val slidePopIn: AnimatedContentTransitionScope<NavBackStackEntry>.() -> androidx.compose.animation.EnterTransition =
+        {
+            slideInHorizontally(animationSpec = tween(220)) { -it / 24 } +
+                fadeIn(animationSpec = tween(220))
+        }
+    val slidePopOut: AnimatedContentTransitionScope<NavBackStackEntry>.() -> androidx.compose.animation.ExitTransition =
+        {
+            slideOutHorizontally(animationSpec = tween(180)) { it / 10 } +
+                fadeOut(animationSpec = tween(180))
+        }
+    NavHost(
+        navController = navController,
+        startDestination = Routes.PEOPLE_LIST,
+        enterTransition = slidePushIn,
+        exitTransition = slidePushOut,
+        popEnterTransition = slidePopIn,
+        popExitTransition = slidePopOut,
+    ) {
         composable(Routes.PEOPLE_LIST) {
             PeopleListScreen(
                 onAddPerson = { navController.navigate(Routes.ADD_PERSON) },

@@ -202,6 +202,13 @@ fun SettingsScreen(
                     modifier = Modifier.clickable { showRestrictedSettingsDialog = true },
                 )
             }
+            ListItem(
+                headlineContent = { Text("Blocked numbers") },
+                supportingContent = {
+                    Text("Manage the numbers that can't reach you. Opens the system blocked-numbers list.")
+                },
+                modifier = Modifier.clickable { openBlockedNumbers(context) },
+            )
 
             HorizontalDivider()
             SectionHeader("Security")
@@ -473,6 +480,16 @@ private fun openAppInfo(context: android.content.Context) {
         .setData("package:${context.packageName}".toUri())
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     runCatching { context.startActivity(intent) }
+}
+
+private fun openBlockedNumbers(context: android.content.Context) {
+    val telecom = context.getSystemService(android.content.Context.TELECOM_SERVICE)
+        as? android.telecom.TelecomManager
+    val intent = telecom?.createManageBlockedNumbersIntent()
+        ?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    if (intent != null) {
+        runCatching { context.startActivity(intent) }
+    }
 }
 
 @Composable

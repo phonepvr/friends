@@ -12,10 +12,10 @@ import javax.inject.Singleton
 
 /**
  * Editable subset of a contact. Anything not represented here (addresses,
- * websites, photo, structured given/family name, custom labels, etc.) is
- * preserved untouched when [ContactWriter.update] runs — the writer only
- * deletes + re-inserts the mime types it knows about for the contact's
- * first raw-contact row.
+ * websites, structured given/family name, custom labels, etc.) is preserved
+ * untouched when [ContactWriter.update] runs — the writer only deletes +
+ * re-inserts the mime types it knows about for the contact's first
+ * raw-contact row. Photo is special-cased through [photoChange].
  */
 data class ContactForm(
     val displayName: String = "",
@@ -23,7 +23,28 @@ data class ContactForm(
     val emails: List<String> = emptyList(),
     val notes: String = "",
     val organization: String = "",
+    /** What to do with the contact's photo on save. Defaults to "leave it". */
+    val photoChange: PhotoChange = PhotoChange.Unchanged,
 )
+
+/** What [ContactWriter] should do with the photo on save. */
+sealed interface PhotoChange {
+    /** No change — leave whatever photo the contact already has. */
+    data object Unchanged : PhotoChange
+
+    /** Delete the contact's photo. */
+    data object Remove : PhotoChange
+
+    /** Write [bytes] as the new photo (a JPEG, already scaled). */
+    data class Replace(val bytes: ByteArray) : PhotoChange {
+        // ByteArray identity-equality is wrong for data classes — give
+        // structural equals + hashCode so the form participates in
+        // copy() comparisons cleanly.
+        override fun equals(other: Any?): Boolean =
+            other is Replace && bytes.contentEquals(other.bytes)
+        override fun hashCode(): Int = bytes.contentHashCode()
+    }
+}
 
 /** Result of a successful create — both ids the caller needs to auto-track. */
 data class CreatedContact(val contactId: Long, val lookupKey: String)
@@ -74,14 +95,20 @@ class ContactWriter @Inject constructor(
     /**
      * Replaces the editable mime types for the contact's first raw row,
      * leaving anything else (addresses, websites, custom-typed phones, etc.)
-     * intact.
+     * intact. The Photo mime type is only deleted when [form.photoChange] is
+     * Remove or Replace — Unchanged keeps the existing picture intact.
      */
     suspend fun update(contactId: Long, form: ContactForm): Boolean =
         withContext(Dispatchers.IO) {
             val rawContactId = reader.firstRawContactId(contactId)
                 ?: return@withContext false
             val ops = arrayListOf<ContentProviderOperation>()
-            EDITABLE_MIME_TYPES.forEach { mime ->
+            val mimeTypesToDelete = if (form.photoChange == PhotoChange.Unchanged) {
+                EDITABLE_MIME_TYPES
+            } else {
+                EDITABLE_MIME_TYPES + ContactsContract.CommonDataKinds.Photo.CONTENT_ITEM_TYPE
+            }
+            mimeTypesToDelete.forEach { mime ->
                 ops.add(
                     ContentProviderOperation.newDelete(ContactsContract.Data.CONTENT_URI)
                         .withSelection(
@@ -197,6 +224,23 @@ class ContactWriter @Inject constructor(
                         ContactsContract.CommonDataKinds.Organization.CONTENT_ITEM_TYPE,
                     )
                     .withValue(ContactsContract.CommonDataKinds.Organization.COMPANY, company)
+                    .build(),
+            )
+        }
+        (form.photoChange as? PhotoChange.Replace)?.let { replace ->
+            ops.add(
+                attach(ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI))
+                    .withValue(
+                        ContactsContract.Data.MIMETYPE,
+                        ContactsContract.CommonDataKinds.Photo.CONTENT_ITEM_TYPE,
+                    )
+                    // The provider takes the raw bytes and generates its own
+                    // thumbnail + full-size storage on the receiving end, so
+                    // we just hand it the scaled JPEG.
+                    .withValue(
+                        ContactsContract.CommonDataKinds.Photo.PHOTO,
+                        replace.bytes,
+                    )
                     .build(),
             )
         }

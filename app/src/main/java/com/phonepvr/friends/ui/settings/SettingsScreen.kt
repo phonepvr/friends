@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -76,10 +77,19 @@ fun SettingsScreen(
     val context = LocalContext.current
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val isDefaultDialer by viewModel.isDefaultDialer.collectAsStateWithLifecycle()
+    val exportState by viewModel.exportState.collectAsStateWithLifecycle()
     var activeDialog by remember { mutableStateOf<SettingsDialog?>(null) }
     var showLockUnavailable by remember { mutableStateOf(false) }
     var showUpdateDialog by remember { mutableStateOf(false) }
     var showRestrictedSettingsDialog by remember { mutableStateOf(false) }
+
+    // Storage-Access-Framework picker: user chooses where the .vcf goes.
+    // No storage permission needed because the URI grants per-document access.
+    val exportContactsLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/x-vcard"),
+    ) { destination ->
+        if (destination != null) viewModel.exportContactsToVcf(destination)
+    }
 
     // Re-read the default-dialer state every time Settings becomes
     // foreground: if the user toggled the role in another app between
@@ -275,6 +285,18 @@ fun SettingsScreen(
                 },
                 modifier = Modifier.clickable { activeDialog = SettingsDialog.BACKUP_NUDGE },
             )
+            ListItem(
+                headlineContent = { Text("Export contacts to vCard") },
+                supportingContent = {
+                    Text(
+                        "Save every contact on this phone as a single .vcf file. " +
+                            "Any contacts app can import it back.",
+                    )
+                },
+                modifier = Modifier.clickable {
+                    exportContactsLauncher.launch(viewModel.defaultExportFileName())
+                },
+            )
 
             HorizontalDivider()
             SectionHeader("Personalisation")
@@ -458,6 +480,45 @@ fun SettingsScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showLockUnavailable = false }) { Text("OK") }
+            },
+        )
+    }
+
+    when (val s = exportState) {
+        ExportState.Idle -> Unit
+        ExportState.Running -> AlertDialog(
+            onDismissRequest = {},
+            title = { Text("Exporting contacts") },
+            text = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.height(20.dp).width(20.dp),
+                        strokeWidth = 2.dp,
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Text("Reading and writing the vCard…")
+                }
+            },
+            confirmButton = {},
+        )
+        is ExportState.Done -> AlertDialog(
+            onDismissRequest = { viewModel.acknowledgeExportResult() },
+            title = { Text("Export complete") },
+            text = {
+                Text(
+                    if (s.count == 1) "1 contact written." else "${s.count} contacts written.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { viewModel.acknowledgeExportResult() }) { Text("OK") }
+            },
+        )
+        is ExportState.Error -> AlertDialog(
+            onDismissRequest = { viewModel.acknowledgeExportResult() },
+            title = { Text("Export failed") },
+            text = { Text(s.message) },
+            confirmButton = {
+                TextButton(onClick = { viewModel.acknowledgeExportResult() }) { Text("OK") }
             },
         )
     }

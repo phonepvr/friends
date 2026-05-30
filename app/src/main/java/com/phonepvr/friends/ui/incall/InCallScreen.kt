@@ -24,7 +24,9 @@ import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.filled.Dialpad
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Headset
+import androidx.compose.material.icons.filled.MergeType
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Pause
@@ -59,6 +61,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
@@ -85,6 +88,7 @@ fun InCallScreen(
     onDtmf: (Char) -> Unit,
     onToggleHold: () -> Unit,
     onSwap: () -> Unit,
+    onMerge: () -> Unit,
     onAddCall: () -> Unit,
 ) {
     val snapshot = state.snapshot
@@ -130,6 +134,7 @@ fun InCallScreen(
                     availableRoutes = state.audio.availableRoutes,
                     canHold = snapshot.canHold,
                     isHeld = snapshot.state == CallSimpleState.HOLDING,
+                    canMerge = snapshot.canMerge,
                     heldSnapshot = state.heldSnapshot,
                     heldName = state.heldName,
                     onEnd = onEnd,
@@ -138,6 +143,7 @@ fun InCallScreen(
                     onSetAudioRoute = onSetAudioRoute,
                     onToggleHold = onToggleHold,
                     onSwap = onSwap,
+                    onMerge = onMerge,
                     onAddCall = onAddCall,
                 )
             }
@@ -154,13 +160,18 @@ private fun Header(
     callEnded: Boolean,
     dtmfDigits: String,
 ) {
+    val isConference = snapshot?.isConference == true
     // Bonded name wins, then the resolved address-book name, then whatever
-    // Telecom gave us, then the raw number.
-    val displayName = bondedPerson?.displayName
-        ?: callerName
-        ?: snapshot?.callerDisplayName
-        ?: snapshot?.number
-        ?: ""
+    // Telecom gave us, then the raw number. A conference has no single
+    // identity, so it overrides everything with a fixed label.
+    val displayName = when {
+        isConference -> "Conference call"
+        else -> bondedPerson?.displayName
+            ?: callerName
+            ?: snapshot?.callerDisplayName
+            ?: snapshot?.number
+            ?: ""
+    }
     val statusText = when {
         callEnded -> "Call ended"
         snapshot == null -> "Connecting…"
@@ -173,10 +184,25 @@ private fun Header(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(24.dp))
-        // Photo priority: bonded person's local photo, then the system
-        // contact photo, else a tinted initial bubble.
+        // Photo priority: conference → group glyph; then bonded person's
+        // local photo, then the system contact photo, else a tinted initial
+        // bubble.
         val localPhoto = bondedPerson?.photoRelativePath
         when {
+            isConference -> Box(
+                modifier = Modifier
+                    .size(120.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Groups,
+                    contentDescription = null,
+                    modifier = Modifier.size(56.dp),
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
             localPhoto != null -> PersonAvatar(
                 photoRelativePath = localPhoto,
                 displayName = displayName,
@@ -212,7 +238,15 @@ private fun Header(
             textAlign = TextAlign.Center,
             fontWeight = FontWeight.SemiBold,
         )
-        if (bondedPerson != null) {
+        if (isConference && snapshot != null && snapshot.childCount > 0) {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = "${snapshot.childCount} people",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (bondedPerson != null && !isConference) {
             Spacer(Modifier.height(8.dp))
             BondedChip()
             bondedPerson.daysSinceLastContact?.let { days ->
@@ -429,6 +463,7 @@ private fun OngoingControls(
     availableRoutes: Set<CallAudioRoute>,
     canHold: Boolean,
     isHeld: Boolean,
+    canMerge: Boolean,
     heldSnapshot: CallSnapshot?,
     heldName: String?,
     onEnd: () -> Unit,
@@ -437,6 +472,7 @@ private fun OngoingControls(
     onSetAudioRoute: (CallAudioRoute) -> Unit,
     onToggleHold: () -> Unit,
     onSwap: () -> Unit,
+    onMerge: () -> Unit,
     onAddCall: () -> Unit,
 ) {
     var showRoutePicker by remember { mutableStateOf(false) }
@@ -462,7 +498,9 @@ private fun OngoingControls(
         if (heldSnapshot != null) {
             HeldCallBanner(
                 heldName = heldName ?: "On hold",
+                canMerge = canMerge,
                 onSwap = onSwap,
+                onMerge = onMerge,
             )
             Spacer(Modifier.height(16.dp))
         }
@@ -537,7 +575,12 @@ private fun OngoingControls(
 }
 
 @Composable
-private fun HeldCallBanner(heldName: String, onSwap: () -> Unit) {
+private fun HeldCallBanner(
+    heldName: String,
+    canMerge: Boolean,
+    onSwap: () -> Unit,
+    onMerge: () -> Unit,
+) {
     Surface(
         shape = RoundedCornerShape(24.dp),
         color = MaterialTheme.colorScheme.secondaryContainer,
@@ -557,7 +600,20 @@ private fun HeldCallBanner(heldName: String, onSwap: () -> Unit) {
                     text = heldName,
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
+            }
+            if (canMerge) {
+                TextButton(onClick = onMerge) {
+                    Icon(
+                        imageVector = Icons.Filled.MergeType,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text("Merge")
+                }
             }
             TextButton(onClick = onSwap) {
                 Icon(
@@ -565,7 +621,7 @@ private fun HeldCallBanner(heldName: String, onSwap: () -> Unit) {
                     contentDescription = null,
                     modifier = Modifier.size(18.dp),
                 )
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(4.dp))
                 Text("Swap")
             }
         }

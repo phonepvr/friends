@@ -61,6 +61,33 @@ class BondwidthInCallService : InCallService() {
             callSession.publishSnapshot()
             refreshNotification()
         }
+
+        // The Merge affordance hinges on conferenceable peers, which the
+        // platform recomputes as calls move between active / held. Refresh
+        // so the button appears and disappears in lockstep.
+        override fun onConferenceableCallsChanged(
+            call: Call,
+            conferenceableCalls: List<Call>,
+        ) {
+            callSession.publishSnapshot()
+            refreshNotification()
+        }
+
+        // Fires when a conference gains or loses legs — keep the participant
+        // count and the held/primary split current.
+        override fun onChildrenChanged(call: Call, children: List<Call>) {
+            callSession.publishSnapshot()
+            refreshNotification()
+        }
+
+        // Fires when a call joins or leaves a conference. The parent
+        // relationship isn't part of Call.Details, so onDetailsChanged
+        // won't catch it — re-derive so the child stops showing as a
+        // separate top-level call once it's a conference leg.
+        override fun onParentChanged(call: Call, parent: Call?) {
+            callSession.publishSnapshot()
+            refreshNotification()
+        }
     }
 
     override fun onCallAdded(call: Call) {

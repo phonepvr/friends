@@ -72,6 +72,7 @@ class InCallActivity : ComponentActivity() {
                         onDtmf = viewModel::pressDtmf,
                         onToggleHold = viewModel::toggleHold,
                         onSwap = viewModel::swap,
+                        onMerge = viewModel::merge,
                         onAddCall = ::openDialpadForAddCall,
                     )
                 }

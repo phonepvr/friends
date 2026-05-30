@@ -35,6 +35,18 @@ data class CallSnapshot(
     val isVideo: Boolean,
     /** True iff the platform reports CAPABILITY_HOLD for this Call. */
     val canHold: Boolean = false,
+    /**
+     * True when this call can be merged into a conference — either it has
+     * conferenceable peers, or it's a conference that supports merging its
+     * legs together (CAPABILITY_MERGE_CONFERENCE).
+     */
+    val canMerge: Boolean = false,
+    /** True iff this Call is itself a conference (PROPERTY_CONFERENCE). */
+    val isConference: Boolean = false,
+    /** Number of legs in this conference, 0 for a normal call. */
+    val childCount: Int = 0,
+    /** True when this call is a leg inside a conference (has a parent). */
+    val hasParent: Boolean = false,
 )
 
 data class AudioSnapshot(
@@ -128,7 +140,12 @@ class CallSession @Inject constructor() {
             _heldSnapshot.value = null
             return
         }
-        val sorted = calls.sortedBy { primaryPriority(it.snapshot.state) }
+        // Legs inside a conference are represented by the conference parent,
+        // not shown as separate top-level calls. If everything has a parent
+        // (shouldn't happen — the conference itself is top-level), fall back
+        // to the full list so we never blank the screen mid-call.
+        val topLevel = calls.filter { !it.snapshot.hasParent }.ifEmpty { calls }
+        val sorted = topLevel.sortedBy { primaryPriority(it.snapshot.state) }
         _snapshot.value = sorted.first().snapshot
         // The held banner only fires when there's a second call and it's on
         // hold (the typical "added a call while in another call" shape).
@@ -190,6 +207,25 @@ class CallSession @Inject constructor() {
         val held = callInState(CallSimpleState.HOLDING)
         active?.hold()
         held?.unhold()
+    }
+
+    /**
+     * Merges the two live calls into a conference. Mirrors Fossify Phone's
+     * CallManager.merge(): prefer the direct conference() path when the
+     * primary call lists conferenceable peers, otherwise fall back to
+     * mergeConference() on a call that already advertises
+     * CAPABILITY_MERGE_CONFERENCE. No-op when neither is available — the UI
+     * only surfaces Merge when [CallSnapshot.canMerge] is set, but the
+     * capability can lapse between the tap and this call so we re-check.
+     */
+    fun merge() {
+        val primary = primaryCall() ?: return
+        val conferenceable = primary.conferenceableCalls
+        if (conferenceable.isNotEmpty()) {
+            primary.conference(conferenceable.first())
+        } else if (primary.details.can(Call.Details.CAPABILITY_MERGE_CONFERENCE)) {
+            primary.mergeConference()
+        }
     }
 
     /** Plays a DTMF tone for the in-call dialpad (IVR menus). */
@@ -277,6 +313,13 @@ private fun Call.toSnapshot(): CallSnapshot {
     // "can hold be offered" flag — both wanted before the Hold UI shows.
     val canHold = details.can(Call.Details.CAPABILITY_HOLD) &&
         details.can(Call.Details.CAPABILITY_SUPPORT_HOLD)
+    // Merge is offered when this call has conferenceable peers, or when it's
+    // already a conference that can merge its legs (CAPABILITY_MERGE_CONFERENCE).
+    val canMerge = conferenceableCalls.isNotEmpty() ||
+        details.can(Call.Details.CAPABILITY_MERGE_CONFERENCE)
+    val isConference = details.hasProperty(Call.Details.PROPERTY_CONFERENCE)
+    val childCount = children.size
+    val hasParent = parent != null
     // No public Call ID getter on Call.Details; the number + the Call's
     // identity hash are unique enough for the UI's Compose key.
     val callId = "${number.ifEmpty { "anon" }}-${System.identityHashCode(this)}"
@@ -289,6 +332,10 @@ private fun Call.toSnapshot(): CallSnapshot {
         connectTimeMillis = connectTime,
         isVideo = isVideo,
         canHold = canHold,
+        canMerge = canMerge,
+        isConference = isConference,
+        childCount = childCount,
+        hasParent = hasParent,
     )
 }
 

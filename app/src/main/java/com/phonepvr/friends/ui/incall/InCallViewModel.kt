@@ -201,6 +201,9 @@ class InCallViewModel @Inject constructor(
     /** Swap which call is active when two calls are present. */
     fun swap() = callSession.swap()
 
+    /** Merge the active and held calls into a conference. */
+    fun merge() = callSession.merge()
+
     /** Tap-and-release on an in-call dialpad key sends one DTMF tone. */
     fun pressDtmf(digit: Char) {
         callSession.playDtmf(digit)

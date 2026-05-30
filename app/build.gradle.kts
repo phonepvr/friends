@@ -56,6 +56,9 @@ android {
 
     buildFeatures {
         compose = true
+        // VERSION_NAME is surfaced in Settings so the user can see which
+        // build they're on and tap straight to the releases page.
+        buildConfig = true
     }
 
     testOptions {

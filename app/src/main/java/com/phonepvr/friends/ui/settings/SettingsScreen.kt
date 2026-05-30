@@ -20,7 +20,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -33,6 +36,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import com.phonepvr.friends.BuildConfig
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -116,6 +120,11 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState()),
         ) {
+            VersionUpdateCard(
+                versionName = BuildConfig.VERSION_NAME,
+                onTap = { showUpdateDialog = true },
+            )
+
             SectionHeader("Appearance")
             ListItem(
                 headlineContent = { Text("Theme") },
@@ -265,19 +274,6 @@ fun SettingsScreen(
                     Text("Nudge me every ${daysLabel(settings.backupNudgeIntervalDays)}")
                 },
                 modifier = Modifier.clickable { activeDialog = SettingsDialog.BACKUP_NUDGE },
-            )
-
-            HorizontalDivider()
-            SectionHeader("Updates")
-            ListItem(
-                headlineContent = { Text("Update Bondwidth") },
-                supportingContent = {
-                    Text(
-                        "Bondwidth has no internet, so it can't update itself. " +
-                            "Tap to see how to install the latest version manually.",
-                    )
-                },
-                modifier = Modifier.clickable { showUpdateDialog = true },
             )
 
             HorizontalDivider()
@@ -489,6 +485,44 @@ private fun openBlockedNumbers(context: android.content.Context) {
         ?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     if (intent != null) {
         runCatching { context.startActivity(intent) }
+    }
+}
+
+@Composable
+private fun VersionUpdateCard(versionName: String, onTap: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 16.dp)
+            .clickable(onClick = onTap),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        ),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 18.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.SystemUpdate,
+                contentDescription = null,
+            )
+            Spacer(Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Bondwidth v$versionName",
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = "Tap to update",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        }
     }
 }
 

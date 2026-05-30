@@ -26,6 +26,7 @@ import javax.inject.Inject
 data class RecentEntry(
     val number: String,
     val displayName: String?,
+    val contactId: Long?,
     val isTracked: Boolean,
     val photoRelativePath: String?,
     val type: CallType,
@@ -92,6 +93,7 @@ class DialerViewModel @Inject constructor(
             RecentEntry(
                 number = call.number,
                 displayName = contact?.displayName,
+                contactId = contact?.contactId,
                 isTracked = person != null,
                 photoRelativePath = person?.photoRelativePath,
                 type = call.type,

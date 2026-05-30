@@ -1,11 +1,17 @@
 package com.phonepvr.friends.ui.dialer
 
 import android.Manifest
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,16 +27,22 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Message
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CallMade
 import androidx.compose.material.icons.filled.CallMissed
 import androidx.compose.material.icons.filled.CallReceived
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Dialpad
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
@@ -55,6 +67,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.phonepvr.friends.data.dialer.CallPlacer
@@ -165,6 +178,36 @@ fun DialerScreen(
         }
     }
 
+    var sheetEntry by remember { mutableStateOf<RecentEntry?>(null) }
+
+    sheetEntry?.let { entry ->
+        RecentActionsSheet(
+            entry = entry,
+            onDismiss = { sheetEntry = null },
+            onCall = {
+                sheetEntry = null
+                placeCall(entry.number)
+            },
+            onMessage = {
+                sheetEntry = null
+                openSms(context, entry.number)
+            },
+            onCopy = {
+                sheetEntry = null
+                copyToClipboard(context, entry.number)
+                scope.launch { snackbarState.showSnackbar("Number copied") }
+            },
+            onOpenContact = entry.contactId?.let { id ->
+                { sheetEntry = null; onOpenContact(id) }
+            },
+            onAddContact = if (entry.contactId == null) {
+                { sheetEntry = null; openAddContact(context, entry.number) }
+            } else {
+                null
+            },
+        )
+    }
+
     Scaffold(
         topBar = { TopAppBar(title = { Text("Calls") }) },
         bottomBar = bottomBar,
@@ -185,10 +228,27 @@ fun DialerScreen(
                 hasPermission = hasCallLog,
                 onRequest = { showRationale = true },
                 onCallNumber = placeCall,
-                onOpenContact = onOpenContact,
+                onLongPress = { entry -> sheetEntry = entry },
             )
         }
     }
+}
+
+private fun openSms(context: Context, number: String) {
+    val intent = Intent(Intent.ACTION_SENDTO, "smsto:$number".toUri())
+    runCatching { context.startActivity(intent) }
+}
+
+private fun copyToClipboard(context: Context, number: String) {
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+    clipboard?.setPrimaryClip(ClipData.newPlainText("Phone number", number))
+}
+
+private fun openAddContact(context: Context, number: String) {
+    val intent = Intent(Intent.ACTION_INSERT_OR_EDIT)
+        .setType("vnd.android.cursor.item/contact")
+        .putExtra(android.provider.ContactsContract.Intents.Insert.PHONE, number)
+    runCatching { context.startActivity(intent) }
 }
 
 private fun tryPlace(
@@ -209,7 +269,7 @@ private fun RecentsContent(
     hasPermission: Boolean,
     onRequest: () -> Unit,
     onCallNumber: (String) -> Unit,
-    onOpenContact: (Long) -> Unit,
+    onLongPress: (RecentEntry) -> Unit,
 ) {
     if (!hasPermission) {
         EmptyArea(
@@ -236,22 +296,23 @@ private fun RecentsContent(
             RecentRow(
                 entry = entry,
                 onCall = { onCallNumber(entry.number) },
-                onOpenContact = onOpenContact,
+                onLongPress = { onLongPress(entry) },
             )
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun RecentRow(
     entry: RecentEntry,
     onCall: () -> Unit,
-    onOpenContact: (Long) -> Unit,
+    onLongPress: () -> Unit,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onCall)
+            .combinedClickable(onClick = onCall, onLongClick = onLongPress)
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -294,6 +355,69 @@ private fun RecentRow(
         IconButton(onClick = onCall) {
             Icon(Icons.Filled.Call, contentDescription = "Call back")
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun RecentActionsSheet(
+    entry: RecentEntry,
+    onDismiss: () -> Unit,
+    onCall: () -> Unit,
+    onMessage: () -> Unit,
+    onCopy: () -> Unit,
+    onOpenContact: (() -> Unit)?,
+    onAddContact: (() -> Unit)?,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(modifier = Modifier.padding(bottom = 24.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                PersonAvatar(
+                    photoRelativePath = entry.photoRelativePath,
+                    displayName = entry.displayName ?: entry.number,
+                )
+                Spacer(Modifier.width(12.dp))
+                Column {
+                    Text(
+                        text = entry.displayName ?: entry.number,
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    if (entry.displayName != null) {
+                        Text(
+                            text = entry.number,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+            HorizontalDivider()
+            SheetAction(Icons.Filled.Call, "Call", onCall)
+            SheetAction(Icons.AutoMirrored.Filled.Message, "Message", onMessage)
+            SheetAction(Icons.Filled.ContentCopy, "Copy number", onCopy)
+            onOpenContact?.let { SheetAction(Icons.Filled.Person, "View contact", it) }
+            onAddContact?.let { SheetAction(Icons.Filled.PersonAdd, "Add to contacts", it) }
+        }
+    }
+}
+
+@Composable
+private fun SheetAction(icon: ImageVector, label: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 24.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null)
+        Spacer(Modifier.width(20.dp))
+        Text(label, style = MaterialTheme.typography.bodyLarge)
     }
 }
 

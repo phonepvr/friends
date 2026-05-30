@@ -27,12 +27,31 @@ import com.phonepvr.friends.ui.navigation.FriendsNavHost
 import com.phonepvr.friends.ui.navigation.Routes
 import com.phonepvr.friends.ui.onboarding.OnboardingScreen
 import com.phonepvr.friends.ui.theme.FriendsTheme
+import com.phonepvr.friends.data.incall.CallSession
+import com.phonepvr.friends.ui.incall.InCallActivity
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : FragmentActivity() {
 
     private val viewModel: MainViewModel by viewModels()
+
+    @Inject lateinit var callSession: CallSession
+
+    override fun onResume() {
+        super.onResume()
+        // If a call is live and the user lands back on the app (e.g. tapping
+        // the launcher icon during a call), bounce them to the in-call screen
+        // — that's what every phone app does. When the call ends, the in-call
+        // Activity finishes and the app returns here normally.
+        if (callSession.hasActiveCall()) {
+            startActivity(
+                Intent(this, InCallActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

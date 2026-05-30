@@ -91,7 +91,8 @@ class BondwidthInCallService : InCallService() {
     }
 
     private fun refreshNotification() {
-        val snapshot = callSession.snapshot.value ?: run {
+        val snapshot = callSession.snapshot.value
+        if (snapshot == null || snapshot.state == CallSimpleState.DISCONNECTED) {
             callNotifier.cancel()
             return
         }

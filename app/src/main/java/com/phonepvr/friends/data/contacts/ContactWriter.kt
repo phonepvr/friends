@@ -108,6 +108,27 @@ class ContactWriter @Inject constructor(
             }.getOrElse { false }
         }
 
+    /**
+     * Marks the phone Data row [dataId] as the contact's default number by
+     * setting IS_SUPER_PRIMARY (+ IS_PRIMARY). The provider clears the flag
+     * on the contact's other numbers automatically, so this both promotes
+     * the chosen number and demotes the rest. Needs WRITE_CONTACTS.
+     */
+    suspend fun setPrimaryNumber(dataId: Long): Boolean = withContext(Dispatchers.IO) {
+        val values = android.content.ContentValues().apply {
+            put(ContactsContract.Data.IS_SUPER_PRIMARY, 1)
+            put(ContactsContract.Data.IS_PRIMARY, 1)
+        }
+        runCatching {
+            resolver.update(
+                ContactsContract.Data.CONTENT_URI,
+                values,
+                "${ContactsContract.Data._ID} = ?",
+                arrayOf(dataId.toString()),
+            ) > 0
+        }.getOrElse { false }
+    }
+
     private fun addDataRows(
         ops: ArrayList<ContentProviderOperation>,
         form: ContactForm,

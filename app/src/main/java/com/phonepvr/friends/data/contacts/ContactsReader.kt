@@ -35,6 +35,8 @@ data class ContactDetails(
     val lookupKey: String,
     val displayName: String,
     val phoneNumbers: List<String>,
+    /** Phone rows with their data IDs + which is the contact's default. */
+    val phoneEntries: List<ContactPhone> = emptyList(),
     val emails: List<String> = emptyList(),
     val notes: String? = null,
     val organization: String? = null,
@@ -42,6 +44,13 @@ data class ContactDetails(
     val anniversary: ContactDate?,
     /** System contact photo content:// URI, or null when the contact has none. */
     val photoUri: String? = null,
+)
+
+/** A single phone number of a contact, with its provider Data row id. */
+data class ContactPhone(
+    val dataId: Long,
+    val number: String,
+    val isPrimary: Boolean,
 )
 
 /** Read-only access to the device address book via ContactsContract. */
@@ -135,23 +144,40 @@ class ContactsReader @Inject constructor(
         }
         if (displayName.isBlank()) return null
 
-        val phoneNumbers = mutableListOf<String>()
+        val phoneEntries = mutableListOf<ContactPhone>()
         resolver.query(
             ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
-            arrayOf(ContactsContract.CommonDataKinds.Phone.NUMBER),
+            arrayOf(
+                ContactsContract.CommonDataKinds.Phone._ID,
+                ContactsContract.CommonDataKinds.Phone.NUMBER,
+                ContactsContract.CommonDataKinds.Phone.IS_SUPER_PRIMARY,
+            ),
             "${ContactsContract.CommonDataKinds.Phone.CONTACT_ID} = ?",
             arrayOf(contactId.toString()),
             null,
         )?.use { cursor ->
+            val idColumn =
+                cursor.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone._ID)
             val numberColumn =
                 cursor.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.NUMBER)
+            val superPrimaryColumn =
+                cursor.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.IS_SUPER_PRIMARY)
             while (cursor.moveToNext()) {
-                cursor.getString(numberColumn)
-                    ?.trim()
-                    ?.takeIf { it.isNotBlank() }
-                    ?.let { phoneNumbers.add(it) }
+                val number = cursor.getString(numberColumn)?.trim()?.takeIf { it.isNotBlank() }
+                    ?: continue
+                phoneEntries.add(
+                    ContactPhone(
+                        dataId = cursor.getLong(idColumn),
+                        number = number,
+                        isPrimary = cursor.getInt(superPrimaryColumn) != 0,
+                    ),
+                )
             }
         }
+        // Primary number first so callers that take "the" number (favourites,
+        // tap-to-call) honour the user's choice.
+        val sortedPhones = phoneEntries.sortedByDescending { it.isPrimary }
+        val phoneNumbers = sortedPhones.map { it.number }.distinct()
 
         var birthday: ContactDate? = null
         var anniversary: ContactDate? = null
@@ -203,7 +229,8 @@ class ContactsReader @Inject constructor(
         return ContactDetails(
             lookupKey = lookupKey,
             displayName = displayName,
-            phoneNumbers = phoneNumbers.distinct(),
+            phoneNumbers = phoneNumbers,
+            phoneEntries = sortedPhones,
             emails = emails.distinct(),
             notes = notes,
             organization = organization,

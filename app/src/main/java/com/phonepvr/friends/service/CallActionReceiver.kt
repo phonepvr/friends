@@ -22,6 +22,7 @@ class CallActionReceiver : BroadcastReceiver() {
             ACTION_ANSWER -> callSession.accept()
             ACTION_DECLINE -> callSession.reject()
             ACTION_HANGUP -> callSession.end()
+            ACTION_TOGGLE_AUDIO -> callSession.cycleAudioRoute()
         }
     }
 
@@ -29,5 +30,6 @@ class CallActionReceiver : BroadcastReceiver() {
         const val ACTION_ANSWER = "com.phonepvr.friends.call.ANSWER"
         const val ACTION_DECLINE = "com.phonepvr.friends.call.DECLINE"
         const val ACTION_HANGUP = "com.phonepvr.friends.call.HANGUP"
+        const val ACTION_TOGGLE_AUDIO = "com.phonepvr.friends.call.TOGGLE_AUDIO"
     }
 }

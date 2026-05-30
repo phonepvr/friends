@@ -76,6 +76,8 @@ class BondwidthInCallService : InCallService() {
     override fun onCallAudioStateChanged(audioState: CallAudioState) {
         super.onCallAudioStateChanged(audioState)
         callSession.publishAudio(audioState)
+        // Re-post so the notification's audio button reflects the new route.
+        refreshNotification()
     }
 
     override fun onBringToForeground(showDialpad: Boolean) {
@@ -102,7 +104,7 @@ class BondwidthInCallService : InCallService() {
             val name = identity.displayName
                 ?: snapshot.callerDisplayName
                 ?: snapshot.number.ifBlank { "Unknown" }
-            callNotifier.show(snapshot, name)
+            callNotifier.show(snapshot, name, callSession.audio.value)
         }
     }
 

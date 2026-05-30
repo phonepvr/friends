@@ -287,12 +287,18 @@ fun ContactDetailScreen(
                                     ?.takeIf { state.isTracked }
                                     ?.let { id -> { onOpenPerson(id) } },
                             )
-                            if (d.phoneNumbers.isNotEmpty()) {
+                            if (d.phoneEntries.isNotEmpty()) {
                                 SectionLabel("Phone")
-                                d.phoneNumbers.forEach { number ->
+                                val multiple = d.phoneEntries.size > 1
+                                d.phoneEntries.forEach { phone ->
                                     PhoneRow(
-                                        number = number,
-                                        onCall = { onCallNumber(number) },
+                                        number = phone.number,
+                                        isPrimary = phone.isPrimary,
+                                        // Only offer "set primary" when there's
+                                        // more than one number to choose between.
+                                        canSetPrimary = multiple && !phone.isPrimary,
+                                        onCall = { onCallNumber(phone.number) },
+                                        onSetPrimary = { viewModel.setPrimaryNumber(phone.dataId) },
                                     )
                                 }
                             }
@@ -534,7 +540,13 @@ private fun SectionLabel(text: String) {
 }
 
 @Composable
-private fun PhoneRow(number: String, onCall: () -> Unit) {
+private fun PhoneRow(
+    number: String,
+    isPrimary: Boolean,
+    canSetPrimary: Boolean,
+    onCall: () -> Unit,
+    onSetPrimary: () -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -544,7 +556,30 @@ private fun PhoneRow(number: String, onCall: () -> Unit) {
     ) {
         Icon(Icons.Filled.Call, contentDescription = null)
         Spacer(Modifier.width(16.dp))
-        Text(number, style = MaterialTheme.typography.bodyLarge)
+        Column(modifier = Modifier.weight(1f)) {
+            Text(number, style = MaterialTheme.typography.bodyLarge)
+            if (isPrimary) {
+                Text(
+                    text = "Default",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
+        when {
+            isPrimary -> Icon(
+                imageVector = Icons.Filled.Star,
+                contentDescription = "Default number",
+                tint = MaterialTheme.colorScheme.primary,
+            )
+            canSetPrimary -> IconButton(onClick = onSetPrimary) {
+                Icon(
+                    imageVector = Icons.Filled.StarBorder,
+                    contentDescription = "Set as default number",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }
 

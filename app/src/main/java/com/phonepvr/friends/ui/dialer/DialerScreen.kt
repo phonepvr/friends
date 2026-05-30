@@ -549,6 +549,20 @@ private val timestampFormat: DateFormat by lazy {
 
 private fun formatTimestamp(millis: Long): String = timestampFormat.format(Date(millis))
 
+/**
+ * Second line of a recents row: the dialled number plus the time when we
+ * resolved a contact name (so the number is always visible), or just the
+ * time for an unknown number that's already shown as the title.
+ */
+private fun secondaryLine(entry: RecentEntry): String {
+    val time = formatTimestamp(entry.timestampMillis)
+    return if (entry.displayName != null && entry.number.isNotBlank()) {
+        "${entry.number} · $time"
+    } else {
+        time
+    }
+}
+
 @Composable
 private fun EmptyArea(
     message: String,

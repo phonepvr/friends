@@ -153,6 +153,25 @@ class CallSession @Inject constructor() {
         )
     }
 
+    /**
+     * Advances to the next available audio output, in a stable order. Used by
+     * the notification's single audio button (where a full picker doesn't
+     * fit): earpiece -> speaker -> bluetooth -> wired -> back to earpiece,
+     * skipping whatever isn't connected.
+     */
+    fun cycleAudioRoute() {
+        val current = _audio.value
+        val order = listOf(
+            CallAudioRoute.EARPIECE,
+            CallAudioRoute.SPEAKER,
+            CallAudioRoute.BLUETOOTH,
+            CallAudioRoute.WIRED_HEADSET,
+        ).filter { it in current.availableRoutes }
+        if (order.size < 2) return
+        val idx = order.indexOf(current.route).coerceAtLeast(0)
+        setRoute(order[(idx + 1) % order.size])
+    }
+
     fun hasActiveCall(): Boolean = currentCall != null
 }
 

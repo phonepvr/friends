@@ -174,6 +174,14 @@ class ContactDetailViewModel @Inject constructor(
      */
     fun placeCall(number: String): CallPlacer.PlaceResult = callPlacer.place(number)
 
+    /** Sets which of the contact's numbers is the default, then reloads. */
+    fun setPrimaryNumber(dataId: Long) {
+        viewModelScope.launch {
+            contactWriter.setPrimaryNumber(dataId)
+            details.value = systemContactsRepository.details(contactId)
+        }
+    }
+
     /** Most recent call-log timestamp matching any of [numbers], or null. */
     private fun latestCallTimestampFor(numbers: List<String>): Long? {
         val suffixes = numbers

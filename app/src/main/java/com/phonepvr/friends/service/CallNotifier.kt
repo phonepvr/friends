@@ -9,6 +9,8 @@ import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import com.phonepvr.friends.data.incall.AudioSnapshot
+import com.phonepvr.friends.data.incall.CallAudioRoute
 import com.phonepvr.friends.data.incall.CallDirection
 import com.phonepvr.friends.data.incall.CallSimpleState
 import com.phonepvr.friends.data.incall.CallSnapshot
@@ -53,7 +55,7 @@ class CallNotifier @Inject constructor(
         sys.createNotificationChannel(channel)
     }
 
-    fun show(snapshot: CallSnapshot, callerName: String) {
+    fun show(snapshot: CallSnapshot, callerName: String, audio: AudioSnapshot) {
         ensureChannel()
         val isIncomingRing = snapshot.state == CallSimpleState.RINGING &&
             snapshot.direction == CallDirection.INCOMING
@@ -87,6 +89,16 @@ class CallNotifier @Inject constructor(
                 builder.setWhen(snapshot.connectTimeMillis)
                     .setShowWhen(true)
                     .setUsesChronometer(true)
+            }
+            // Audio output toggle — only when there's more than one route to
+            // switch between (e.g. a Bluetooth headset is connected). The
+            // label names the CURRENT output so it's clear what's active.
+            if (audio.availableRoutes.size > 1) {
+                builder.addAction(
+                    routeIcon(audio.route),
+                    routeLabel(audio.route),
+                    broadcast(CallActionReceiver.ACTION_TOGGLE_AUDIO, REQ_AUDIO),
+                )
             }
             builder.addAction(
                 0,
@@ -132,6 +144,21 @@ class CallNotifier @Inject constructor(
         )
     }
 
+    private fun routeLabel(route: CallAudioRoute): String = when (route) {
+        CallAudioRoute.EARPIECE -> "Earpiece"
+        CallAudioRoute.SPEAKER -> "Speaker"
+        CallAudioRoute.BLUETOOTH -> "Bluetooth"
+        CallAudioRoute.WIRED_HEADSET -> "Headset"
+    }
+
+    // Notification actions need a drawable resId; system glyphs keep it
+    // dependency-free. The label already names the route, so the icon is
+    // just decorative.
+    private fun routeIcon(route: CallAudioRoute): Int = when (route) {
+        CallAudioRoute.SPEAKER -> android.R.drawable.ic_lock_silent_mode_off
+        else -> android.R.drawable.ic_btn_speak_now
+    }
+
     companion object {
         private const val CHANNEL_ID = "ongoing_call"
         private const val NOTIFICATION_ID = 4242
@@ -139,5 +166,6 @@ class CallNotifier @Inject constructor(
         private const val REQ_ANSWER = 2
         private const val REQ_DECLINE = 3
         private const val REQ_HANGUP = 4
+        private const val REQ_AUDIO = 5
     }
 }

@@ -44,6 +44,15 @@
     <!-- Required for hosting the InCallService while a call is active. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 
+    <!--
+      Android 14+ requires a typed foreground-service permission for each
+      service type. The InCallService runs while a call is present and uses
+      FOREGROUND_SERVICE_TYPE_PHONE_CALL; without this permission the
+      startForeground call would throw SecurityException on API 34+ and the
+      call notification would be silently dropped on aggressive OEMs.
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
+
     <!-- Keep the device awake during a call (the in-call activity already
          uses FLAG_KEEP_SCREEN_ON, but the service can run when the screen
          is off if the user dismisses the call UI). -->
@@ -169,6 +178,7 @@
             android:name=".service.BondwidthInCallService"
             android:enabled="true"
             android:exported="true"
+            android:foregroundServiceType="phoneCall"
             android:permission="android.permission.BIND_INCALL_SERVICE">
             <meta-data
                 android:name="android.telecom.IN_CALL_SERVICE_UI"

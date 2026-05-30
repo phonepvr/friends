@@ -1,6 +1,9 @@
 package com.phonepvr.friends.service
 
+import android.app.Service
 import android.content.Intent
+import android.content.pm.ServiceInfo
+import android.os.Build
 import android.telecom.Call
 import android.telecom.CallAudioState
 import android.telecom.InCallService
@@ -8,6 +11,7 @@ import com.phonepvr.friends.data.incall.CallDirection
 import com.phonepvr.friends.data.incall.CallSession
 import com.phonepvr.friends.data.incall.CallSimpleState
 import com.phonepvr.friends.data.incall.CallerIdentityResolver
+import com.phonepvr.friends.data.incall.Ringer
 import com.phonepvr.friends.ui.incall.InCallActivity
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
@@ -25,8 +29,14 @@ import javax.inject.Inject
  * render the Compose UI, and posts the ongoing-call notification so the
  * call is reachable from anywhere.
  *
- * v1 single-call assumption: the latest-added Call is the one the UI
- * shows. Held / waiting calls aren't surfaced separately yet.
+ * Runs as a foreground service with type=phoneCall while at least one
+ * call exists. That's what makes the incoming-call full-screen intent
+ * reliably fire on idle / locked devices and on aggressive OEMs (Xiaomi
+ * HyperOS, Samsung One UI) that otherwise drop call notifications.
+ *
+ * v1 single-call assumption for the UI: the latest-added Call is the one
+ * the screen shows. Held / waiting calls are tracked at the service level
+ * (for foreground bookkeeping) but a richer multi-call UI is Phase 8c.
  */
 @AndroidEntryPoint
 class BondwidthInCallService : InCallService() {
@@ -34,8 +44,11 @@ class BondwidthInCallService : InCallService() {
     @Inject lateinit var callSession: CallSession
     @Inject lateinit var callNotifier: CallNotifier
     @Inject lateinit var callerIdentityResolver: CallerIdentityResolver
+    @Inject lateinit var ringer: Ringer
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val activeCalls = mutableSetOf<Call>()
+    private var inForeground = false
 
     private val callCallback = object : Call.Callback() {
         override fun onStateChanged(call: Call, state: Int) {
@@ -51,9 +64,11 @@ class BondwidthInCallService : InCallService() {
 
     override fun onCallAdded(call: Call) {
         super.onCallAdded(call)
+        activeCalls += call
         callSession.attachService(this)
         callSession.attachCall(call)
         call.registerCallback(callCallback)
+        ensureForeground()
         refreshNotification()
         // For an outgoing/active call there's a foreground token from the
         // user's dial action, so opening the Activity directly is allowed.
@@ -68,9 +83,19 @@ class BondwidthInCallService : InCallService() {
 
     override fun onCallRemoved(call: Call) {
         super.onCallRemoved(call)
+        activeCalls -= call
         call.unregisterCallback(callCallback)
         callSession.detachCall(call)
-        callNotifier.cancel()
+        ringer.stop()
+        if (activeCalls.isEmpty()) {
+            if (inForeground) {
+                stopForeground(Service.STOP_FOREGROUND_REMOVE)
+                inForeground = false
+            }
+            callNotifier.cancel()
+        } else {
+            refreshNotification()
+        }
     }
 
     override fun onCallAudioStateChanged(audioState: CallAudioState) {
@@ -87,24 +112,59 @@ class BondwidthInCallService : InCallService() {
 
     override fun onDestroy() {
         super.onDestroy()
+        ringer.stop()
         callSession.detachService(this)
         callNotifier.cancel()
         scope.cancel()
     }
 
+    /**
+     * Promotes the service to foreground with a best-effort initial
+     * notification, synchronously. The caller name will likely still be
+     * just the raw number at this point — [refreshNotification] re-posts
+     * with the resolved name a beat later. Synchronous is the point: the
+     * platform requires startForeground within ~5s of a call arriving, and
+     * the async caller lookup can't be in that critical path.
+     */
+    private fun ensureForeground() {
+        if (inForeground) return
+        val snapshot = callSession.snapshot.value ?: return
+        val initialName = snapshot.callerDisplayName
+            ?: snapshot.number.takeIf { it.isNotBlank() }
+            ?: "Call"
+        val notification = callNotifier.build(snapshot, initialName, callSession.audio.value)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            startForeground(
+                CallNotifier.NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL,
+            )
+        } else {
+            startForeground(CallNotifier.NOTIFICATION_ID, notification)
+        }
+        inForeground = true
+    }
+
     private fun refreshNotification() {
         val snapshot = callSession.snapshot.value
         if (snapshot == null || snapshot.state == CallSimpleState.DISCONNECTED) {
-            callNotifier.cancel()
             return
         }
-        // Resolve the caller's name off the main thread, then post.
+        // Drive the ringtone + vibration from the state machine. Re-entering
+        // start() while already playing is a no-op, so it's safe to call on
+        // every state-change re-post.
+        val isIncomingRing = snapshot.state == CallSimpleState.RINGING &&
+            snapshot.direction == CallDirection.INCOMING
+        if (isIncomingRing) ringer.start() else ringer.stop()
+
+        // Resolve the caller's name off the main thread, then re-post.
         scope.launch {
             val identity = callerIdentityResolver.resolve(snapshot.number)
             val name = identity.displayName
                 ?: snapshot.callerDisplayName
                 ?: snapshot.number.ifBlank { "Unknown" }
-            callNotifier.show(snapshot, name, callSession.audio.value)
+            val notification = callNotifier.build(snapshot, name, callSession.audio.value)
+            callNotifier.post(notification)
         }
     }
 

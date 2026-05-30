@@ -9,6 +9,7 @@ import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.app.Person
 import com.phonepvr.friends.data.incall.AudioSnapshot
 import com.phonepvr.friends.data.incall.CallAudioRoute
 import com.phonepvr.friends.data.incall.CallDirection
@@ -24,12 +25,12 @@ import javax.inject.Singleton
  * the status bar, the notification panel, and (for incoming calls) a
  * full-screen heads-up that rises over the lock screen.
  *
- * Deliberately a plain high-priority ongoing notification rather than
- * NotificationCompat.CallStyle: CallStyle notifications are only rendered as
- * calls when they're attached to a foreground service, and silently dropped
- * otherwise on many devices — which is exactly the "no way back to the call"
- * symptom. A plain notification with a contentIntent into InCallActivity
- * always shows and always returns the user to the call screen.
+ * Uses NotificationCompat.CallStyle so the OS renders it as a proper
+ * call-shaped notification (round answer / decline buttons, heads-up,
+ * lock-screen visibility). CallStyle only renders correctly when the
+ * posting service is in the foreground — [BondwidthInCallService] handles
+ * that side, calling startForeground with this notification at the start
+ * of every call.
  */
 @Singleton
 class CallNotifier @Inject constructor(
@@ -37,33 +38,23 @@ class CallNotifier @Inject constructor(
 ) {
     private val manager = NotificationManagerCompat.from(context)
 
-    private fun ensureChannel() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        val sys = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        if (sys.getNotificationChannel(CHANNEL_ID) != null) return
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            "Calls",
-            NotificationManager.IMPORTANCE_HIGH,
-        ).apply {
-            description = "Ongoing and incoming calls"
-            setShowBadge(false)
-            lockscreenVisibility = Notification.VISIBILITY_PUBLIC
-            setSound(null, null)
-            enableVibration(false)
-        }
-        sys.createNotificationChannel(channel)
-    }
-
-    fun show(snapshot: CallSnapshot, callerName: String, audio: AudioSnapshot) {
+    /**
+     * Builds the call notification without posting it. The InCallService
+     * passes the first instance to startForeground; subsequent updates go
+     * via [post].
+     */
+    fun build(snapshot: CallSnapshot, callerName: String, audio: AudioSnapshot): Notification {
         ensureChannel()
         val isIncomingRing = snapshot.state == CallSimpleState.RINGING &&
             snapshot.direction == CallDirection.INCOMING
 
+        val person = Person.Builder()
+            .setName(callerName)
+            .setImportant(true)
+            .build()
+
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.sym_action_call)
-            .setContentTitle(callerName)
-            .setContentText(statusText(snapshot, isIncomingRing))
             .setOngoing(true)
             .setAutoCancel(false)
             .setOnlyAlertOnce(true)
@@ -73,18 +64,25 @@ class CallNotifier @Inject constructor(
             .setContentIntent(activityIntent())
 
         if (isIncomingRing) {
+            // The full-screen intent is what rises over the lockscreen — the
+            // sanctioned way to launch an Activity from a background event on
+            // Android 10+. Requires USE_FULL_SCREEN_INTENT (manifest) AND
+            // either ROLE_DIALER or the per-app Settings toggle on 14+.
             builder.setFullScreenIntent(activityIntent(), true)
-            builder.addAction(
-                0,
-                "Decline",
-                broadcast(CallActionReceiver.ACTION_DECLINE, REQ_DECLINE),
-            )
-            builder.addAction(
-                0,
-                "Answer",
-                broadcast(CallActionReceiver.ACTION_ANSWER, REQ_ANSWER),
+            builder.setStyle(
+                NotificationCompat.CallStyle.forIncomingCall(
+                    person,
+                    broadcast(CallActionReceiver.ACTION_DECLINE, REQ_DECLINE),
+                    broadcast(CallActionReceiver.ACTION_ANSWER, REQ_ANSWER),
+                ),
             )
         } else {
+            builder.setStyle(
+                NotificationCompat.CallStyle.forOngoingCall(
+                    person,
+                    broadcast(CallActionReceiver.ACTION_HANGUP, REQ_HANGUP),
+                ),
+            )
             if (snapshot.state == CallSimpleState.ACTIVE && snapshot.connectTimeMillis != null) {
                 builder.setWhen(snapshot.connectTimeMillis)
                     .setShowWhen(true)
@@ -100,27 +98,39 @@ class CallNotifier @Inject constructor(
                     broadcast(CallActionReceiver.ACTION_TOGGLE_AUDIO, REQ_AUDIO),
                 )
             }
-            builder.addAction(
-                0,
-                "Hang up",
-                broadcast(CallActionReceiver.ACTION_HANGUP, REQ_HANGUP),
-            )
         }
 
-        runCatching { manager.notify(NOTIFICATION_ID, builder.build()) }
+        return builder.build()
+    }
+
+    fun post(notification: Notification) {
+        runCatching { manager.notify(NOTIFICATION_ID, notification) }
     }
 
     fun cancel() {
         manager.cancel(NOTIFICATION_ID)
     }
 
-    private fun statusText(snapshot: CallSnapshot, isIncomingRing: Boolean): String = when {
-        isIncomingRing -> "Incoming call"
-        snapshot.state == CallSimpleState.DIALING ||
-            snapshot.state == CallSimpleState.CONNECTING -> "Calling…"
-        snapshot.state == CallSimpleState.HOLDING -> "On hold"
-        snapshot.state == CallSimpleState.ACTIVE -> "Ongoing call"
-        else -> "In call"
+    private fun ensureChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val sys = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        if (sys.getNotificationChannel(CHANNEL_ID) != null) return
+        val channel = NotificationChannel(
+            CHANNEL_ID,
+            "Calls",
+            NotificationManager.IMPORTANCE_HIGH,
+        ).apply {
+            description = "Ongoing and incoming calls"
+            setShowBadge(false)
+            lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+            // Ringer owns ringtone + vibration for incoming calls
+            // (IN_CALL_SERVICE_RINGING="true" means the platform delegates
+            // ringing to us). Channel-level sound stays null so the
+            // notification itself never makes noise.
+            setSound(null, null)
+            enableVibration(false)
+        }
+        sys.createNotificationChannel(channel)
     }
 
     private fun activityIntent(): PendingIntent {
@@ -160,8 +170,8 @@ class CallNotifier @Inject constructor(
     }
 
     companion object {
+        const val NOTIFICATION_ID = 4242
         private const val CHANNEL_ID = "ongoing_call"
-        private const val NOTIFICATION_ID = 4242
         private const val REQ_OPEN = 1
         private const val REQ_ANSWER = 2
         private const val REQ_DECLINE = 3

@@ -10,6 +10,7 @@ import com.phonepvr.friends.data.incall.CallAudioRoute
 import com.phonepvr.friends.data.incall.CallSession
 import com.phonepvr.friends.data.incall.CallSimpleState
 import com.phonepvr.friends.data.incall.CallSnapshot
+import com.phonepvr.friends.data.incall.CallerIdentityResolver
 import com.phonepvr.friends.domain.cadence.CadenceCalculator
 import com.phonepvr.friends.domain.cadence.CadenceStatus
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -48,6 +49,10 @@ data class InCallUiState(
         availableRoutes = setOf(CallAudioRoute.EARPIECE),
     ),
     val bondedPerson: MatchedBondedPerson? = null,
+    /** Address-book name for the caller (any saved contact, not just bonds). */
+    val callerName: String? = null,
+    /** System contact photo URI for the caller, when available. */
+    val callerPhotoUri: String? = null,
     val callEnded: Boolean = false,
 )
 
@@ -58,7 +63,24 @@ class InCallViewModel @Inject constructor(
     private val phoneNumberDao: PhoneNumberDao,
     private val personDao: PersonDao,
     private val timelineDao: TimelineDao,
+    private val callerIdentityResolver: CallerIdentityResolver,
 ) : ViewModel() {
+
+    // Address-book identity (name + photo) for the caller, resolved off the
+    // main thread whenever the number changes. Covers any saved contact, so
+    // the name shows even when Telecom's callerDisplayName is null (common
+    // for outgoing calls and on many devices once connected).
+    private val callerIdentity: Flow<CallerIdentityResolver.Identity> =
+        callSession.snapshot
+            .map { it?.number.orEmpty() }
+            .distinctUntilChanged()
+            .map { number ->
+                if (number.isBlank()) {
+                    CallerIdentityResolver.Identity.EMPTY
+                } else {
+                    callerIdentityResolver.resolve(number)
+                }
+            }
 
     // Resolve the call's number to a tracked PersonEntity. Suffix-match on
     // the last 9 digits so different country-code prefixes still hit.
@@ -94,7 +116,8 @@ class InCallViewModel @Inject constructor(
         callSession.audio,
         matchedPerson,
         lastContactAtMs,
-    ) { snapshot, audio, person, lastContact ->
+        callerIdentity,
+    ) { snapshot, audio, person, lastContact, identity ->
         val bonded = person?.takeIf { !it.isArchived }?.let { p ->
             val lastContactDate = lastContact?.let { ms ->
                 Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault()).toLocalDate()
@@ -122,6 +145,8 @@ class InCallViewModel @Inject constructor(
             snapshot = snapshot,
             audio = audio,
             bondedPerson = bonded,
+            callerName = identity.displayName,
+            callerPhotoUri = identity.photoUri,
             callEnded = snapshot == null ||
                 snapshot.state == CallSimpleState.DISCONNECTED,
         )

@@ -23,6 +23,14 @@ data class ContactDate(
     val year: Int?,
 )
 
+/** A number resolved to its address-book identity via PhoneLookup. */
+data class NumberIdentity(
+    val contactId: Long,
+    val lookupKey: String?,
+    val displayName: String?,
+    val photoUri: String?,
+)
+
 data class ContactDetails(
     val lookupKey: String,
     val displayName: String,
@@ -260,6 +268,47 @@ class ContactsReader @Inject constructor(
             }
         }
         return null
+    }
+
+    /**
+     * Resolves a raw phone number to its system-contact identity via
+     * ContactsContract.PhoneLookup — the canonical "who is this number"
+     * query that matches ANY saved contact (not just bonded people) and
+     * handles number formatting / country-code differences itself.
+     * Returns null when the number isn't in the address book or
+     * READ_CONTACTS isn't granted.
+     */
+    fun lookupByNumber(number: String): NumberIdentity? {
+        if (number.isBlank()) return null
+        val uri = android.net.Uri.withAppendedPath(
+            ContactsContract.PhoneLookup.CONTENT_FILTER_URI,
+            android.net.Uri.encode(number),
+        )
+        return runCatching {
+            resolver.query(
+                uri,
+                arrayOf(
+                    ContactsContract.PhoneLookup._ID,
+                    ContactsContract.PhoneLookup.LOOKUP_KEY,
+                    ContactsContract.PhoneLookup.DISPLAY_NAME,
+                    ContactsContract.PhoneLookup.PHOTO_URI,
+                ),
+                null,
+                null,
+                null,
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    NumberIdentity(
+                        contactId = cursor.getLong(0),
+                        lookupKey = cursor.getString(1),
+                        displayName = cursor.getString(2)?.takeIf { it.isNotBlank() },
+                        photoUri = cursor.getString(3)?.takeIf { it.isNotBlank() },
+                    )
+                } else {
+                    null
+                }
+            }
+        }.getOrNull()
     }
 
     /** Opens the contact's photo for reading, or null when it has none. */

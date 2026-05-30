@@ -152,6 +152,11 @@
             android:name=".notification.MarkAsWishedReceiver"
             android:exported="false" />
 
+        <!-- Answer / Decline / Hang up actions from the call notification. -->
+        <receiver
+            android:name=".service.CallActionReceiver"
+            android:exported="false" />
+
         <!--
           InCallService — bound by the platform's Telecom framework when
           Bondwidth holds ROLE_DIALER and a call is present. IN_CALL_SERVICE_UI

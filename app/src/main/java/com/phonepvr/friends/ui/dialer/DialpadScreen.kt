@@ -2,6 +2,7 @@ package com.phonepvr.friends.ui.dialer
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.view.HapticFeedbackConstants
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -47,6 +48,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -342,11 +344,15 @@ private fun DialpadKey(
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
 ) {
+    val view = LocalView.current
     Surface(
         modifier = modifier
             .height(64.dp)
             .combinedClickable(
-                onClick = onClick,
+                onClick = {
+                    view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                    onClick()
+                },
                 onLongClick = onLongClick,
             ),
         shape = RoundedCornerShape(12.dp),

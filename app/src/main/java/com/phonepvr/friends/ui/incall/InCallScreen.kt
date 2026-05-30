@@ -44,15 +44,20 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import android.view.HapticFeedbackConstants
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.net.toUri
+import coil.compose.AsyncImage
 import com.phonepvr.friends.data.incall.CallAudioRoute
 import com.phonepvr.friends.data.incall.CallDirection
 import com.phonepvr.friends.data.incall.CallSimpleState
@@ -92,6 +97,8 @@ fun InCallScreen(
             Header(
                 snapshot = snapshot,
                 bondedPerson = state.bondedPerson,
+                callerName = state.callerName,
+                callerPhotoUri = state.callerPhotoUri,
                 callEnded = state.callEnded,
                 dtmfDigits = dtmfDigits,
             )
@@ -127,11 +134,15 @@ fun InCallScreen(
 private fun Header(
     snapshot: CallSnapshot?,
     bondedPerson: MatchedBondedPerson?,
+    callerName: String?,
+    callerPhotoUri: String?,
     callEnded: Boolean,
     dtmfDigits: String,
 ) {
-    // Bonded match takes priority — that's how the user knows this contact.
+    // Bonded name wins, then the resolved address-book name, then whatever
+    // Telecom gave us, then the raw number.
     val displayName = bondedPerson?.displayName
+        ?: callerName
         ?: snapshot?.callerDisplayName
         ?: snapshot?.number
         ?: ""
@@ -147,16 +158,24 @@ private fun Header(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(24.dp))
-        // Use the bonded person's saved photo when we have one; otherwise
-        // fall back to a tinted initial bubble.
-        if (bondedPerson?.photoRelativePath != null) {
-            PersonAvatar(
-                photoRelativePath = bondedPerson.photoRelativePath,
+        // Photo priority: bonded person's local photo, then the system
+        // contact photo, else a tinted initial bubble.
+        val localPhoto = bondedPerson?.photoRelativePath
+        when {
+            localPhoto != null -> PersonAvatar(
+                photoRelativePath = localPhoto,
                 displayName = displayName,
                 diameter = 120.dp,
             )
-        } else {
-            Box(
+            callerPhotoUri != null -> AsyncImage(
+                model = callerPhotoUri.toUri(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(120.dp)
+                    .clip(CircleShape),
+            )
+            else -> Box(
                 modifier = Modifier
                     .size(120.dp)
                     .clip(CircleShape)
@@ -524,6 +543,7 @@ private fun InCallDialpad(
     onDigit: (Char) -> Unit,
     onHide: () -> Unit,
 ) {
+    val view = LocalView.current
     val rows = listOf(
         listOf('1', '2', '3'),
         listOf('4', '5', '6'),
@@ -545,7 +565,10 @@ private fun InCallDialpad(
                     Surface(
                         modifier = Modifier.size(64.dp).clip(CircleShape),
                         color = MaterialTheme.colorScheme.surfaceVariant,
-                        onClick = { onDigit(digit) },
+                        onClick = {
+                            view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                            onDigit(digit)
+                        },
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Text(
@@ -584,12 +607,19 @@ private fun ActionButton(
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
 ) {
+    val view = LocalView.current
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Surface(
             modifier = Modifier
                 .size(72.dp)
                 .clip(CircleShape)
-                .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+                .combinedClickable(
+                    onClick = {
+                        view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                        onClick()
+                    },
+                    onLongClick = onLongClick,
+                ),
             color = containerColor,
         ) {
             Box(contentAlignment = Alignment.Center) {

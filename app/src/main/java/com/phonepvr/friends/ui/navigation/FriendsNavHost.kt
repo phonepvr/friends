@@ -14,6 +14,7 @@ import com.phonepvr.friends.ui.contacts.ContactDetailScreen
 import com.phonepvr.friends.ui.contacts.ContactEditScreen
 import com.phonepvr.friends.ui.contacts.ContactsBrowserScreen
 import com.phonepvr.friends.ui.contacts.ImportContactsScreen
+import com.phonepvr.friends.ui.dialer.DialerScreen
 import com.phonepvr.friends.ui.onboarding.OnboardingScreen
 import com.phonepvr.friends.ui.people.AddEditPersonScreen
 import com.phonepvr.friends.ui.people.PeopleListScreen
@@ -35,6 +36,7 @@ object Routes {
     const val CONTACT_DETAIL = "contacts/detail/{contactId}"
     const val NEW_CONTACT = "contacts/new"
     const val CONTACT_EDIT = "contacts/edit/{contactId}"
+    const val DIALER = "dialer"
     const val BACKUP = "backup"
     const val SETTINGS = "settings"
     const val YEAR_IN_REVIEW = "year-in-review"
@@ -166,6 +168,14 @@ fun FriendsNavHost(
             arguments = listOf(navArgument(Routes.CONTACT_ID_ARG) { type = NavType.LongType }),
         ) {
             ContactEditScreen(onDone = { navController.popBackStack() })
+        }
+        composable(Routes.DIALER) {
+            DialerScreen(
+                onOpenContact = { contactId ->
+                    navController.navigate(Routes.contactDetail(contactId))
+                },
+                bottomBar = { FriendsBottomBar(TopLevelTab.PHONE, onSelectTab) },
+            )
         }
         composable(Routes.SETTINGS) {
             SettingsScreen(

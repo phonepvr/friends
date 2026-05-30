@@ -4,6 +4,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -20,6 +21,12 @@ enum class TopLevelTab(
     val gatedByAllInOne: Boolean = false,
 ) {
     PEOPLE(Routes.PEOPLE_LIST, "People", Icons.Filled.Person),
+    PHONE(
+        route = Routes.DIALER,
+        label = "Phone",
+        icon = Icons.Filled.Phone,
+        gatedByAllInOne = true,
+    ),
     CONTACTS(
         route = Routes.CONTACTS_BROWSER,
         label = "Contacts",

@@ -10,7 +10,12 @@ import com.phonepvr.friends.data.incall.CallAudioRoute
 import com.phonepvr.friends.data.incall.CallSession
 import com.phonepvr.friends.data.incall.CallSimpleState
 import com.phonepvr.friends.data.incall.CallSnapshot
+import com.phonepvr.friends.domain.cadence.CadenceCalculator
+import com.phonepvr.friends.domain.cadence.CadenceStatus
 import dagger.hilt.android.lifecycle.HiltViewModel
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
@@ -32,6 +37,7 @@ data class MatchedBondedPerson(
     val photoRelativePath: String?,
     val cadenceTargetDays: Int?,
     val daysSinceLastContact: Int?,
+    val cadenceStatus: CadenceStatus,
 )
 
 data class InCallUiState(
@@ -90,6 +96,14 @@ class InCallViewModel @Inject constructor(
         lastContactAtMs,
     ) { snapshot, audio, person, lastContact ->
         val bonded = person?.takeIf { !it.isArchived }?.let { p ->
+            val lastContactDate = lastContact?.let { ms ->
+                Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault()).toLocalDate()
+            }
+            val cadence = CadenceCalculator.status(
+                lastContact = lastContactDate,
+                cadenceTargetDays = p.cadenceTargetDays,
+                today = LocalDate.now(),
+            )
             MatchedBondedPerson(
                 personId = p.id,
                 displayName = p.displayName,
@@ -101,6 +115,7 @@ class InCallViewModel @Inject constructor(
                         .toInt()
                         .coerceAtLeast(0)
                 },
+                cadenceStatus = cadence,
             )
         }
         InCallUiState(

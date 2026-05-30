@@ -9,6 +9,7 @@ import com.phonepvr.friends.data.contacts.ContactWriter
 import com.phonepvr.friends.data.contacts.SystemContactsRepository
 import com.phonepvr.friends.data.db.dao.PersonDao
 import com.phonepvr.friends.data.db.entity.PersonEntity
+import com.phonepvr.friends.data.dialer.CallPlacer
 import com.phonepvr.friends.ui.navigation.Routes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -43,6 +44,7 @@ class ContactDetailViewModel @Inject constructor(
     private val systemContactsRepository: SystemContactsRepository,
     private val contactTracker: ContactTracker,
     private val contactWriter: ContactWriter,
+    private val callPlacer: CallPlacer,
     personDao: PersonDao,
 ) : ViewModel() {
 
@@ -112,6 +114,15 @@ class ContactDetailViewModel @Inject constructor(
             }
         }
     }
+
+    /**
+     * Place a call directly through Bondwidth's CallPlacer. Returns the
+     * Telecom result so the screen can prompt for CALL_PHONE or snackbar
+     * an error. Avoids the ACTION_DIAL chooser detour the screen used to
+     * launch — tapping a number on a contact you're looking at is intent
+     * enough to dial.
+     */
+    fun placeCall(number: String): CallPlacer.PlaceResult = callPlacer.place(number)
 
     fun deleteContact() {
         val d = details.value ?: return

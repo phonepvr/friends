@@ -46,6 +46,8 @@ import com.phonepvr.friends.data.incall.CallAudioRoute
 import com.phonepvr.friends.data.incall.CallDirection
 import com.phonepvr.friends.data.incall.CallSimpleState
 import com.phonepvr.friends.data.incall.CallSnapshot
+import com.phonepvr.friends.domain.cadence.CadenceState
+import com.phonepvr.friends.domain.cadence.CadenceStatus
 import com.phonepvr.friends.ui.components.PersonAvatar
 import kotlinx.coroutines.delay
 import java.util.Locale
@@ -160,6 +162,14 @@ private fun Header(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            cadenceSubtitle(bondedPerson.cadenceStatus)?.let { (text, tint) ->
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = tint,
+                )
+            }
         }
         if (snapshot != null && snapshot.number.isNotBlank() && displayName != snapshot.number) {
             Spacer(Modifier.height(4.dp))
@@ -206,6 +216,31 @@ private fun lastSpokeLabel(daysAgo: Int): String = when (daysAgo) {
     0 -> "Spoke today"
     1 -> "Spoke yesterday"
     else -> "Last spoke $daysAgo days ago"
+}
+
+@Composable
+private fun cadenceSubtitle(status: CadenceStatus): Pair<String, Color>? {
+    val days = status.daysUntilDue ?: return null
+    return when (status.state) {
+        CadenceState.OVERDUE -> {
+            val n = -days
+            val text = if (n == 1L) "Overdue by 1 day" else "Overdue by $n days"
+            text to MaterialTheme.colorScheme.error
+        }
+        CadenceState.DUE_SOON -> {
+            val text = when (days) {
+                0L -> "Due today"
+                1L -> "Due tomorrow"
+                else -> "Due in $days days"
+            }
+            text to MaterialTheme.colorScheme.tertiary
+        }
+        CadenceState.ON_TRACK -> {
+            val text = if (days == 1L) "Next check-in in 1 day" else "Next check-in in $days days"
+            text to MaterialTheme.colorScheme.onSurfaceVariant
+        }
+        CadenceState.NOT_TRACKED, CadenceState.NEVER_CONTACTED -> null
+    }
 }
 
 @Composable

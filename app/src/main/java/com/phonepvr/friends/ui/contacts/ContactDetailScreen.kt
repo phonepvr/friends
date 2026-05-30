@@ -1,6 +1,10 @@
 package com.phonepvr.friends.ui.contacts
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -34,6 +38,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -42,17 +49,22 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.phonepvr.friends.data.contacts.ContactDate
+import com.phonepvr.friends.data.dialer.CallPlacer
 import com.phonepvr.friends.ui.components.PersonAvatar
+import com.phonepvr.friends.ui.permissions.PermissionRationaleSheet
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -64,7 +76,66 @@ fun ContactDetailScreen(
 ) {
     val context = LocalContext.current
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val snackbarState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var hasCallPhone by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.CALL_PHONE,
+            ) == PackageManager.PERMISSION_GRANTED,
+        )
+    }
+    var showCallPermissionSheet by remember { mutableStateOf(false) }
+    var pendingNumber by remember { mutableStateOf<String?>(null) }
+
+    val callPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        hasCallPhone = granted
+        pendingNumber?.let { num ->
+            pendingNumber = null
+            if (granted) placeCall(viewModel, num, snackbarState, scope)
+        }
+    }
+
+    if (showCallPermissionSheet) {
+        PermissionRationaleSheet(
+            title = "Permission to call",
+            body = "Bondwidth needs your phone's Call permission to dial " +
+                "numbers from this screen. Nothing leaves the device.",
+            manualFallback = "Skip and Bondwidth will hand the dial off " +
+                "to your existing phone app instead.",
+            grantLabel = "Grant access",
+            manualLabel = "Use system dialer",
+            onGrant = {
+                showCallPermissionSheet = false
+                callPermissionLauncher.launch(Manifest.permission.CALL_PHONE)
+            },
+            onManualFallback = {
+                showCallPermissionSheet = false
+                pendingNumber?.let { num ->
+                    pendingNumber = null
+                    val intent = Intent(Intent.ACTION_DIAL, "tel:$num".toUri())
+                    context.startActivity(intent)
+                }
+            },
+            onDismiss = {
+                showCallPermissionSheet = false
+                pendingNumber = null
+            },
+        )
+    }
+
+    val onCallNumber: (String) -> Unit = { number ->
+        if (hasCallPhone) {
+            placeCall(viewModel, number, snackbarState, scope)
+        } else {
+            pendingNumber = number
+            showCallPermissionSheet = true
+        }
+    }
 
     LaunchedEffect(state.deleted) {
         if (state.deleted) onBack()
@@ -96,6 +167,7 @@ fun ContactDetailScreen(
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarState) { Snackbar(it) } },
         topBar = {
             TopAppBar(
                 title = { Text(state.details?.displayName ?: "Contact") },
@@ -162,13 +234,7 @@ fun ContactDetailScreen(
                             d.phoneNumbers.forEach { number ->
                                 PhoneRow(
                                     number = number,
-                                    onCall = {
-                                        val intent = Intent(
-                                            Intent.ACTION_DIAL,
-                                            "tel:$number".toUri(),
-                                        )
-                                        context.startActivity(intent)
-                                    },
+                                    onCall = { onCallNumber(number) },
                                 )
                             }
                         }
@@ -324,6 +390,23 @@ private fun DateRow(label: String, date: ContactDate, icon: ImageVector) {
             Text(formatDate(date), style = MaterialTheme.typography.bodyLarge)
         }
     }
+}
+
+private fun placeCall(
+    viewModel: ContactDetailViewModel,
+    number: String,
+    snackbarHost: SnackbarHostState,
+    scope: kotlinx.coroutines.CoroutineScope,
+) {
+    val result = viewModel.placeCall(number)
+    val msg = when (result) {
+        CallPlacer.PlaceResult.OK -> null
+        CallPlacer.PlaceResult.NO_PERMISSION ->
+            "Couldn't dial — Call permission missing."
+        CallPlacer.PlaceResult.INVALID_NUMBER -> "Invalid number."
+        CallPlacer.PlaceResult.ERROR -> "Couldn't place the call. Try again."
+    }
+    if (msg != null) scope.launch { snackbarHost.showSnackbar(msg) }
 }
 
 private fun formatDate(date: ContactDate): String {

@@ -1,6 +1,8 @@
 package com.phonepvr.friends.ui.incall
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,29 +17,38 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Message
+import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CallEnd
+import androidx.compose.material.icons.filled.Dialpad
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Headset
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material.icons.filled.PhoneInTalk
 import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -57,11 +68,16 @@ fun InCallScreen(
     state: InCallUiState,
     onAccept: () -> Unit,
     onReject: () -> Unit,
+    onRejectWith: (String) -> Unit,
     onEnd: () -> Unit,
     onToggleMute: () -> Unit,
-    onToggleSpeaker: () -> Unit,
+    onSetAudioRoute: (CallAudioRoute) -> Unit,
+    onDtmf: (Char) -> Unit,
 ) {
     val snapshot = state.snapshot
+    var showKeypad by remember { mutableStateOf(false) }
+    var dtmfDigits by remember { mutableStateOf("") }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -77,6 +93,7 @@ fun InCallScreen(
                 snapshot = snapshot,
                 bondedPerson = state.bondedPerson,
                 callEnded = state.callEnded,
+                dtmfDigits = dtmfDigits,
             )
             Spacer(Modifier.weight(1f))
             when {
@@ -84,13 +101,22 @@ fun InCallScreen(
                 snapshot == null -> { /* waiting for first snapshot */ }
                 snapshot.state == CallSimpleState.RINGING &&
                     snapshot.direction == CallDirection.INCOMING ->
-                    IncomingControls(onAccept = onAccept, onReject = onReject)
+                    IncomingControls(onAccept = onAccept, onReject = onReject, onRejectWith = onRejectWith)
+                showKeypad -> InCallDialpad(
+                    onDigit = { c ->
+                        dtmfDigits += c
+                        onDtmf(c)
+                    },
+                    onHide = { showKeypad = false },
+                )
                 else -> OngoingControls(
                     isMuted = state.audio.isMuted,
-                    isSpeaker = state.audio.route == CallAudioRoute.SPEAKER,
+                    route = state.audio.route,
+                    availableRoutes = state.audio.availableRoutes,
                     onEnd = onEnd,
                     onToggleMute = onToggleMute,
-                    onToggleSpeaker = onToggleSpeaker,
+                    onShowKeypad = { showKeypad = true },
+                    onSetAudioRoute = onSetAudioRoute,
                 )
             }
         }
@@ -102,6 +128,7 @@ private fun Header(
     snapshot: CallSnapshot?,
     bondedPerson: MatchedBondedPerson?,
     callEnded: Boolean,
+    dtmfDigits: String,
 ) {
     // Bonded match takes priority — that's how the user knows this contact.
     val displayName = bondedPerson?.displayName
@@ -177,6 +204,15 @@ private fun Header(
                 text = snapshot.number,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        // DTMF digits the user has tapped into the in-call keypad.
+        if (dtmfDigits.isNotEmpty()) {
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = dtmfDigits,
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.primary,
             )
         }
         if (snapshot?.state == CallSimpleState.ACTIVE && snapshot.connectTimeMillis != null) {
@@ -262,40 +298,125 @@ private fun DurationTicker(connectTimeMillis: Long) {
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun IncomingControls(onAccept: () -> Unit, onReject: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 24.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        ActionButton(
-            icon = Icons.Filled.CallEnd,
-            label = "Reject",
-            containerColor = MaterialTheme.colorScheme.error,
-            contentColor = MaterialTheme.colorScheme.onError,
-            onClick = onReject,
-        )
-        ActionButton(
-            icon = Icons.Filled.Call,
-            label = "Accept",
-            containerColor = AcceptGreen,
-            contentColor = Color.White,
-            onClick = onAccept,
+private fun IncomingControls(
+    onAccept: () -> Unit,
+    onReject: () -> Unit,
+    onRejectWith: (String) -> Unit,
+) {
+    var showQuickReplies by remember { mutableStateOf(false) }
+
+    if (showQuickReplies) {
+        QuickReplySheet(
+            onPick = { msg ->
+                showQuickReplies = false
+                onRejectWith(msg)
+            },
+            onDismiss = { showQuickReplies = false },
         )
     }
+
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = "Hold Reject to reply with a message",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 16.dp),
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ActionButton(
+                icon = Icons.Filled.CallEnd,
+                label = "Reject",
+                containerColor = MaterialTheme.colorScheme.error,
+                contentColor = MaterialTheme.colorScheme.onError,
+                onClick = onReject,
+                onLongClick = { showQuickReplies = true },
+            )
+            ActionButton(
+                icon = Icons.Filled.Call,
+                label = "Accept",
+                containerColor = AcceptGreen,
+                contentColor = Color.White,
+                onClick = onAccept,
+            )
+        }
+    }
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun QuickReplySheet(
+    onPick: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(modifier = Modifier.padding(bottom = 24.dp)) {
+            Text(
+                text = "Reply and decline",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+            )
+            QUICK_DECLINE_MESSAGES.forEach { msg ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickableRow { onPick(msg) }
+                        .padding(horizontal = 24.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.Message,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Spacer(Modifier.width(16.dp))
+                    Text(text = msg, style = MaterialTheme.typography.bodyLarge)
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+private fun Modifier.clickableRow(onClick: () -> Unit): Modifier =
+    this.combinedClickable(onClick = onClick)
 
 @Composable
 private fun OngoingControls(
     isMuted: Boolean,
-    isSpeaker: Boolean,
+    route: CallAudioRoute,
+    availableRoutes: Set<CallAudioRoute>,
     onEnd: () -> Unit,
     onToggleMute: () -> Unit,
-    onToggleSpeaker: () -> Unit,
+    onShowKeypad: () -> Unit,
+    onSetAudioRoute: (CallAudioRoute) -> Unit,
 ) {
+    var showRoutePicker by remember { mutableStateOf(false) }
+    // Only earpiece + speaker on this device → a simple toggle. Bluetooth or
+    // wired headset present → open a picker so all routes are one tap away.
+    val hasExtraRoutes = availableRoutes.any {
+        it == CallAudioRoute.BLUETOOTH || it == CallAudioRoute.WIRED_HEADSET
+    }
+
+    if (showRoutePicker) {
+        AudioRouteSheet(
+            current = route,
+            available = availableRoutes,
+            onPick = {
+                showRoutePicker = false
+                onSetAudioRoute(it)
+            },
+            onDismiss = { showRoutePicker = false },
+        )
+    }
+
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Row(
             modifier = Modifier
@@ -310,10 +431,28 @@ private fun OngoingControls(
                 onClick = onToggleMute,
             )
             ToggleButton(
-                icon = Icons.Filled.VolumeUp,
-                label = if (isSpeaker) "Speaker on" else "Speaker",
-                active = isSpeaker,
-                onClick = onToggleSpeaker,
+                icon = Icons.Filled.Dialpad,
+                label = "Keypad",
+                active = false,
+                onClick = onShowKeypad,
+            )
+            ToggleButton(
+                icon = route.icon(),
+                label = route.label(),
+                active = route != CallAudioRoute.EARPIECE,
+                onClick = {
+                    if (hasExtraRoutes) {
+                        showRoutePicker = true
+                    } else {
+                        onSetAudioRoute(
+                            if (route == CallAudioRoute.SPEAKER) {
+                                CallAudioRoute.EARPIECE
+                            } else {
+                                CallAudioRoute.SPEAKER
+                            },
+                        )
+                    }
+                },
             )
         }
         ActionButton(
@@ -326,21 +465,132 @@ private fun OngoingControls(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AudioRouteSheet(
+    current: CallAudioRoute,
+    available: Set<CallAudioRoute>,
+    onPick: (CallAudioRoute) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(modifier = Modifier.padding(bottom = 24.dp)) {
+            Text(
+                text = "Audio output",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+            )
+            // Stable display order; only show routes the platform reports.
+            listOf(
+                CallAudioRoute.EARPIECE,
+                CallAudioRoute.SPEAKER,
+                CallAudioRoute.BLUETOOTH,
+                CallAudioRoute.WIRED_HEADSET,
+            ).filter { it in available }.forEach { r ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickableRow { onPick(r) }
+                        .padding(horizontal = 24.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = r.icon(),
+                        contentDescription = null,
+                        tint = if (r == current) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                    Spacer(Modifier.width(16.dp))
+                    Text(
+                        text = r.label(),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = if (r == current) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun InCallDialpad(
+    onDigit: (Char) -> Unit,
+    onHide: () -> Unit,
+) {
+    val rows = listOf(
+        listOf('1', '2', '3'),
+        listOf('4', '5', '6'),
+        listOf('7', '8', '9'),
+        listOf('*', '0', '#'),
+    )
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        rows.forEach { row ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+            ) {
+                row.forEach { digit ->
+                    Surface(
+                        modifier = Modifier.size(64.dp).clip(CircleShape),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        onClick = { onDigit(digit) },
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                text = digit.toString(),
+                                fontSize = 26.sp,
+                                fontWeight = FontWeight.Medium,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+        Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.secondaryContainer,
+            onClick = onHide,
+        ) {
+            Text(
+                text = "Hide keypad",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ActionButton(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     label: String,
     containerColor: Color,
     contentColor: Color,
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
 ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Surface(
             modifier = Modifier
                 .size(72.dp)
-                .clip(CircleShape),
+                .clip(CircleShape)
+                .combinedClickable(onClick = onClick, onLongClick = onLongClick),
             color = containerColor,
-            onClick = onClick,
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(
@@ -358,7 +608,7 @@ private fun ActionButton(
 
 @Composable
 private fun ToggleButton(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     label: String,
     active: Boolean,
     onClick: () -> Unit,
@@ -398,6 +648,20 @@ private fun EndingFooter() {
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(bottom = 24.dp),
     )
+}
+
+private fun CallAudioRoute.icon(): ImageVector = when (this) {
+    CallAudioRoute.EARPIECE -> Icons.Filled.PhoneInTalk
+    CallAudioRoute.SPEAKER -> Icons.Filled.VolumeUp
+    CallAudioRoute.BLUETOOTH -> Icons.Filled.Bluetooth
+    CallAudioRoute.WIRED_HEADSET -> Icons.Filled.Headset
+}
+
+private fun CallAudioRoute.label(): String = when (this) {
+    CallAudioRoute.EARPIECE -> "Earpiece"
+    CallAudioRoute.SPEAKER -> "Speaker"
+    CallAudioRoute.BLUETOOTH -> "Bluetooth"
+    CallAudioRoute.WIRED_HEADSET -> "Headset"
 }
 
 private fun CallSimpleState.label(direction: CallDirection): String = when (this) {

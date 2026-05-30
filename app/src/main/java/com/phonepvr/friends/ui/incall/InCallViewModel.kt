@@ -133,18 +133,27 @@ class InCallViewModel @Inject constructor(
 
     fun accept() = callSession.accept()
     fun reject() = callSession.reject()
+    fun rejectWith(message: String) = callSession.rejectWithMessage(message)
     fun end() = callSession.end()
 
     fun toggleMute() {
         callSession.setMuted(!state.value.audio.isMuted)
     }
 
-    fun toggleSpeaker() {
-        val next = if (state.value.audio.route == CallAudioRoute.SPEAKER) {
-            CallAudioRoute.EARPIECE
-        } else {
-            CallAudioRoute.SPEAKER
-        }
-        callSession.setRoute(next)
+    fun setAudioRoute(route: CallAudioRoute) {
+        callSession.setRoute(route)
+    }
+
+    /** Tap-and-release on an in-call dialpad key sends one DTMF tone. */
+    fun pressDtmf(digit: Char) {
+        callSession.playDtmf(digit)
+        callSession.stopDtmf()
     }
 }
+
+/** Pre-set "can't talk" replies offered on a long-press of Reject. */
+val QUICK_DECLINE_MESSAGES: List<String> = listOf(
+    "Can't talk right now — call you back.",
+    "On my way.",
+    "Can't talk. What's up?",
+)

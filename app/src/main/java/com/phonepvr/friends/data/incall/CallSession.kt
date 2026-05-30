@@ -115,8 +115,27 @@ class CallSession @Inject constructor() {
         currentCall?.reject(false, null)
     }
 
+    /**
+     * Rejects the call and asks Telecom to send [message] back as an SMS
+     * (the "can't talk right now" quick replies). The telephony layer
+     * delivers the text; Bondwidth itself never touches the network.
+     */
+    fun rejectWithMessage(message: String) {
+        currentCall?.reject(true, message)
+    }
+
     fun end() {
         currentCall?.disconnect()
+    }
+
+    /** Plays a DTMF tone for the in-call dialpad (IVR menus). */
+    fun playDtmf(digit: Char) {
+        currentCall?.playDtmfTone(digit)
+    }
+
+    /** Stops the currently-playing DTMF tone. */
+    fun stopDtmf() {
+        currentCall?.stopDtmfTone()
     }
 
     fun setMuted(muted: Boolean) {

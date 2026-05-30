@@ -266,6 +266,7 @@ private fun ContactRow(contact: BrowseContact, onClick: () -> Unit) {
         PersonAvatar(
             photoRelativePath = contact.photoRelativePath,
             displayName = contact.displayName,
+            photoUri = contact.photoUri,
         )
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {

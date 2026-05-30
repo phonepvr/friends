@@ -217,11 +217,12 @@ private fun Header(
             .padding(horizontal = 24.dp, vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        if (state.photoRelativePath != null) {
+        if (state.photoRelativePath != null || state.photoUri != null) {
             PersonAvatar(
                 photoRelativePath = state.photoRelativePath,
                 displayName = state.displayName ?: state.number,
                 diameter = 96.dp,
+                photoUri = state.photoUri,
             )
         } else {
             Box(

@@ -31,6 +31,8 @@ data class DialpadMatch(
     val matchedNumber: String,
     val isTracked: Boolean,
     val photoRelativePath: String?,
+    /** System contact photo URI, shown when there's no local bonded copy. */
+    val photoUri: String?,
 )
 
 data class DialpadUiState(
@@ -160,6 +162,7 @@ class DialpadViewModel @Inject constructor(
                     },
                     isTracked = person != null,
                     photoRelativePath = person?.photoRelativePath,
+                    photoUri = e.contact.photoUri,
                 ),
             )
             if (results.size >= MAX_MATCHES) break

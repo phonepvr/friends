@@ -222,6 +222,7 @@ fun SaveNumberScreen(
                         PersonAvatar(
                             photoRelativePath = null,
                             displayName = contact.displayName,
+                            photoUri = contact.photoUri,
                         )
                         Spacer(Modifier.width(16.dp))
                         Column(modifier = Modifier.weight(1f)) {

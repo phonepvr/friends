@@ -15,6 +15,8 @@ data class DeviceContact(
     val displayName: String,
     /** Raw phone strings as stored on the device. Empty if the contact has none. */
     val phoneNumbers: List<String> = emptyList(),
+    /** System contact photo content:// URI, or null when the contact has none. */
+    val photoUri: String? = null,
 )
 
 data class ContactDate(
@@ -71,6 +73,7 @@ class ContactsReader @Inject constructor(
                 ContactsContract.Contacts._ID,
                 ContactsContract.Contacts.LOOKUP_KEY,
                 ContactsContract.Contacts.DISPLAY_NAME_PRIMARY,
+                ContactsContract.Contacts.PHOTO_URI,
             ),
             null,
             null,
@@ -80,6 +83,8 @@ class ContactsReader @Inject constructor(
             val keyColumn = cursor.getColumnIndexOrThrow(ContactsContract.Contacts.LOOKUP_KEY)
             val nameColumn =
                 cursor.getColumnIndexOrThrow(ContactsContract.Contacts.DISPLAY_NAME_PRIMARY)
+            val photoColumn =
+                cursor.getColumnIndexOrThrow(ContactsContract.Contacts.PHOTO_URI)
             while (cursor.moveToNext()) {
                 val name = cursor.getString(nameColumn)?.takeIf { it.isNotBlank() } ?: continue
                 val id = cursor.getLong(idColumn)
@@ -89,6 +94,7 @@ class ContactsReader @Inject constructor(
                         lookupKey = cursor.getString(keyColumn).orEmpty(),
                         displayName = name,
                         phoneNumbers = phonesByContact[id].orEmpty(),
+                        photoUri = cursor.getString(photoColumn)?.takeIf { it.isNotBlank() },
                     ),
                 )
             }

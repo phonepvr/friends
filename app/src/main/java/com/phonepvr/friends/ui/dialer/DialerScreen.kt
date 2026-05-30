@@ -338,6 +338,7 @@ private fun RecentsContent(
             item(key = "__favourites_strip", contentType = "favourites") {
                 FavouritesStrip(
                     favourites = state.favourites,
+                    photoByLookupKey = state.favouritePhotoByLookupKey,
                     onCallFavourite = onCallFavourite,
                 )
             }
@@ -364,6 +365,7 @@ private fun RecentsContent(
 @Composable
 private fun FavouritesStrip(
     favourites: List<FavouriteContactEntity>,
+    photoByLookupKey: Map<String, String>,
     onCallFavourite: (FavouriteContactEntity) -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -385,7 +387,11 @@ private fun FavouritesStrip(
                 key = { it.lookupKey },
                 contentType = { "fav" },
             ) { fav ->
-                FavouriteTile(fav = fav, onClick = { onCallFavourite(fav) })
+                FavouriteTile(
+                    fav = fav,
+                    photoUri = photoByLookupKey[fav.lookupKey],
+                    onClick = { onCallFavourite(fav) },
+                )
             }
         }
     }
@@ -394,6 +400,7 @@ private fun FavouritesStrip(
 @Composable
 private fun FavouriteTile(
     fav: FavouriteContactEntity,
+    photoUri: String?,
     onClick: () -> Unit,
 ) {
     Column(
@@ -408,6 +415,7 @@ private fun FavouriteTile(
             photoRelativePath = fav.photoRelativePath,
             displayName = fav.displayName,
             diameter = 56.dp,
+            photoUri = photoUri,
         )
         Spacer(Modifier.height(6.dp))
         Text(
@@ -446,6 +454,7 @@ private fun RecentRow(
             PersonAvatar(
                 photoRelativePath = entry.photoRelativePath,
                 displayName = entry.displayName ?: entry.number,
+                photoUri = entry.photoUri,
             )
         }
         Spacer(Modifier.width(12.dp))
@@ -565,6 +574,7 @@ private fun RecentActionsSheet(
                 PersonAvatar(
                     photoRelativePath = entry.photoRelativePath,
                     displayName = entry.displayName ?: entry.number,
+                    photoUri = entry.photoUri,
                 )
                 Spacer(Modifier.width(12.dp))
                 Column {

@@ -27,6 +27,8 @@ data class BrowseContact(
     val isTracked: Boolean,
     val trackedPersonId: Long?,
     val photoRelativePath: String?,
+    /** System contact photo URI, shown when there's no local bonded copy. */
+    val photoUri: String?,
 )
 
 data class ContactsBrowserUiState(
@@ -72,6 +74,7 @@ class ContactsBrowserViewModel @Inject constructor(
                 isTracked = person != null,
                 trackedPersonId = person?.id,
                 photoRelativePath = person?.photoRelativePath,
+                photoUri = dc.photoUri,
             )
         }
         ContactsBrowserUiState(

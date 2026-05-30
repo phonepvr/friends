@@ -32,6 +32,8 @@ data class RecentEntry(
     val contactId: Long?,
     val isTracked: Boolean,
     val photoRelativePath: String?,
+    /** System contact photo URI, shown when there's no local bonded copy. */
+    val photoUri: String?,
     val type: CallType,
     val timestampMillis: Long,
     val durationSeconds: Long,
@@ -41,6 +43,8 @@ data class DialerUiState(
     val recents: List<RecentEntry> = emptyList(),
     val recentsLoaded: Boolean = false,
     val favourites: List<FavouriteContactEntity> = emptyList(),
+    /** Live system photo URI per favourite lookupKey, for the strip avatars. */
+    val favouritePhotoByLookupKey: Map<String, String> = emptyMap(),
     val placeError: String? = null,
 )
 
@@ -53,6 +57,12 @@ sealed interface CallTarget {
     data class Direct(val number: String) : CallTarget
     data class Pick(val displayName: String, val phones: List<ContactPhone>) : CallTarget
 }
+
+/** Two address-book indexes built together in one pass over the contacts list. */
+private data class ContactsIndex(
+    val byPhoneSuffix: Map<String, DeviceContact>,
+    val photoByLookupKey: Map<String, String>,
+)
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
@@ -78,17 +88,23 @@ class DialerViewModel @Inject constructor(
         if (granted) systemContactsRepository.observeAll() else flowOf(emptyList())
     }
 
-    private val contactByPhoneSuffix: Flow<Map<String, DeviceContact>> =
-        contactsFlow.map { contacts ->
-            val map = HashMap<String, DeviceContact>()
-            for (c in contacts) {
-                for (number in c.phoneNumbers) {
-                    val key = T9.digitsOnly(number).takeLast(SUFFIX_DIGITS)
-                    if (key.length >= 4 && key !in map) map[key] = c
-                }
+    // One pass over the address book yields both indexes the dialer needs:
+    // a phone-suffix → contact map (for matching a recents number to its
+    // saved identity) and a lookupKey → photo URI map (for the favourites
+    // strip, which is keyed by lookupKey).
+    private val contactsIndex: Flow<ContactsIndex> = contactsFlow.map { contacts ->
+        val byPhoneSuffix = HashMap<String, DeviceContact>()
+        val photoByLookupKey = HashMap<String, String>()
+        for (c in contacts) {
+            for (number in c.phoneNumbers) {
+                val key = T9.digitsOnly(number).takeLast(SUFFIX_DIGITS)
+                if (key.length >= 4 && key !in byPhoneSuffix) byPhoneSuffix[key] = c
             }
-            map
+            val photo = c.photoUri
+            if (c.lookupKey.isNotBlank() && photo != null) photoByLookupKey[c.lookupKey] = photo
         }
+        ContactsIndex(byPhoneSuffix, photoByLookupKey)
+    }
 
     private val trackedByKeyFlow = personDao.observeActive().map { tracked ->
         tracked.asSequence()
@@ -98,13 +114,13 @@ class DialerViewModel @Inject constructor(
 
     val state: StateFlow<DialerUiState> = combine(
         recentsFlow,
-        contactByPhoneSuffix,
+        contactsIndex,
         trackedByKeyFlow,
         favouritesRepository.observeAll(),
         placeError,
-    ) { calls, byDigits, trackedByKey, favourites, err ->
+    ) { calls, index, trackedByKey, favourites, err ->
         val recents = calls.map { call ->
-            val contact = lookupCallContact(call.number, byDigits)
+            val contact = lookupCallContact(call.number, index.byPhoneSuffix)
             val person = contact?.lookupKey?.let { trackedByKey[it] }
             RecentEntry(
                 number = call.number,
@@ -112,6 +128,7 @@ class DialerViewModel @Inject constructor(
                 contactId = contact?.contactId,
                 isTracked = person != null,
                 photoRelativePath = person?.photoRelativePath,
+                photoUri = contact?.photoUri,
                 type = call.type,
                 timestampMillis = call.timestampMillis,
                 durationSeconds = call.durationSeconds,
@@ -121,6 +138,7 @@ class DialerViewModel @Inject constructor(
             recents = recents,
             recentsLoaded = true,
             favourites = favourites,
+            favouritePhotoByLookupKey = index.photoByLookupKey,
             placeError = err,
         )
     }.stateIn(

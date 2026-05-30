@@ -25,6 +25,8 @@ data class CallHistoryUiState(
     val contactId: Long? = null,
     val displayName: String? = null,
     val photoRelativePath: String? = null,
+    /** System contact photo URI, shown when there's no local bonded copy. */
+    val photoUri: String? = null,
     val isBonded: Boolean = false,
     val bondedPersonId: Long? = null,
     val calls: List<DeviceCall> = emptyList(),
@@ -78,6 +80,7 @@ class CallHistoryViewModel @Inject constructor(
             contactId = contact?.contactId,
             displayName = contact?.displayName,
             photoRelativePath = person?.photoRelativePath,
+            photoUri = contact?.photoUri,
             isBonded = person != null,
             bondedPersonId = person?.id,
             calls = callsForNumber,

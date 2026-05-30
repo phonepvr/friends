@@ -277,6 +277,7 @@ private fun MatchRow(
         PersonAvatar(
             photoRelativePath = match.photoRelativePath,
             displayName = match.displayName,
+            photoUri = match.photoUri,
         )
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {

@@ -4,6 +4,15 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
 import com.phonepvr.friends.data.db.entity.PhoneNumberEntity
+import kotlinx.coroutines.flow.Flow
+
+/** A bonded (active) person's number, flattened for call-log matching. */
+data class BondedNumberRow(
+    val personId: Long,
+    val displayName: String,
+    val photoRelativePath: String?,
+    val normalizedNumber: String,
+)
 
 @Dao
 interface PhoneNumberDao {
@@ -34,4 +43,21 @@ interface PhoneNumberDao {
 
     @Query("SELECT * FROM phone_numbers")
     suspend fun getAll(): List<PhoneNumberEntity>
+
+    /**
+     * Every phone number belonging to a non-archived person, joined with
+     * that person's name + photo. Powers the Width call-analytics bond
+     * classification (a call counts as "bond" when its number suffix
+     * matches one of these). Reactive — re-emits when people or their
+     * numbers change.
+     */
+    @Query(
+        "SELECT p.id AS personId, p.displayName AS displayName, " +
+            "p.photoRelativePath AS photoRelativePath, " +
+            "pn.normalizedNumber AS normalizedNumber " +
+            "FROM phone_numbers pn " +
+            "INNER JOIN people p ON pn.personId = p.id " +
+            "WHERE p.isArchived = 0",
+    )
+    fun observeActiveBondedNumbers(): Flow<List<BondedNumberRow>>
 }

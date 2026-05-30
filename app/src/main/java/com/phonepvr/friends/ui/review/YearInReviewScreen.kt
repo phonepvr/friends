@@ -22,11 +22,17 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -36,6 +42,8 @@ import com.phonepvr.friends.domain.model.InteractionType
 import com.phonepvr.friends.domain.review.GapStat
 import com.phonepvr.friends.domain.review.ReviewYear
 import com.phonepvr.friends.ui.common.formatDate
+
+private enum class WidthTab { CALLS, REFLECTION }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -49,10 +57,12 @@ fun YearInReviewScreen(
     val includeSilent by viewModel.includeSilent.collectAsStateWithLifecycle()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
+    var tab by remember { mutableStateOf(WidthTab.CALLS) }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Year in review") },
+                title = { Text("Width") },
                 navigationIcon = {
                     // Hidden in tab mode (bottom-nav handles navigation); shown
                     // when launched from inside another flow.
@@ -75,19 +85,40 @@ fun YearInReviewScreen(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState()),
         ) {
-            YearChipRow(
-                years = availableYears,
-                selected = selectedYear,
-                onSelect = viewModel::setYear,
-            )
-            when (val s = state) {
-                ReviewUiState.Loading -> Unit
-                is ReviewUiState.Sparse -> SparsePlaceholder(year = s.year)
-                is ReviewUiState.Loaded -> ReviewBody(
-                    review = s.review,
-                    includeSilent = includeSilent,
-                    onIncludeSilentChange = viewModel::setIncludeSilent,
-                )
+            SingleChoiceSegmentedButtonRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+            ) {
+                SegmentedButton(
+                    selected = tab == WidthTab.CALLS,
+                    onClick = { tab = WidthTab.CALLS },
+                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                ) { Text("Calls") }
+                SegmentedButton(
+                    selected = tab == WidthTab.REFLECTION,
+                    onClick = { tab = WidthTab.REFLECTION },
+                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                ) { Text("Reflection") }
+            }
+            when (tab) {
+                WidthTab.CALLS -> CallAnalyticsSection()
+                WidthTab.REFLECTION -> {
+                    YearChipRow(
+                        years = availableYears,
+                        selected = selectedYear,
+                        onSelect = viewModel::setYear,
+                    )
+                    when (val s = state) {
+                        ReviewUiState.Loading -> Unit
+                        is ReviewUiState.Sparse -> SparsePlaceholder(year = s.year)
+                        is ReviewUiState.Loaded -> ReviewBody(
+                            review = s.review,
+                            includeSilent = includeSilent,
+                            onIncludeSilentChange = viewModel::setIncludeSilent,
+                        )
+                    }
+                }
             }
         }
     }

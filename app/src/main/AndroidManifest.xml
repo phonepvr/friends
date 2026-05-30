@@ -44,6 +44,19 @@
     <!-- Required for hosting the InCallService while a call is active. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 
+    <!-- Keep the device awake during a call (the in-call activity already
+         uses FLAG_KEEP_SCREEN_ON, but the service can run when the screen
+         is off if the user dismisses the call UI). -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- Route call audio through speaker / bluetooth / earpiece. -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+
+    <!-- Required on Android 14+ for the in-call Activity to be launched
+         from a full-screen intent (incoming call ringer). Auto-granted
+         for apps that hold ROLE_DIALER. -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+
     <!-- Post reminder notifications (runtime permission on Android 13+). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
@@ -92,22 +105,12 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-        </activity>
-
-        <!--
-          activity-alias makes Bondwidth a candidate target for the
-          platform's ACTION_DIAL intent (tel: links across the OS,
-          contacts-app call buttons, etc.). Launching this alias just
-          opens MainActivity, which routes the ACTION_DIAL intent to the
-          Calls tab via deepLinkFor(). Required for ROLE_DIALER
-          qualification when the in-call UI ships in Phase 5.
-        -->
-        <activity-alias
-            android:name=".DialerAlias"
-            android:targetActivity=".MainActivity"
-            android:exported="true"
-            android:enabled="true"
-            android:label="@string/app_name">
+            <!--
+              ROLE_DIALER qualifier requires Activities (not activity-aliases)
+              that handle ACTION_DIAL with and without tel: data. MainActivity
+              picks up these filters; deepLinkFor() routes them to the Calls
+              tab / full-screen Dialpad with the number pre-filled.
+            -->
             <intent-filter>
                 <action android:name="android.intent.action.DIAL" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -123,7 +126,16 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="tel" />
             </intent-filter>
-        </activity-alias>
+        </activity>
+
+        <!--
+          activity-alias removed — ROLE_DIALER qualification requires
+          intent filters on a real <activity>, and the MainActivity
+          declaration above carries them. Aliases were tolerated by the
+          PackageManager.queryIntentActivities() check but rejected by
+          the role qualifier on at least some OEMs ("App was denied
+          access to be the default Phone app").
+        -->
 
         <receiver
             android:name=".widget.UpcomingWidgetReceiver"
@@ -150,8 +162,9 @@
         -->
         <service
             android:name=".service.BondwidthInCallService"
-            android:permission="android.permission.BIND_INCALL_SERVICE"
-            android:exported="true">
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.BIND_INCALL_SERVICE">
             <meta-data
                 android:name="android.telecom.IN_CALL_SERVICE_UI"
                 android:value="true" />

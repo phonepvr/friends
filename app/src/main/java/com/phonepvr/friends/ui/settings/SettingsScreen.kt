@@ -3,6 +3,7 @@ package com.phonepvr.friends.ui.settings
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import android.content.Intent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -10,9 +11,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.core.net.toUri
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -71,6 +74,7 @@ fun SettingsScreen(
     val isDefaultDialer by viewModel.isDefaultDialer.collectAsStateWithLifecycle()
     var activeDialog by remember { mutableStateOf<SettingsDialog?>(null) }
     var showLockUnavailable by remember { mutableStateOf(false) }
+    var showUpdateDialog by remember { mutableStateOf(false) }
 
     // Re-read the default-dialer state every time Settings becomes
     // foreground: if the user toggled the role in another app between
@@ -247,6 +251,19 @@ fun SettingsScreen(
             )
 
             HorizontalDivider()
+            SectionHeader("Updates")
+            ListItem(
+                headlineContent = { Text("Update Bondwidth") },
+                supportingContent = {
+                    Text(
+                        "Bondwidth has no internet, so it can't update itself. " +
+                            "Tap to see how to install the latest version manually.",
+                    )
+                },
+                modifier = Modifier.clickable { showUpdateDialog = true },
+            )
+
+            HorizontalDivider()
             SectionHeader("Personalisation")
             ListItem(
                 headlineContent = { Text("My quotes") },
@@ -324,6 +341,48 @@ fun SettingsScreen(
         null -> Unit
     }
 
+    if (showUpdateDialog) {
+        AlertDialog(
+            onDismissRequest = { showUpdateDialog = false },
+            title = { Text("Updating Bondwidth") },
+            text = {
+                Column {
+                    Text(
+                        "Bondwidth never asks for the INTERNET permission, " +
+                            "so it can't fetch updates on its own. New builds " +
+                            "land on GitHub Releases as signed APKs and you " +
+                            "install them by hand.",
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text("To update:")
+                    Spacer(Modifier.height(4.dp))
+                    Text("1.  Tap “Open releases page” below — this opens GitHub in your browser.")
+                    Text("2.  Pick the newest Bondwidth-v*.apk under Assets.")
+                    Text("3.  Open the downloaded file from your notifications or your file manager and tap Install. Android applies the update on top of your existing app.")
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        "Every release uses the same signing key, so updates " +
+                            "install cleanly without touching your bonds, " +
+                            "timeline or settings.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showUpdateDialog = false
+                        openReleasesPage(context)
+                    },
+                ) { Text("Open releases page") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUpdateDialog = false }) { Text("Close") }
+            },
+        )
+    }
+
     if (showLockUnavailable) {
         AlertDialog(
             onDismissRequest = { showLockUnavailable = false },
@@ -339,6 +398,14 @@ fun SettingsScreen(
             },
         )
     }
+}
+
+private const val RELEASES_URL = "https://github.com/phonepvr/friends/releases"
+
+private fun openReleasesPage(context: android.content.Context) {
+    val intent = Intent(Intent.ACTION_VIEW, RELEASES_URL.toUri())
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    runCatching { context.startActivity(intent) }
 }
 
 @Composable

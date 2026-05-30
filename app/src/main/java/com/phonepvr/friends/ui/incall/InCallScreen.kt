@@ -11,10 +11,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CallEnd
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.VolumeUp
@@ -43,6 +46,7 @@ import com.phonepvr.friends.data.incall.CallAudioRoute
 import com.phonepvr.friends.data.incall.CallDirection
 import com.phonepvr.friends.data.incall.CallSimpleState
 import com.phonepvr.friends.data.incall.CallSnapshot
+import com.phonepvr.friends.ui.components.PersonAvatar
 import kotlinx.coroutines.delay
 import java.util.Locale
 
@@ -67,7 +71,11 @@ fun InCallScreen(
                 .padding(horizontal = 24.dp, vertical = 48.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Header(snapshot = snapshot, callEnded = state.callEnded)
+            Header(
+                snapshot = snapshot,
+                bondedPerson = state.bondedPerson,
+                callEnded = state.callEnded,
+            )
             Spacer(Modifier.weight(1f))
             when {
                 state.callEnded -> EndingFooter()
@@ -88,8 +96,16 @@ fun InCallScreen(
 }
 
 @Composable
-private fun Header(snapshot: CallSnapshot?, callEnded: Boolean) {
-    val displayName = snapshot?.callerDisplayName ?: snapshot?.number ?: ""
+private fun Header(
+    snapshot: CallSnapshot?,
+    bondedPerson: MatchedBondedPerson?,
+    callEnded: Boolean,
+) {
+    // Bonded match takes priority — that's how the user knows this contact.
+    val displayName = bondedPerson?.displayName
+        ?: snapshot?.callerDisplayName
+        ?: snapshot?.number
+        ?: ""
     val statusText = when {
         callEnded -> "Call ended"
         snapshot == null -> "Connecting…"
@@ -102,21 +118,29 @@ private fun Header(snapshot: CallSnapshot?, callEnded: Boolean) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(24.dp))
-        // Big initial avatar — Phase 5 doesn't yet pull the local photo
-        // for the matched contact; that's the next refinement.
-        Box(
-            modifier = Modifier
-                .size(120.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primaryContainer),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = displayName.trim().firstOrNull()?.uppercase() ?: "?",
-                fontSize = 48.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
+        // Use the bonded person's saved photo when we have one; otherwise
+        // fall back to a tinted initial bubble.
+        if (bondedPerson?.photoRelativePath != null) {
+            PersonAvatar(
+                photoRelativePath = bondedPerson.photoRelativePath,
+                displayName = displayName,
+                diameter = 120.dp,
             )
+        } else {
+            Box(
+                modifier = Modifier
+                    .size(120.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = displayName.trim().firstOrNull()?.uppercase() ?: "?",
+                    fontSize = 48.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
         }
         Spacer(Modifier.height(20.dp))
         Text(
@@ -125,7 +149,19 @@ private fun Header(snapshot: CallSnapshot?, callEnded: Boolean) {
             textAlign = TextAlign.Center,
             fontWeight = FontWeight.SemiBold,
         )
-        if (snapshot?.callerDisplayName != null && snapshot.number.isNotBlank()) {
+        if (bondedPerson != null) {
+            Spacer(Modifier.height(8.dp))
+            BondedChip()
+            bondedPerson.daysSinceLastContact?.let { days ->
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = lastSpokeLabel(days),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        if (snapshot != null && snapshot.number.isNotBlank() && displayName != snapshot.number) {
             Spacer(Modifier.height(4.dp))
             Text(
                 text = snapshot.number,
@@ -138,6 +174,38 @@ private fun Header(snapshot: CallSnapshot?, callEnded: Boolean) {
             DurationTicker(connectTimeMillis = snapshot.connectTimeMillis)
         }
     }
+}
+
+@Composable
+private fun BondedChip() {
+    Surface(
+        shape = RoundedCornerShape(50),
+        color = MaterialTheme.colorScheme.secondaryContainer,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Favorite,
+                contentDescription = null,
+                modifier = Modifier.size(14.dp),
+                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = "Bonded",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+            )
+        }
+    }
+}
+
+private fun lastSpokeLabel(daysAgo: Int): String = when (daysAgo) {
+    0 -> "Spoke today"
+    1 -> "Spoke yesterday"
+    else -> "Last spoke $daysAgo days ago"
 }
 
 @Composable

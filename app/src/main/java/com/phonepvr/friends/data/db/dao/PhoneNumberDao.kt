@@ -19,6 +19,19 @@ interface PhoneNumberDao {
     @Query("SELECT * FROM phone_numbers WHERE normalizedNumber = :normalizedNumber")
     suspend fun findByNormalizedNumber(normalizedNumber: String): List<PhoneNumberEntity>
 
+    /**
+     * Suffix match — finds the first stored number whose normalizedNumber
+     * ends in [suffix]. Used by the in-call UI to resolve a caller's number
+     * to a tracked person even when the caller-ID has a different country
+     * code prefix than what was saved.
+     */
+    @Query(
+        "SELECT * FROM phone_numbers " +
+            "WHERE normalizedNumber LIKE '%' || :suffix " +
+            "LIMIT 1",
+    )
+    suspend fun findOneByNumberSuffix(suffix: String): PhoneNumberEntity?
+
     @Query("SELECT * FROM phone_numbers")
     suspend fun getAll(): List<PhoneNumberEntity>
 }

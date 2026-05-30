@@ -182,7 +182,7 @@ private fun ContactList(
                 selected = state.filterMode == ContactsFilterMode.TRACKED,
                 onClick = { onFilterChange(ContactsFilterMode.TRACKED) },
                 label = {
-                    Text("Tracked (${state.contacts.count { it.isTracked }})")
+                    Text("Bonded (${state.contacts.count { it.isTracked }})")
                 },
             )
         }
@@ -195,8 +195,8 @@ private fun ContactList(
                 val msg = when {
                     state.query.isNotBlank() -> "No contacts match “${state.query}”"
                     state.filterMode == ContactsFilterMode.TRACKED ->
-                        "No tracked contacts yet. Open any contact and turn on " +
-                            "“Track in Bondwidth” to start."
+                        "No bonds yet. Open any contact and tap " +
+                            "“Add to Bonds” to start."
                     else -> "No contacts on this device."
                 }
                 Text(
@@ -243,12 +243,12 @@ private fun ContactRow(contact: BrowseContact, onClick: () -> Unit) {
                 )
             }
         }
-        if (contact.isTracked) TrackedChip()
+        if (contact.isTracked) BondedChip()
     }
 }
 
 @Composable
-private fun TrackedChip() {
+private fun BondedChip() {
     Surface(
         shape = RoundedCornerShape(50),
         color = MaterialTheme.colorScheme.secondaryContainer,
@@ -265,7 +265,7 @@ private fun TrackedChip() {
             )
             Spacer(Modifier.width(4.dp))
             Text(
-                text = "Tracked",
+                text = "Bonded",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
             )

@@ -77,7 +77,7 @@ fun ContactDetailScreen(
             text = {
                 Text(
                     "This removes the contact from your phone for good. " +
-                        "If they're tracked in Bondwidth, their cadence " +
+                        "If they're bonded in Bondwidth, their cadence " +
                         "and timeline are archived but kept.",
                 )
             },
@@ -255,13 +255,13 @@ private fun Header(
                 ) {
                     Icon(Icons.Filled.Favorite, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Tracked — tap to stop")
+                    Text("Bonded — tap to remove")
                 }
             } else {
                 Button(onClick = onToggle, enabled = !mutating) {
                     Icon(Icons.Filled.FavoriteBorder, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Track in Bondwidth")
+                    Text("Add to Bonds")
                 }
             }
             if (onOpenPerson != null) {

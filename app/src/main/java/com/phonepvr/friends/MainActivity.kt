@@ -109,6 +109,14 @@ class MainActivity : FragmentActivity() {
         if (intent.getBooleanExtra(EXTRA_OPEN_BACKUP, false)) return Routes.BACKUP
         val personId = intent.getLongExtra(EXTRA_OPEN_PERSON_ID, -1L)
         if (personId > 0L) return Routes.personDetail(personId)
+        // The dialer activity-alias forwards ACTION_DIAL + ACTION_VIEW (tel:)
+        // here. Phase 7 will pre-fill the dialpad with intent.data; for now
+        // we just land on the Calls tab.
+        if (intent.action == Intent.ACTION_DIAL ||
+            (intent.action == Intent.ACTION_VIEW && intent.data?.scheme == "tel")
+        ) {
+            return Routes.DIALER
+        }
         return null
     }
 

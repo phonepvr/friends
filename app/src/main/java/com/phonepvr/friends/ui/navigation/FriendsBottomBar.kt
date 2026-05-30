@@ -20,10 +20,9 @@ enum class TopLevelTab(
     /** False means the tab is hidden when [Features.ALL_IN_ONE] is off. */
     val gatedByAllInOne: Boolean = false,
 ) {
-    PEOPLE(Routes.PEOPLE_LIST, "People", Icons.Filled.Person),
     PHONE(
         route = Routes.DIALER,
-        label = "Phone",
+        label = "Calls",
         icon = Icons.Filled.Phone,
         gatedByAllInOne = true,
     ),
@@ -33,7 +32,8 @@ enum class TopLevelTab(
         icon = Icons.Filled.Contacts,
         gatedByAllInOne = true,
     ),
-    YEAR_IN_REVIEW(Routes.YEAR_IN_REVIEW, "Year", Icons.Filled.DateRange),
+    PEOPLE(Routes.PEOPLE_LIST, "Bonds", Icons.Filled.Person),
+    YEAR_IN_REVIEW(Routes.YEAR_IN_REVIEW, "Width", Icons.Filled.DateRange),
 }
 
 @Composable

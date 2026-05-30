@@ -94,6 +94,37 @@
             </intent-filter>
         </activity>
 
+        <!--
+          activity-alias makes Bondwidth a candidate target for the
+          platform's ACTION_DIAL intent (tel: links across the OS,
+          contacts-app call buttons, etc.). Launching this alias just
+          opens MainActivity, which routes the ACTION_DIAL intent to the
+          Calls tab via deepLinkFor(). Required for ROLE_DIALER
+          qualification when the in-call UI ships in Phase 5.
+        -->
+        <activity-alias
+            android:name=".DialerAlias"
+            android:targetActivity=".MainActivity"
+            android:exported="true"
+            android:enabled="true"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.intent.action.DIAL" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.DIAL" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="tel" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="tel" />
+            </intent-filter>
+        </activity-alias>
+
         <receiver
             android:name=".widget.UpcomingWidgetReceiver"
             android:exported="false">

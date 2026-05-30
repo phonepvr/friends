@@ -1,6 +1,8 @@
 package com.phonepvr.friends.ui.settings
 
 import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -29,6 +31,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,6 +42,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.phonepvr.friends.domain.model.ThemeMode
 import com.phonepvr.friends.ui.lock.isAppLockAvailable
@@ -62,8 +68,27 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val settings by viewModel.settings.collectAsStateWithLifecycle()
+    val isDefaultDialer by viewModel.isDefaultDialer.collectAsStateWithLifecycle()
     var activeDialog by remember { mutableStateOf<SettingsDialog?>(null) }
     var showLockUnavailable by remember { mutableStateOf(false) }
+
+    // Re-read the default-dialer state every time Settings becomes
+    // foreground: if the user toggled the role in another app between
+    // visits, the row reflects it without a restart.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.refreshDialerRoleState()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    val dialerRoleLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { viewModel.refreshDialerRoleState() }
 
     Scaffold(
         topBar = {
@@ -139,6 +164,29 @@ fun SettingsScreen(
                     Text("Every ${daysLabel(settings.defaultCadenceDays)}")
                 },
                 modifier = Modifier.clickable { activeDialog = SettingsDialog.CADENCE },
+            )
+
+            HorizontalDivider()
+            SectionHeader("Phone app")
+            ListItem(
+                headlineContent = { Text("Default phone app") },
+                supportingContent = {
+                    Text(
+                        if (isDefaultDialer) {
+                            "Bondwidth handles calls on this device."
+                        } else {
+                            // Phase 5 will add the in-call UI required for
+                            // the system to accept Bondwidth as default.
+                            // Until then, tapping opens the picker but
+                            // Bondwidth may not appear yet.
+                            "Tap to choose Bondwidth as your phone app."
+                        },
+                    )
+                },
+                modifier = Modifier.clickable {
+                    val intent = viewModel.makeAcquireDialerRoleIntent() ?: return@clickable
+                    dialerRoleLauncher.launch(intent)
+                },
             )
 
             HorizontalDivider()

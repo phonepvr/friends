@@ -18,7 +18,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Message
-import androidx.compose.material.icons.filled.AddCall
+import androidx.compose.material.icons.filled.AddIcCall
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CallEnd
@@ -554,7 +554,7 @@ private fun OngoingControls(
         if (heldSnapshot == null) {
             TextButton(onClick = onAddCall, modifier = Modifier.padding(bottom = 16.dp)) {
                 Icon(
-                    imageVector = Icons.Filled.AddCall,
+                    imageVector = Icons.Filled.AddIcCall,
                     contentDescription = null,
                     modifier = Modifier.size(18.dp),
                 )

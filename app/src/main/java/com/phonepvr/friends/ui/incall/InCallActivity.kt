@@ -1,5 +1,6 @@
 package com.phonepvr.friends.ui.incall
 
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
@@ -10,6 +11,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.phonepvr.friends.MainActivity
 import com.phonepvr.friends.ui.theme.FriendsTheme
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.delay
@@ -68,9 +70,26 @@ class InCallActivity : ComponentActivity() {
                         onToggleMute = viewModel::toggleMute,
                         onSetAudioRoute = viewModel::setAudioRoute,
                         onDtmf = viewModel::pressDtmf,
+                        onToggleHold = viewModel::toggleHold,
+                        onSwap = viewModel::swap,
+                        onAddCall = ::openDialpadForAddCall,
                     )
                 }
             }
         }
+    }
+
+    /**
+     * Opens MainActivity's dialpad in a separate task so the user can
+     * dial a second number. Telecom puts the current call on hold the
+     * moment a second leg starts; when that second call lands the
+     * InCallService re-launches this activity over the new call.
+     */
+    private fun openDialpadForAddCall() {
+        val intent = Intent(this, MainActivity::class.java).apply {
+            action = Intent.ACTION_DIAL
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        runCatching { startActivity(intent) }
     }
 }

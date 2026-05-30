@@ -53,6 +53,10 @@ data class InCallUiState(
     val callerName: String? = null,
     /** System contact photo URI for the caller, when available. */
     val callerPhotoUri: String? = null,
+    /** The non-primary call, when there's a second call on hold (for swap UI). */
+    val heldSnapshot: CallSnapshot? = null,
+    /** Best-effort display name for the held call. */
+    val heldName: String? = null,
     val callEnded: Boolean = false,
 )
 
@@ -111,15 +115,25 @@ class InCallViewModel @Inject constructor(
         }
     }
 
+    // Pre-merge bonded inputs so the main combine stays at ≤5 typed args.
+    private data class BondedRaw(
+        val person: com.phonepvr.friends.data.db.entity.PersonEntity?,
+        val lastContactMs: Long?,
+    )
+
+    private val bondedRaw: Flow<BondedRaw> = combine(matchedPerson, lastContactAtMs) { p, lc ->
+        BondedRaw(p, lc)
+    }
+
     val state: StateFlow<InCallUiState> = combine(
         callSession.snapshot,
         callSession.audio,
-        matchedPerson,
-        lastContactAtMs,
+        bondedRaw,
         callerIdentity,
-    ) { snapshot, audio, person, lastContact, identity ->
-        val bonded = person?.takeIf { !it.isArchived }?.let { p ->
-            val lastContactDate = lastContact?.let { ms ->
+        callSession.heldSnapshot,
+    ) { snapshot, audio, bonded, identity, held ->
+        val bondedPerson = bonded.person?.takeIf { !it.isArchived }?.let { p ->
+            val lastContactDate = bonded.lastContactMs?.let { ms ->
                 Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault()).toLocalDate()
             }
             val cadence = CadenceCalculator.status(
@@ -132,7 +146,7 @@ class InCallViewModel @Inject constructor(
                 displayName = p.displayName,
                 photoRelativePath = p.photoRelativePath,
                 cadenceTargetDays = p.cadenceTargetDays,
-                daysSinceLastContact = lastContact?.let { ms ->
+                daysSinceLastContact = bonded.lastContactMs?.let { ms ->
                     TimeUnit.MILLISECONDS
                         .toDays(System.currentTimeMillis() - ms)
                         .toInt()
@@ -144,9 +158,11 @@ class InCallViewModel @Inject constructor(
         InCallUiState(
             snapshot = snapshot,
             audio = audio,
-            bondedPerson = bonded,
+            bondedPerson = bondedPerson,
             callerName = identity.displayName,
             callerPhotoUri = identity.photoUri,
+            heldSnapshot = held,
+            heldName = held?.callerDisplayName ?: held?.number?.takeIf { it.isNotBlank() },
             callEnded = snapshot == null ||
                 snapshot.state == CallSimpleState.DISCONNECTED,
         )
@@ -168,6 +184,22 @@ class InCallViewModel @Inject constructor(
     fun setAudioRoute(route: CallAudioRoute) {
         callSession.setRoute(route)
     }
+
+    /**
+     * Toggle the primary call between active and on-hold. When a second
+     * call is parked on hold, the platform handles the cross-fade itself —
+     * this just flips the primary's state.
+     */
+    fun toggleHold() {
+        if (state.value.snapshot?.state == CallSimpleState.HOLDING) {
+            callSession.unhold()
+        } else {
+            callSession.hold()
+        }
+    }
+
+    /** Swap which call is active when two calls are present. */
+    fun swap() = callSession.swap()
 
     /** Tap-and-release on an in-call dialpad key sends one DTMF tone. */
     fun pressDtmf(digit: Char) {

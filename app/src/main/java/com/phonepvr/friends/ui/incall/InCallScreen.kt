@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Message
+import androidx.compose.material.icons.filled.AddCall
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CallEnd
@@ -26,8 +27,12 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Headset
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PhoneInTalk
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.SwapCalls
 import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
@@ -78,6 +83,9 @@ fun InCallScreen(
     onToggleMute: () -> Unit,
     onSetAudioRoute: (CallAudioRoute) -> Unit,
     onDtmf: (Char) -> Unit,
+    onToggleHold: () -> Unit,
+    onSwap: () -> Unit,
+    onAddCall: () -> Unit,
 ) {
     val snapshot = state.snapshot
     var showKeypad by remember { mutableStateOf(false) }
@@ -120,10 +128,17 @@ fun InCallScreen(
                     isMuted = state.audio.isMuted,
                     route = state.audio.route,
                     availableRoutes = state.audio.availableRoutes,
+                    canHold = snapshot.canHold,
+                    isHeld = snapshot.state == CallSimpleState.HOLDING,
+                    heldSnapshot = state.heldSnapshot,
+                    heldName = state.heldName,
                     onEnd = onEnd,
                     onToggleMute = onToggleMute,
                     onShowKeypad = { showKeypad = true },
                     onSetAudioRoute = onSetAudioRoute,
+                    onToggleHold = onToggleHold,
+                    onSwap = onSwap,
+                    onAddCall = onAddCall,
                 )
             }
         }
@@ -412,10 +427,17 @@ private fun OngoingControls(
     isMuted: Boolean,
     route: CallAudioRoute,
     availableRoutes: Set<CallAudioRoute>,
+    canHold: Boolean,
+    isHeld: Boolean,
+    heldSnapshot: CallSnapshot?,
+    heldName: String?,
     onEnd: () -> Unit,
     onToggleMute: () -> Unit,
     onShowKeypad: () -> Unit,
     onSetAudioRoute: (CallAudioRoute) -> Unit,
+    onToggleHold: () -> Unit,
+    onSwap: () -> Unit,
+    onAddCall: () -> Unit,
 ) {
     var showRoutePicker by remember { mutableStateOf(false) }
     // Only earpiece + speaker on this device → a simple toggle. Bluetooth or
@@ -437,10 +459,17 @@ private fun OngoingControls(
     }
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        if (heldSnapshot != null) {
+            HeldCallBanner(
+                heldName = heldName ?: "On hold",
+                onSwap = onSwap,
+            )
+            Spacer(Modifier.height(16.dp))
+        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 32.dp),
+                .padding(bottom = 16.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
         ) {
             ToggleButton(
@@ -449,6 +478,14 @@ private fun OngoingControls(
                 active = isMuted,
                 onClick = onToggleMute,
             )
+            if (canHold) {
+                ToggleButton(
+                    icon = if (isHeld) Icons.Filled.PlayArrow else Icons.Filled.Pause,
+                    label = if (isHeld) "Resume" else "Hold",
+                    active = isHeld,
+                    onClick = onToggleHold,
+                )
+            }
             ToggleButton(
                 icon = Icons.Filled.Dialpad,
                 label = "Keypad",
@@ -474,6 +511,21 @@ private fun OngoingControls(
                 },
             )
         }
+        // Only offer "Add call" while we're already 1-on-1; the platform
+        // won't accept a third leg so hiding the entry point is honest.
+        if (heldSnapshot == null) {
+            TextButton(onClick = onAddCall, modifier = Modifier.padding(bottom = 16.dp)) {
+                Icon(
+                    imageVector = Icons.Filled.AddCall,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text("Add call")
+            }
+        } else {
+            Spacer(Modifier.height(16.dp))
+        }
         ActionButton(
             icon = Icons.Filled.CallEnd,
             label = "End call",
@@ -481,6 +533,42 @@ private fun OngoingControls(
             contentColor = MaterialTheme.colorScheme.onError,
             onClick = onEnd,
         )
+    }
+}
+
+@Composable
+private fun HeldCallBanner(heldName: String, onSwap: () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "On hold",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+                Text(
+                    text = heldName,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+            }
+            TextButton(onClick = onSwap) {
+                Icon(
+                    imageVector = Icons.Filled.SwapCalls,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text("Swap")
+            }
+        }
     }
 }
 

@@ -34,9 +34,11 @@ import javax.inject.Inject
  * reliably fire on idle / locked devices and on aggressive OEMs (Xiaomi
  * HyperOS, Samsung One UI) that otherwise drop call notifications.
  *
- * v1 single-call assumption for the UI: the latest-added Call is the one
- * the screen shows. Held / waiting calls are tracked at the service level
- * (for foreground bookkeeping) but a richer multi-call UI is Phase 8c.
+ * Multi-call lifecycle: CallSession is the source of truth for the list
+ * of live calls. This service is only responsible for forwarding Telecom
+ * events (onCallAdded / onCallRemoved / Call.Callback per entry) and for
+ * the foreground-service bookkeeping (start on first call, stop when the
+ * last call is gone).
  */
 @AndroidEntryPoint
 class BondwidthInCallService : InCallService() {
@@ -47,7 +49,6 @@ class BondwidthInCallService : InCallService() {
     @Inject lateinit var ringer: Ringer
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-    private val activeCalls = mutableSetOf<Call>()
     private var inForeground = false
 
     private val callCallback = object : Call.Callback() {
@@ -64,7 +65,6 @@ class BondwidthInCallService : InCallService() {
 
     override fun onCallAdded(call: Call) {
         super.onCallAdded(call)
-        activeCalls += call
         callSession.attachService(this)
         callSession.attachCall(call)
         call.registerCallback(callCallback)
@@ -80,11 +80,10 @@ class BondwidthInCallService : InCallService() {
 
     override fun onCallRemoved(call: Call) {
         super.onCallRemoved(call)
-        activeCalls -= call
         call.unregisterCallback(callCallback)
         callSession.detachCall(call)
-        ringer.stop()
-        if (activeCalls.isEmpty()) {
+        if (!callSession.hasActiveCall()) {
+            ringer.stop()
             if (inForeground) {
                 stopForeground(Service.STOP_FOREGROUND_REMOVE)
                 inForeground = false

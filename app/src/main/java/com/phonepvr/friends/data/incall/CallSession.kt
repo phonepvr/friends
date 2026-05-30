@@ -33,6 +33,8 @@ data class CallSnapshot(
     /** Wall-clock ms when the call first reached ACTIVE — drives the timer. */
     val connectTimeMillis: Long?,
     val isVideo: Boolean,
+    /** True iff the platform reports CAPABILITY_HOLD for this Call. */
+    val canHold: Boolean = false,
 )
 
 data class AudioSnapshot(
@@ -45,24 +47,36 @@ data class AudioSnapshot(
  * Process singleton that bridges the [android.telecom.InCallService] and
  * the Compose in-call UI. The service writes here when calls are added /
  * change state / receive an audio update; the Activity reads via StateFlow
- * and calls back here to drive mute / speaker / accept / reject / end.
+ * and calls back here to drive mute / speaker / accept / reject / end /
+ * hold / swap.
  *
- * Lifecycle: the service holds a single active [android.telecom.Call] at
- * a time in v1 (multi-call is Phase 7). When the call ends the service
- * clears its reference here so the Activity's collector receives a null
- * and pops itself off.
+ * Multi-call awareness: holds a list of live [android.telecom.Call]s, each
+ * paired with its derived [CallSnapshot]. The "primary" call is whichever
+ * one the UI should foreground — usually the ACTIVE one, falling back to
+ * DIALING / RINGING / HOLDING in priority order. The "held" snapshot is
+ * the other call when there are two and one is on hold, so the in-call UI
+ * can render the swap surface.
  */
 @Singleton
 class CallSession @Inject constructor() {
 
+    private data class TrackedCall(
+        val call: Call,
+        val snapshot: CallSnapshot,
+    )
+
     @Volatile
-    private var currentCall: Call? = null
+    private var calls: List<TrackedCall> = emptyList()
 
     @Volatile
     private var service: InCallService? = null
 
     private val _snapshot = MutableStateFlow<CallSnapshot?>(null)
     val snapshot: StateFlow<CallSnapshot?> = _snapshot.asStateFlow()
+
+    private val _heldSnapshot = MutableStateFlow<CallSnapshot?>(null)
+    /** The non-primary call, when there are two and one is HOLDING. */
+    val heldSnapshot: StateFlow<CallSnapshot?> = _heldSnapshot.asStateFlow()
 
     private val _audio = MutableStateFlow(
         AudioSnapshot(
@@ -80,39 +94,66 @@ class CallSession @Inject constructor() {
     }
 
     fun detachService(svc: InCallService) {
-        // Only clear if the service detaching is the one we hold.
         if (service === svc) service = null
     }
 
+    @Synchronized
     fun attachCall(call: Call) {
-        currentCall = call
-        publishSnapshot()
-    }
-
-    fun detachCall(call: Call) {
-        if (currentCall === call) {
-            currentCall = null
-            _snapshot.value = null
+        if (calls.none { it.call === call }) {
+            calls = calls + TrackedCall(call, call.toSnapshot())
         }
+        recomputeSnapshots()
     }
 
+    @Synchronized
+    fun detachCall(call: Call) {
+        calls = calls.filter { it.call !== call }
+        recomputeSnapshots()
+    }
+
+    @Synchronized
     fun publishSnapshot() {
-        val call = currentCall ?: return
-        _snapshot.value = call.toSnapshot()
+        // Re-derive every tracked call's snapshot from its live Call object.
+        calls = calls.map { tc -> TrackedCall(tc.call, tc.call.toSnapshot()) }
+        recomputeSnapshots()
     }
 
     fun publishAudio(state: CallAudioState) {
         _audio.value = state.toSnapshot()
     }
 
+    private fun recomputeSnapshots() {
+        if (calls.isEmpty()) {
+            _snapshot.value = null
+            _heldSnapshot.value = null
+            return
+        }
+        val sorted = calls.sortedBy { primaryPriority(it.snapshot.state) }
+        _snapshot.value = sorted.first().snapshot
+        // The held banner only fires when there's a second call and it's on
+        // hold (the typical "added a call while in another call" shape).
+        _heldSnapshot.value = sorted.drop(1)
+            .firstOrNull { it.snapshot.state == CallSimpleState.HOLDING }
+            ?.snapshot
+    }
+
+    private fun primaryPriority(state: CallSimpleState): Int = when (state) {
+        CallSimpleState.ACTIVE -> 0
+        CallSimpleState.DIALING, CallSimpleState.CONNECTING, CallSimpleState.NEW -> 1
+        CallSimpleState.RINGING -> 2
+        CallSimpleState.HOLDING -> 3
+        CallSimpleState.DISCONNECTED -> 4
+    }
+
     // --- UI actions ---
 
     fun accept() {
-        currentCall?.answer(android.telecom.VideoProfile.STATE_AUDIO_ONLY)
+        callInState(CallSimpleState.RINGING)
+            ?.answer(android.telecom.VideoProfile.STATE_AUDIO_ONLY)
     }
 
     fun reject() {
-        currentCall?.reject(false, null)
+        callInState(CallSimpleState.RINGING)?.reject(false, null)
     }
 
     /**
@@ -121,21 +162,44 @@ class CallSession @Inject constructor() {
      * delivers the text; Bondwidth itself never touches the network.
      */
     fun rejectWithMessage(message: String) {
-        currentCall?.reject(true, message)
+        callInState(CallSimpleState.RINGING)?.reject(true, message)
     }
 
     fun end() {
-        currentCall?.disconnect()
+        primaryCall()?.disconnect()
+    }
+
+    /** Puts the primary call on hold. */
+    fun hold() {
+        callInState(CallSimpleState.ACTIVE)?.hold()
+    }
+
+    /** Resumes a held primary call. */
+    fun unhold() {
+        callInState(CallSimpleState.HOLDING)?.unhold()
+    }
+
+    /**
+     * Swaps which call is active when two calls are present — the
+     * Telecom-standard "switch between calls" gesture. Holds whichever is
+     * ACTIVE and resumes whichever is HOLDING; if only one call exists this
+     * collapses to plain hold or unhold.
+     */
+    fun swap() {
+        val active = callInState(CallSimpleState.ACTIVE)
+        val held = callInState(CallSimpleState.HOLDING)
+        active?.hold()
+        held?.unhold()
     }
 
     /** Plays a DTMF tone for the in-call dialpad (IVR menus). */
     fun playDtmf(digit: Char) {
-        currentCall?.playDtmfTone(digit)
+        primaryCall()?.playDtmfTone(digit)
     }
 
     /** Stops the currently-playing DTMF tone. */
     fun stopDtmf() {
-        currentCall?.stopDtmfTone()
+        primaryCall()?.stopDtmfTone()
     }
 
     fun setMuted(muted: Boolean) {
@@ -172,7 +236,16 @@ class CallSession @Inject constructor() {
         setRoute(order[(idx + 1) % order.size])
     }
 
-    fun hasActiveCall(): Boolean = currentCall != null
+    fun hasActiveCall(): Boolean = calls.isNotEmpty()
+
+    /** Snapshot of every tracked call — primary first, held second. */
+    private fun primaryCall(): Call? {
+        val primaryId = _snapshot.value?.callId ?: return null
+        return calls.firstOrNull { it.snapshot.callId == primaryId }?.call
+    }
+
+    private fun callInState(state: CallSimpleState): Call? =
+        calls.firstOrNull { it.snapshot.state == state }?.call
 }
 
 private fun Call.toSnapshot(): CallSnapshot {
@@ -200,9 +273,13 @@ private fun Call.toSnapshot(): CallSnapshot {
     val isVideo =
         details.videoState != android.telecom.VideoProfile.STATE_AUDIO_ONLY &&
             details.videoState != 0
+    // Held / un-hold uses CAPABILITY_HOLD; CAPABILITY_SUPPORT_HOLD is the
+    // "can hold be offered" flag — both wanted before the Hold UI shows.
+    val canHold = details.can(Call.Details.CAPABILITY_HOLD) &&
+        details.can(Call.Details.CAPABILITY_SUPPORT_HOLD)
     // No public Call ID getter on Call.Details; the number + the Call's
     // identity hash are unique enough for the UI's Compose key.
-    val callId = number.ifEmpty { "anon-${System.identityHashCode(this)}" }
+    val callId = "${number.ifEmpty { "anon" }}-${System.identityHashCode(this)}"
     return CallSnapshot(
         callId = callId,
         state = state,
@@ -211,6 +288,7 @@ private fun Call.toSnapshot(): CallSnapshot {
         callerDisplayName = callerDisplayName,
         connectTimeMillis = connectTime,
         isVideo = isVideo,
+        canHold = canHold,
     )
 }
 

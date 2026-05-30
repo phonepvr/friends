@@ -21,6 +21,7 @@ import com.phonepvr.friends.ui.contacts.ContactDetailScreen
 import com.phonepvr.friends.ui.contacts.ContactEditScreen
 import com.phonepvr.friends.ui.contacts.ContactsBrowserScreen
 import com.phonepvr.friends.ui.contacts.ImportContactsScreen
+import com.phonepvr.friends.ui.contacts.SaveNumberScreen
 import com.phonepvr.friends.ui.dialer.CallHistoryScreen
 import com.phonepvr.friends.ui.dialer.DialerScreen
 import com.phonepvr.friends.ui.dialer.DialpadScreen

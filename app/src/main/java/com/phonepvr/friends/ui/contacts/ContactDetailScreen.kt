@@ -1,10 +1,12 @@
 package com.phonepvr.friends.ui.contacts
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,7 +17,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Notes
@@ -28,6 +34,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.AlertDialog
@@ -55,18 +62,29 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.core.net.toUri
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
 import com.phonepvr.friends.data.contacts.ContactDate
+import com.phonepvr.friends.data.contacts.ContactDetails
+import com.phonepvr.friends.data.contacts.VCardBuilder
 import com.phonepvr.friends.data.dialer.CallPlacer
-import com.phonepvr.friends.ui.components.PersonAvatar
 import com.phonepvr.friends.ui.permissions.PermissionRationaleSheet
 import kotlinx.coroutines.launch
+import java.io.File
+import java.util.concurrent.TimeUnit
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -183,6 +201,10 @@ fun ContactDetailScreen(
                 },
                 actions = {
                     if (state.details != null && !state.deleting) {
+                        val sharable = state.details
+                        IconButton(onClick = { sharable?.let { shareContact(context, it) } }) {
+                            Icon(Icons.Filled.Share, contentDescription = "Share contact")
+                        }
                         // Pinning needs a primary number — hide if the
                         // contact has none, otherwise the tap silently no-ops.
                         if (state.details?.phoneNumbers?.isNotEmpty() == true) {
@@ -241,66 +263,78 @@ fun ContactDetailScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                            .verticalScroll(rememberScrollState()),
                     ) {
-                        Header(
+                        HeroHeader(
+                            context = context,
                             displayName = d.displayName,
                             photoRelativePath = state.photoRelativePath,
-                            isTracked = state.isTracked,
-                            mutating = state.mutating,
-                            onToggle = viewModel::toggleTracked,
-                            onOpenPerson = state.trackedPersonId
-                                ?.takeIf { state.isTracked }
-                                ?.let { id -> { onOpenPerson(id) } },
+                            photoUri = d.photoUri,
+                            isBonded = state.isTracked,
+                            lastContactedAt = state.lastContactedAt,
                         )
-                        if (d.phoneNumbers.isNotEmpty()) {
-                            SectionLabel("Phone")
-                            d.phoneNumbers.forEach { number ->
-                                PhoneRow(
-                                    number = number,
-                                    onCall = { onCallNumber(number) },
-                                )
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                        ) {
+                            BondActions(
+                                isTracked = state.isTracked,
+                                mutating = state.mutating,
+                                onToggle = viewModel::toggleTracked,
+                                onOpenPerson = state.trackedPersonId
+                                    ?.takeIf { state.isTracked }
+                                    ?.let { id -> { onOpenPerson(id) } },
+                            )
+                            if (d.phoneNumbers.isNotEmpty()) {
+                                SectionLabel("Phone")
+                                d.phoneNumbers.forEach { number ->
+                                    PhoneRow(
+                                        number = number,
+                                        onCall = { onCallNumber(number) },
+                                    )
+                                }
                             }
-                        }
-                        if (d.emails.isNotEmpty()) {
-                            SectionLabel("Email")
-                            d.emails.forEach { address ->
+                            if (d.emails.isNotEmpty()) {
+                                SectionLabel("Email")
+                                d.emails.forEach { address ->
+                                    IconTextRow(
+                                        icon = Icons.Filled.Email,
+                                        text = address,
+                                    )
+                                }
+                            }
+                            d.organization?.let { company ->
                                 IconTextRow(
-                                    icon = Icons.Filled.Email,
-                                    text = address,
+                                    icon = Icons.Filled.Business,
+                                    text = company,
                                 )
                             }
-                        }
-                        d.organization?.let { company ->
-                            IconTextRow(
-                                icon = Icons.Filled.Business,
-                                text = company,
-                            )
-                        }
-                        d.birthday?.let {
-                            DateRow(
-                                label = "Birthday",
-                                date = it,
-                                icon = Icons.Filled.Cake,
-                            )
-                        }
-                        d.anniversary?.let {
-                            DateRow(
-                                label = "Anniversary",
-                                date = it,
-                                icon = Icons.Filled.CalendarMonth,
-                            )
-                        }
-                        d.notes?.let { notes ->
-                            SectionLabel("Notes")
-                            Row(verticalAlignment = Alignment.Top) {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.Notes,
-                                    contentDescription = null,
+                            d.birthday?.let {
+                                DateRow(
+                                    label = "Birthday",
+                                    date = it,
+                                    icon = Icons.Filled.Cake,
                                 )
-                                Spacer(Modifier.width(16.dp))
-                                Text(notes, style = MaterialTheme.typography.bodyLarge)
+                            }
+                            d.anniversary?.let {
+                                DateRow(
+                                    label = "Anniversary",
+                                    date = it,
+                                    icon = Icons.Filled.CalendarMonth,
+                                )
+                            }
+                            d.notes?.let { notes ->
+                                SectionLabel("Notes")
+                                Row(verticalAlignment = Alignment.Top) {
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.Notes,
+                                        contentDescription = null,
+                                    )
+                                    Spacer(Modifier.width(16.dp))
+                                    Text(notes, style = MaterialTheme.typography.bodyLarge)
+                                }
                             }
                         }
                     }
@@ -311,54 +345,182 @@ fun ContactDetailScreen(
 }
 
 @Composable
-private fun Header(
+private fun HeroHeader(
+    context: Context,
     displayName: String,
     photoRelativePath: String?,
+    photoUri: String?,
+    isBonded: Boolean,
+    lastContactedAt: Long?,
+) {
+    // Prefer the bonded person's locally-saved photo, then the system
+    // contact's photo, else a tinted block with a big initial.
+    val photoModel: Any? = when {
+        photoRelativePath != null -> File(context.filesDir, photoRelativePath)
+        photoUri != null -> photoUri.toUri()
+        else -> null
+    }
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(260.dp),
+    ) {
+        if (photoModel != null) {
+            AsyncImage(
+                model = photoModel,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = displayName.trim().firstOrNull()?.uppercase() ?: "?",
+                    fontSize = 96.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
+        }
+        // Dark scrim at the bottom so the white name text stays legible over
+        // any photo.
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.55f)),
+                        startY = 220f,
+                    ),
+                ),
+        )
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(20.dp),
+        ) {
+            Text(
+                text = displayName,
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = Color.White,
+            )
+            Spacer(Modifier.height(6.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (isBonded) {
+                    HeroChip(icon = Icons.Filled.Favorite, text = "Bonded")
+                    Spacer(Modifier.width(8.dp))
+                }
+                lastContactedAt?.let { ms ->
+                    HeroChip(icon = null, text = lastContactedLabel(ms))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HeroChip(icon: ImageVector?, text: String) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(Color.Black.copy(alpha = 0.35f))
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (icon != null) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    modifier = Modifier.size(13.dp),
+                    tint = Color.White,
+                )
+                Spacer(Modifier.width(4.dp))
+            }
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelMedium,
+                color = Color.White,
+            )
+        }
+    }
+}
+
+@Composable
+private fun BondActions(
     isTracked: Boolean,
     mutating: Boolean,
     onToggle: () -> Unit,
     onOpenPerson: (() -> Unit)?,
 ) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        PersonAvatar(
-            photoRelativePath = photoRelativePath,
-            displayName = displayName,
-            diameter = 96.dp,
-        )
-        Spacer(Modifier.height(12.dp))
-        Text(
-            text = displayName,
-            style = MaterialTheme.typography.headlineSmall,
-        )
-        Spacer(Modifier.height(12.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
-        ) {
-            if (isTracked) {
-                Button(
-                    onClick = onToggle,
-                    enabled = !mutating,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                    ),
-                ) {
-                    Icon(Icons.Filled.Favorite, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Bonded — tap to remove")
-                }
-            } else {
-                Button(onClick = onToggle, enabled = !mutating) {
-                    Icon(Icons.Filled.FavoriteBorder, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Add to Bonds")
-                }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        if (isTracked) {
+            Button(
+                onClick = onToggle,
+                enabled = !mutating,
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                ),
+            ) {
+                Icon(Icons.Filled.Favorite, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Bonded")
             }
-            if (onOpenPerson != null) {
-                OutlinedButton(onClick = onOpenPerson) { Text("Open profile") }
+        } else {
+            Button(
+                onClick = onToggle,
+                enabled = !mutating,
+                modifier = Modifier.weight(1f),
+            ) {
+                Icon(Icons.Filled.FavoriteBorder, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Add to Bonds")
             }
         }
+        if (onOpenPerson != null) {
+            OutlinedButton(onClick = onOpenPerson) { Text("Open profile") }
+        }
+    }
+}
+
+private fun lastContactedLabel(ms: Long): String {
+    val days = TimeUnit.MILLISECONDS.toDays(System.currentTimeMillis() - ms).toInt()
+    return when {
+        days <= 0 -> "Spoke today"
+        days == 1 -> "Spoke yesterday"
+        days < 30 -> "Last spoke $days days ago"
+        days < 60 -> "Last spoke a month ago"
+        days < 365 -> "Last spoke ${days / 30} months ago"
+        else -> "Last spoke over a year ago"
+    }
+}
+
+private fun shareContact(context: Context, details: ContactDetails) {
+    runCatching {
+        val dir = File(context.cacheDir, "shared_contacts").apply { mkdirs() }
+        val file = File(dir, VCardBuilder.fileName(details.displayName))
+        file.writeText(VCardBuilder.build(details))
+        val uri = FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            file,
+        )
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/x-vcard"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(Intent.createChooser(intent, "Share contact"))
     }
 }
 

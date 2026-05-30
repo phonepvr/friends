@@ -32,6 +32,8 @@ data class ContactDetails(
     val organization: String? = null,
     val birthday: ContactDate?,
     val anniversary: ContactDate?,
+    /** System contact photo content:// URI, or null when the contact has none. */
+    val photoUri: String? = null,
 )
 
 /** Read-only access to the device address book via ContactsContract. */
@@ -105,11 +107,13 @@ class ContactsReader @Inject constructor(
     fun readDetails(contactId: Long): ContactDetails? {
         var lookupKey = ""
         var displayName = ""
+        var photoUri: String? = null
         resolver.query(
             ContactsContract.Contacts.CONTENT_URI,
             arrayOf(
                 ContactsContract.Contacts.LOOKUP_KEY,
                 ContactsContract.Contacts.DISPLAY_NAME_PRIMARY,
+                ContactsContract.Contacts.PHOTO_URI,
             ),
             "${ContactsContract.Contacts._ID} = ?",
             arrayOf(contactId.toString()),
@@ -118,6 +122,7 @@ class ContactsReader @Inject constructor(
             if (cursor.moveToFirst()) {
                 lookupKey = cursor.getString(0).orEmpty()
                 displayName = cursor.getString(1).orEmpty()
+                photoUri = cursor.getString(2)?.takeIf { it.isNotBlank() }
             }
         }
         if (displayName.isBlank()) return null
@@ -196,6 +201,7 @@ class ContactsReader @Inject constructor(
             organization = organization,
             birthday = birthday,
             anniversary = anniversary,
+            photoUri = photoUri,
         )
     }
 

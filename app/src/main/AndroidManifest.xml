@@ -188,5 +188,20 @@
             android:launchMode="singleInstance"
             android:excludeFromRecents="true"
             android:theme="@style/Theme.Friends" />
+
+        <!--
+          FileProvider exposes only the cacheDir/shared_contacts staging
+          folder, used to share a contact as a .vcf to another app the user
+          picks. No network involved — the receiving app handles delivery.
+        -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 </manifest>

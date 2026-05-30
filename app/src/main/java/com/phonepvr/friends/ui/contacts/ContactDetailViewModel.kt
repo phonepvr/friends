@@ -3,16 +3,19 @@ package com.phonepvr.friends.ui.contacts
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.phonepvr.friends.data.calllog.CallLogReader
 import com.phonepvr.friends.data.contacts.ContactDetails
 import com.phonepvr.friends.data.contacts.ContactTracker
 import com.phonepvr.friends.data.contacts.ContactWriter
 import com.phonepvr.friends.data.contacts.SystemContactsRepository
 import com.phonepvr.friends.data.db.dao.PersonDao
+import com.phonepvr.friends.data.db.dao.TimelineDao
 import com.phonepvr.friends.data.db.entity.PersonEntity
 import com.phonepvr.friends.data.dialer.CallPlacer
 import com.phonepvr.friends.data.repository.FavouritesRepository
 import com.phonepvr.friends.ui.navigation.Routes
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,9 +23,12 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
 data class ContactDetailUiState(
@@ -37,6 +43,8 @@ data class ContactDetailUiState(
     val deleting: Boolean = false,
     val deleted: Boolean = false,
     val isFavourite: Boolean = false,
+    /** Epoch ms of the most recent contact (timeline if bonded, else call log). */
+    val lastContactedAt: Long? = null,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -48,6 +56,8 @@ class ContactDetailViewModel @Inject constructor(
     private val contactWriter: ContactWriter,
     private val callPlacer: CallPlacer,
     private val favouritesRepository: FavouritesRepository,
+    private val timelineDao: TimelineDao,
+    private val callLogReader: CallLogReader,
     personDao: PersonDao,
 ) : ViewModel() {
 
@@ -84,6 +94,23 @@ class ContactDetailViewModel @Inject constructor(
         }
     }
 
+    // Last time we were in touch: the timeline's latest "counts as contact"
+    // for bonded people (includes auto-synced calls), otherwise the most
+    // recent call-log entry with any of the contact's numbers.
+    private val lastContactedFlow: Flow<Long?> =
+        combine(details, trackedPerson) { d, person -> d to person }
+            .flatMapLatest { (d, person) ->
+                flow {
+                    emit(null)
+                    val ts = when {
+                        d == null -> null
+                        person != null -> timelineDao.latestContactAt(person.id)
+                        else -> latestCallTimestampFor(d.phoneNumbers)
+                    }
+                    emit(ts)
+                }.flowOn(Dispatchers.IO)
+            }
+
     val state: StateFlow<ContactDetailUiState> = combine(
         details,
         loaded,
@@ -91,6 +118,7 @@ class ContactDetailViewModel @Inject constructor(
         deletionState,
         trackedPerson,
         isFavouriteFlow,
+        lastContactedFlow,
     ) { values ->
         @Suppress("UNCHECKED_CAST")
         val d = values[0] as ContactDetails?
@@ -100,6 +128,7 @@ class ContactDetailViewModel @Inject constructor(
         val deletion = values[3] as Pair<Boolean, Boolean>
         val person = values[4] as PersonEntity?
         val isFav = values[5] as Boolean
+        val lastContacted = values[6] as Long?
         ContactDetailUiState(
             loading = !isLoaded,
             notFound = isLoaded && d == null,
@@ -111,6 +140,7 @@ class ContactDetailViewModel @Inject constructor(
             deleting = deletion.first,
             deleted = deletion.second,
             isFavourite = isFav,
+            lastContactedAt = lastContacted,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -143,6 +173,21 @@ class ContactDetailViewModel @Inject constructor(
      * enough to dial.
      */
     fun placeCall(number: String): CallPlacer.PlaceResult = callPlacer.place(number)
+
+    /** Most recent call-log timestamp matching any of [numbers], or null. */
+    private fun latestCallTimestampFor(numbers: List<String>): Long? {
+        val suffixes = numbers
+            .map { it.filter(Char::isDigit).takeLast(9) }
+            .filter { it.length >= 7 }
+            .toSet()
+        if (suffixes.isEmpty()) return null
+        val since = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(365)
+        return runCatching {
+            callLogReader.recentCalls(since)
+                .filter { it.number.filter(Char::isDigit).takeLast(9) in suffixes }
+                .maxOfOrNull { it.timestampMillis }
+        }.getOrNull()
+    }
 
     fun toggleFavourite() {
         val d = details.value ?: return

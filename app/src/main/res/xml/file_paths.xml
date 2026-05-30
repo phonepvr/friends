@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!--
+      Only the dedicated share staging directory under cacheDir is exposed.
+      Nothing else in the app's storage is reachable through the provider.
+    -->
+    <cache-path
+        name="shared_contacts"
+        path="shared_contacts/" />
+</paths>

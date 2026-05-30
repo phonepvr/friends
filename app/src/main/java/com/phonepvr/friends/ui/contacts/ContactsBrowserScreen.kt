@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.stickyHeader
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
@@ -140,6 +142,7 @@ fun ContactsBrowserScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ContactList(
     state: ContactsBrowserUiState,
@@ -204,19 +207,51 @@ private fun ContactList(
                 )
             }
         } else {
+            // Group the already name-sorted list into A · B · C … sections.
+            // groupBy preserves encounter order, so sections come out
+            // alphabetically without a re-sort.
+            val grouped = remember(state.filtered) {
+                state.filtered.groupBy { sectionLetter(it.displayName) }
+            }
             LazyColumn(modifier = Modifier.fillMaxSize()) {
-                items(
-                    items = state.filtered,
-                    key = { it.lookupKey.ifBlank { it.contactId.toString() } },
-                    contentType = { "contact" },
-                ) { contact ->
-                    ContactRow(
-                        contact = contact,
-                        onClick = { onOpenContact(contact.contactId, contact.lookupKey) },
-                    )
+                grouped.forEach { (letter, contacts) ->
+                    stickyHeader(key = "header_$letter") {
+                        SectionHeader(letter)
+                    }
+                    items(
+                        items = contacts,
+                        key = { it.lookupKey.ifBlank { it.contactId.toString() } },
+                        contentType = { "contact" },
+                    ) { contact ->
+                        ContactRow(
+                            contact = contact,
+                            onClick = { onOpenContact(contact.contactId, contact.lookupKey) },
+                        )
+                    }
                 }
             }
         }
+    }
+}
+
+/** First letter of the display name, uppercased; "#" for anything else. */
+private fun sectionLetter(displayName: String): String {
+    val first = displayName.trim().firstOrNull() ?: return "#"
+    return if (first.isLetter()) first.uppercaseChar().toString() else "#"
+}
+
+@Composable
+private fun SectionHeader(letter: String) {
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Text(
+            text = letter,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 4.dp),
+        )
     }
 }
 

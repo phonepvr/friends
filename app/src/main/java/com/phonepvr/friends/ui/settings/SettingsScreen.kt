@@ -75,6 +75,7 @@ fun SettingsScreen(
     var activeDialog by remember { mutableStateOf<SettingsDialog?>(null) }
     var showLockUnavailable by remember { mutableStateOf(false) }
     var showUpdateDialog by remember { mutableStateOf(false) }
+    var showRestrictedSettingsDialog by remember { mutableStateOf(false) }
 
     // Re-read the default-dialer state every time Settings becomes
     // foreground: if the user toggled the role in another app between
@@ -179,10 +180,6 @@ fun SettingsScreen(
                         if (isDefaultDialer) {
                             "Bondwidth handles calls on this device."
                         } else {
-                            // Phase 5 will add the in-call UI required for
-                            // the system to accept Bondwidth as default.
-                            // Until then, tapping opens the picker but
-                            // Bondwidth may not appear yet.
                             "Tap to choose Bondwidth as your phone app."
                         },
                     )
@@ -192,6 +189,19 @@ fun SettingsScreen(
                     dialerRoleLauncher.launch(intent)
                 },
             )
+            if (!isDefaultDialer) {
+                ListItem(
+                    headlineContent = { Text("Can't set Bondwidth as default?") },
+                    supportingContent = {
+                        Text(
+                            "Android 13+ blocks sideloaded apps from becoming " +
+                                "the default phone app by default. Tap to see " +
+                                "how to allow it.",
+                        )
+                    },
+                    modifier = Modifier.clickable { showRestrictedSettingsDialog = true },
+                )
+            }
 
             HorizontalDivider()
             SectionHeader("Security")
@@ -341,6 +351,56 @@ fun SettingsScreen(
         null -> Unit
     }
 
+    if (showRestrictedSettingsDialog) {
+        AlertDialog(
+            onDismissRequest = { showRestrictedSettingsDialog = false },
+            title = { Text("Allow restricted settings") },
+            text = {
+                Column {
+                    Text(
+                        "Android 13 and newer block apps installed outside " +
+                            "the Play Store from becoming the default phone " +
+                            "app. The dialog you saw — “App was denied " +
+                            "access to be the default Phone app” — is " +
+                            "Android's standard refusal, not a Bondwidth " +
+                            "limit. Same wording on Samsung, Xiaomi, Pixel.",
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text("To allow it, just once:")
+                    Spacer(Modifier.height(6.dp))
+                    Text("1.  Tap “Open app info” below.")
+                    Text("2.  Tap the ⋮ menu in the top-right corner of that screen.")
+                    Text("3.  Tap “Allow restricted settings” and confirm.")
+                    Text("4.  Come back here and tap “Default phone app” again.")
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        "If you don't see the ⋮ menu, the manufacturer " +
+                            "has hidden it. On some Xiaomi / HyperOS builds " +
+                            "you also have to turn off Developer options → " +
+                            "Turn on MIUI optimization, then reboot. Calls " +
+                            "still place fine without the role — only the " +
+                            "in-call screen falls back to your existing one.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showRestrictedSettingsDialog = false
+                        openAppInfo(context)
+                    },
+                ) { Text("Open app info") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRestrictedSettingsDialog = false }) {
+                    Text("Close")
+                }
+            },
+        )
+    }
+
     if (showUpdateDialog) {
         AlertDialog(
             onDismissRequest = { showUpdateDialog = false },
@@ -404,6 +464,13 @@ private const val RELEASES_URL = "https://github.com/phonepvr/friends/releases"
 
 private fun openReleasesPage(context: android.content.Context) {
     val intent = Intent(Intent.ACTION_VIEW, RELEASES_URL.toUri())
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    runCatching { context.startActivity(intent) }
+}
+
+private fun openAppInfo(context: android.content.Context) {
+    val intent = Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+        .setData("package:${context.packageName}".toUri())
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     runCatching { context.startActivity(intent) }
 }

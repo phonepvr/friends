@@ -70,15 +70,12 @@ class BondwidthInCallService : InCallService() {
         call.registerCallback(callCallback)
         ensureForeground()
         refreshNotification()
-        // For an outgoing/active call there's a foreground token from the
-        // user's dial action, so opening the Activity directly is allowed.
-        // For an incoming ring the notification's full-screen intent is the
-        // sanctioned path (a background Activity launch would be blocked on
-        // Android 10+), so we don't startActivity here.
-        val snapshot = callSession.snapshot.value
-        val isIncomingRing = snapshot?.state == CallSimpleState.RINGING &&
-            snapshot.direction == CallDirection.INCOMING
-        if (!isIncomingRing) launchInCallUi()
+        // FOREGROUND_SERVICE_TYPE_PHONE_CALL exempts us from the Android 14+
+        // background-activity-launch restrictions, so launching the in-call
+        // UI directly works for both outgoing AND incoming-ring states.
+        // The notification's full-screen intent stays as a backup path for
+        // OEMs that still drop the direct launch.
+        launchInCallUi()
     }
 
     override fun onCallRemoved(call: Call) {

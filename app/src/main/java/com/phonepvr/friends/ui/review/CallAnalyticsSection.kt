@@ -22,7 +22,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CallReceived
+import androidx.compose.material.icons.filled.CallMissed
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -132,7 +132,7 @@ private fun Cards(result: CallAnalyticsResult, onOpenPerson: (Long) -> Unit) {
         BondsVsOthersCard(result)
         BondedReachCard(result)
         if (result.topParties.isNotEmpty()) TopCallersCard(result.topParties, onOpenPerson)
-        DirectionAndMissedCard(result)
+        DirectionAndMissedCard(result, onOpenPerson)
         OthersBreakdownCard(result)
     }
 }
@@ -343,7 +343,7 @@ private fun TopCallersCard(parties: List<CallPartyStat>, onOpenPerson: (Long) ->
 }
 
 @Composable
-private fun DirectionAndMissedCard(result: CallAnalyticsResult) {
+private fun DirectionAndMissedCard(result: CallAnalyticsResult, onOpenPerson: (Long) -> Unit) {
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             CardLabel("Calls in & out")
@@ -353,36 +353,62 @@ private fun DirectionAndMissedCard(result: CallAnalyticsResult) {
                 MiniStat("Outgoing", result.outgoingTotal.toString(), Modifier.weight(1f))
                 MiniStat("Missed", result.missedTotal.toString(), Modifier.weight(1f))
             }
-            if (result.missedFromBonds > 0) {
+            // Only bonds whose *latest* call is still an unreturned miss show
+            // here — once you've called back or spoken since, they drop off.
+            if (result.bondsToCallBack.isNotEmpty()) {
                 Spacer(Modifier.height(10.dp))
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.errorContainer,
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(
-                            Icons.Filled.CallReceived,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.onErrorContainer,
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = "${result.missedFromBonds} missed " +
-                                "${if (result.missedFromBonds == 1) "call" else "calls"} " +
-                                "from a bond — worth a call back.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onErrorContainer,
-                        )
-                    }
+                Text(
+                    text = "Worth a call back",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                Spacer(Modifier.height(6.dp))
+                result.bondsToCallBack.forEach { bond ->
+                    CallBackRow(bond = bond, onOpenPerson = onOpenPerson)
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun CallBackRow(bond: CallPartyStat, onOpenPerson: (Long) -> Unit) {
+    val name = bond.displayName ?: bond.number
+    val rowModifier = bond.personId?.let { id ->
+        Modifier
+            .fillMaxWidth()
+            .semantics(mergeDescendants = true) {
+                contentDescription = "$name, missed call worth returning"
+            }
+            .clickable(
+                onClickLabel = "Open $name",
+                role = Role.Button,
+                onClick = { onOpenPerson(id) },
+            )
+    } ?: Modifier.fillMaxWidth()
+    Row(
+        modifier = rowModifier.padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        PersonAvatar(
+            photoRelativePath = bond.photoRelativePath,
+            displayName = name,
+            diameter = 36.dp,
+        )
+        Spacer(Modifier.width(12.dp))
+        Text(
+            text = name,
+            style = MaterialTheme.typography.bodyLarge,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        Icon(
+            Icons.Filled.CallMissed,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp),
+            tint = MaterialTheme.colorScheme.error,
+        )
     }
 }
 

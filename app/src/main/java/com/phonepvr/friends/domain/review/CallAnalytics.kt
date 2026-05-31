@@ -17,6 +17,9 @@ data class CallRecord(
     val number: String,
     val type: CallType,
     val durationSeconds: Long,
+    /** Epoch millis the call happened — used to tell whether a missed call
+     *  was later "returned" by a subsequent call with the same bond. */
+    val timestampMillis: Long = 0,
 )
 
 /** Per-person (or per-number) rollup for the window. */
@@ -52,11 +55,18 @@ data class CallAnalyticsResult(
     val bondedReachedCount: Int,
     val bondedTotalCount: Int,
     val missedTotal: Int,
-    val missedFromBonds: Int,
+    /**
+     * Bonds whose most recent call in the window is an *unreturned* missed or
+     * rejected call — i.e. you haven't called back or spoken since. A missed
+     * call followed by any later call with that bond is considered handled and
+     * does NOT count here. These are the ones genuinely worth a call back.
+     */
+    val bondsToCallBack: List<CallPartyStat>,
     val incomingTotal: Int,
     val outgoingTotal: Int,
 ) {
     val isEmpty: Boolean get() = totalCalls == 0
+    val bondsToCallBackCount: Int get() = bondsToCallBack.size
 }
 
 /**
@@ -88,6 +98,10 @@ object CallAnalytics {
         var incoming = 0
         var outgoing = 0
         var missed = 0
+
+        /** Type + time of this party's most recent call, for call-back logic. */
+        var latestType: CallType? = null
+        var latestTimestamp = Long.MIN_VALUE
     }
 
     fun compute(
@@ -137,6 +151,13 @@ object CallAnalytics {
                 CallType.OUTGOING -> party.outgoing++
                 CallType.MISSED, CallType.REJECTED -> party.missed++
             }
+            // Track the single most recent call so we can tell whether a missed
+            // call was the *last* contact (still owed a call back) or has since
+            // been followed by another call (already handled).
+            if (call.timestampMillis >= party.latestTimestamp) {
+                party.latestTimestamp = call.timestampMillis
+                party.latestType = call.type
+            }
         }
 
         val partyStats = parties.values.map {
@@ -176,6 +197,18 @@ object CallAnalytics {
             .mapNotNull { it.personId }
             .toSet()
 
+        // A bond is "worth a call back" only if its most recent call is an
+        // unreturned missed/rejected one. Any later call (answered incoming or
+        // an outgoing attempt) means you've reconnected, so it drops off.
+        val statByKey = partyStats.associateBy { it.key }
+        val bondsToCallBack = parties.values
+            .asSequence()
+            .filter { it.bucket == CallBucket.BOND }
+            .filter { it.latestType == CallType.MISSED || it.latestType == CallType.REJECTED }
+            .sortedByDescending { it.latestTimestamp }
+            .mapNotNull { statByKey[it.key] }
+            .toList()
+
         return CallAnalyticsResult(
             windowDays = windowDays,
             totalCalls = calls.size,
@@ -187,9 +220,7 @@ object CallAnalytics {
             bondedReachedCount = reachedBondIds.size,
             bondedTotalCount = bondedTotalCount,
             missedTotal = partyStats.sumOf { it.missed },
-            missedFromBonds = partyStats
-                .filter { it.bucket == CallBucket.BOND }
-                .sumOf { it.missed },
+            bondsToCallBack = bondsToCallBack,
             incomingTotal = partyStats.sumOf { it.incoming },
             outgoingTotal = partyStats.sumOf { it.outgoing },
         )

@@ -109,7 +109,9 @@ class CallAnalyticsViewModel @Inject constructor(
             val (bondSuffix, bondedTotal) = bonds
             val result = CallAnalytics.compute(
                 windowDays = w.days,
-                calls = calls.map { CallRecord(it.number, it.type, it.durationSeconds) },
+                calls = calls.map {
+                    CallRecord(it.number, it.type, it.durationSeconds, it.timestampMillis)
+                },
                 bondBySuffix = bondSuffix,
                 contactNameBySuffix = contactSuffix,
                 bondedTotalCount = bondedTotal,

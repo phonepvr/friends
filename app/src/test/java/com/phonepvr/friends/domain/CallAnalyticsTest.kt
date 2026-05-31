@@ -72,10 +72,11 @@ class CallAnalyticsTest {
     }
 
     @Test
-    fun missedFromBondsCountedSeparately() {
+    fun unreturnedMissedBondCountsAsCallBack() {
+        // A single missed call from the bond, nothing since → worth a call back.
         val calls = listOf(
-            CallRecord("0771234567", CallType.MISSED, 0),
-            CallRecord("0759999999", CallType.MISSED, 0),
+            CallRecord("0771234567", CallType.MISSED, 0, timestampMillis = 1_000),
+            CallRecord("0759999999", CallType.MISSED, 0, timestampMillis = 1_000),
         )
         val result = CallAnalytics.compute(
             windowDays = 90,
@@ -85,6 +86,62 @@ class CallAnalyticsTest {
             bondedTotalCount = 1,
         )
         assertEquals(2, result.missedTotal)
-        assertEquals(1, result.missedFromBonds)
+        assertEquals(1, result.bondsToCallBackCount)
+        assertEquals("Aanya", result.bondsToCallBack.single().displayName)
+    }
+
+    @Test
+    fun missedThenCalledBack_doesNotCount() {
+        // Bond missed us, then we called them back later → already handled.
+        val calls = listOf(
+            CallRecord("0771234567", CallType.MISSED, 0, timestampMillis = 1_000),
+            CallRecord("0771234567", CallType.OUTGOING, 90, timestampMillis = 2_000),
+        )
+        val result = CallAnalytics.compute(
+            windowDays = 90,
+            calls = calls,
+            bondBySuffix = bondBySuffix,
+            contactNameBySuffix = contactBySuffix,
+            bondedTotalCount = 1,
+        )
+        // Still one missed call in the totals…
+        assertEquals(1, result.missedTotal)
+        // …but it's been returned, so it's not "worth a call back".
+        assertEquals(0, result.bondsToCallBackCount)
+    }
+
+    @Test
+    fun answeredAfterMiss_doesNotCount() {
+        // Missed, then a later answered incoming call → reconnected.
+        val calls = listOf(
+            CallRecord("0771234567", CallType.MISSED, 0, timestampMillis = 5_000),
+            CallRecord("0771234567", CallType.INCOMING, 200, timestampMillis = 9_000),
+        )
+        val result = CallAnalytics.compute(
+            windowDays = 90,
+            calls = calls,
+            bondBySuffix = bondBySuffix,
+            contactNameBySuffix = contactBySuffix,
+            bondedTotalCount = 1,
+        )
+        assertEquals(0, result.bondsToCallBackCount)
+    }
+
+    @Test
+    fun callBackThenMissedAgain_countsAgain() {
+        // We called back, but later they missed us again → owed once more.
+        val calls = listOf(
+            CallRecord("0771234567", CallType.MISSED, 0, timestampMillis = 1_000),
+            CallRecord("0771234567", CallType.OUTGOING, 90, timestampMillis = 2_000),
+            CallRecord("0771234567", CallType.MISSED, 0, timestampMillis = 3_000),
+        )
+        val result = CallAnalytics.compute(
+            windowDays = 90,
+            calls = calls,
+            bondBySuffix = bondBySuffix,
+            contactNameBySuffix = contactBySuffix,
+            bondedTotalCount = 1,
+        )
+        assertEquals(1, result.bondsToCallBackCount)
     }
 }

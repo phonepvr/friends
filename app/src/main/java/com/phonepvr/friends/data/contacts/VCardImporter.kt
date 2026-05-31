@@ -45,7 +45,10 @@ class VCardImporter @Inject constructor(
             onProgress(index, cards.size)
             val form = ContactForm(
                 displayName = card.displayName,
-                phones = card.phones,
+                // vCard import doesn't preserve type labels (yet) — every
+                // number lands as the default Mobile. The user can reassign
+                // types in the contact editor.
+                phones = card.phones.map { PhoneEntry(number = it) },
                 emails = card.emails,
                 notes = card.notes.orEmpty(),
                 organization = card.organization.orEmpty(),

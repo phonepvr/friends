@@ -55,6 +55,10 @@ data class ContactPhone(
     val dataId: Long,
     val number: String,
     val isPrimary: Boolean,
+    /** Mobile/Home/Work/etc. — round-tripped so the editor preserves it. */
+    val type: PhoneType = PhoneType.MOBILE,
+    /** Provider LABEL column, used when [type] is CUSTOM. */
+    val customLabel: String? = null,
 )
 
 /** Read-only access to the device address book via ContactsContract. */
@@ -162,6 +166,8 @@ class ContactsReader @Inject constructor(
                 ContactsContract.CommonDataKinds.Phone._ID,
                 ContactsContract.CommonDataKinds.Phone.NUMBER,
                 ContactsContract.CommonDataKinds.Phone.IS_SUPER_PRIMARY,
+                ContactsContract.CommonDataKinds.Phone.TYPE,
+                ContactsContract.CommonDataKinds.Phone.LABEL,
             ),
             "${ContactsContract.CommonDataKinds.Phone.CONTACT_ID} = ?",
             arrayOf(contactId.toString()),
@@ -173,6 +179,10 @@ class ContactsReader @Inject constructor(
                 cursor.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.NUMBER)
             val superPrimaryColumn =
                 cursor.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.IS_SUPER_PRIMARY)
+            val typeColumn =
+                cursor.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.TYPE)
+            val labelColumn =
+                cursor.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.LABEL)
             while (cursor.moveToNext()) {
                 val number = cursor.getString(numberColumn)?.trim()?.takeIf { it.isNotBlank() }
                     ?: continue
@@ -181,6 +191,8 @@ class ContactsReader @Inject constructor(
                         dataId = cursor.getLong(idColumn),
                         number = number,
                         isPrimary = cursor.getInt(superPrimaryColumn) != 0,
+                        type = phoneTypeFromContactsContract(cursor.getInt(typeColumn)),
+                        customLabel = cursor.getString(labelColumn),
                     ),
                 )
             }

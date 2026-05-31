@@ -82,6 +82,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.phonepvr.friends.data.contacts.ContactDate
 import com.phonepvr.friends.data.contacts.ContactDetails
+import com.phonepvr.friends.data.contacts.PhoneType
 import com.phonepvr.friends.data.contacts.VCardBuilder
 import com.phonepvr.friends.data.dialer.CallPlacer
 import com.phonepvr.friends.ui.permissions.PermissionRationaleSheet
@@ -307,6 +308,16 @@ fun ContactDetailScreen(
                                 d.phoneEntries.forEach { phone ->
                                     PhoneRow(
                                         number = phone.number,
+                                        typeLabel = phoneTypeLabel(phone.type)
+                                            .let { base ->
+                                                if (phone.type == PhoneType.CUSTOM &&
+                                                    !phone.customLabel.isNullOrBlank()
+                                                ) {
+                                                    phone.customLabel
+                                                } else {
+                                                    base
+                                                }
+                                            },
                                         isPrimary = phone.isPrimary,
                                         // Only offer "set primary" when there's
                                         // more than one number to choose between.
@@ -647,6 +658,7 @@ private fun SectionLabel(text: String) {
 @Composable
 private fun PhoneRow(
     number: String,
+    typeLabel: String,
     isPrimary: Boolean,
     canSetPrimary: Boolean,
     onCall: () -> Unit,
@@ -663,11 +675,21 @@ private fun PhoneRow(
         Spacer(Modifier.width(16.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(number, style = MaterialTheme.typography.bodyLarge)
-            if (isPrimary) {
+            // "Mobile · Default" / "Work" / "Custom: Office line" — one line
+            // that names the role of this number before any default chip.
+            val subtitle = listOfNotNull(
+                typeLabel.takeIf { it.isNotBlank() },
+                if (isPrimary) "Default" else null,
+            ).joinToString(" · ")
+            if (subtitle.isNotEmpty()) {
                 Text(
-                    text = "Default",
+                    text = subtitle,
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = if (isPrimary) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
                 )
             }
         }

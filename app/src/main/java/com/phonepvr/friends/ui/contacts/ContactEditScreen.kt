@@ -25,8 +25,11 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -56,6 +59,8 @@ import androidx.core.net.toUri
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.phonepvr.friends.data.contacts.PhoneEntry
+import com.phonepvr.friends.data.contacts.PhoneType
 import com.phonepvr.friends.ui.permissions.PermissionRationaleSheet
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -150,6 +155,8 @@ fun ContactEditScreen(
                     state = state,
                     onDisplayNameChange = viewModel::onDisplayNameChange,
                     onPhoneChange = viewModel::onPhoneChange,
+                    onPhoneTypeChange = viewModel::onPhoneTypeChange,
+                    onPhoneLabelChange = viewModel::onPhoneLabelChange,
                     onAddPhone = viewModel::onAddPhone,
                     onRemovePhone = viewModel::onRemovePhone,
                     onEmailChange = viewModel::onEmailChange,
@@ -170,6 +177,8 @@ private fun EditForm(
     state: ContactEditUiState,
     onDisplayNameChange: (String) -> Unit,
     onPhoneChange: (Int, String) -> Unit,
+    onPhoneTypeChange: (Int, PhoneType) -> Unit,
+    onPhoneLabelChange: (Int, String) -> Unit,
     onAddPhone: () -> Unit,
     onRemovePhone: (Int) -> Unit,
     onEmailChange: (Int, String) -> Unit,
@@ -200,12 +209,11 @@ private fun EditForm(
             modifier = Modifier.fillMaxWidth(),
             isError = state.error == "Name is required",
         )
-        RepeatableSection(
-            label = "Phones",
+        PhoneSection(
             entries = state.form.phones,
-            keyboardType = KeyboardType.Phone,
-            placeholder = "Phone number",
             onChange = onPhoneChange,
+            onTypeChange = onPhoneTypeChange,
+            onLabelChange = onPhoneLabelChange,
             onAdd = onAddPhone,
             onRemove = onRemovePhone,
         )
@@ -241,6 +249,90 @@ private fun EditForm(
         }
         Spacer(Modifier.height(48.dp))
     }
+}
+
+@Composable
+private fun PhoneSection(
+    entries: List<PhoneEntry>,
+    onChange: (Int, String) -> Unit,
+    onTypeChange: (Int, PhoneType) -> Unit,
+    onLabelChange: (Int, String) -> Unit,
+    onAdd: () -> Unit,
+    onRemove: (Int) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Phones", style = MaterialTheme.typography.labelLarge)
+        entries.forEachIndexed { index, entry ->
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = entry.number,
+                        onValueChange = { onChange(index, it) },
+                        placeholder = { Text("Phone number") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                    IconButton(onClick = { onRemove(index) }) {
+                        Icon(Icons.Filled.Remove, contentDescription = "Remove")
+                    }
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    PhoneTypePicker(
+                        selected = entry.type,
+                        onSelect = { onTypeChange(index, it) },
+                    )
+                    if (entry.type == PhoneType.CUSTOM) {
+                        OutlinedTextField(
+                            value = entry.customLabel.orEmpty(),
+                            onValueChange = { onLabelChange(index, it) },
+                            placeholder = { Text("Label") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+            }
+        }
+        Button(onClick = onAdd, modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Filled.Add, contentDescription = null)
+            Spacer(Modifier.fillMaxWidth(0.05f))
+            Text("Add phone")
+        }
+    }
+}
+
+@Composable
+private fun PhoneTypePicker(selected: PhoneType, onSelect: (PhoneType) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        AssistChip(
+            onClick = { open = true },
+            label = { Text(phoneTypeLabel(selected)) },
+        )
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            PhoneType.entries.forEach { type ->
+                DropdownMenuItem(
+                    text = { Text(phoneTypeLabel(type)) },
+                    onClick = {
+                        open = false
+                        onSelect(type)
+                    },
+                )
+            }
+        }
+    }
+}
+
+internal fun phoneTypeLabel(type: PhoneType): String = when (type) {
+    PhoneType.MOBILE -> "Mobile"
+    PhoneType.HOME -> "Home"
+    PhoneType.WORK -> "Work"
+    PhoneType.MAIN -> "Main"
+    PhoneType.OTHER -> "Other"
+    PhoneType.CUSTOM -> "Custom"
 }
 
 @Composable

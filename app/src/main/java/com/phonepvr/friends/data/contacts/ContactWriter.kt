@@ -19,7 +19,7 @@ import javax.inject.Singleton
  */
 data class ContactForm(
     val displayName: String = "",
-    val phones: List<String> = emptyList(),
+    val phones: List<PhoneEntry> = emptyList(),
     val emails: List<String> = emptyList(),
     val notes: String = "",
     val organization: String = "",
@@ -28,6 +28,22 @@ data class ContactForm(
     /** What to do with the contact's photo on save. Defaults to "leave it". */
     val photoChange: PhotoChange = PhotoChange.Unchanged,
 )
+
+/**
+ * One editable phone number row: the digits, the chosen [type], and a
+ * [customLabel] used when type is [PhoneType.CUSTOM]. Round-trips through
+ * [ContactWriter] so editing a contact no longer flattens "Home" / "Work" /
+ * "Mobile" labels into a single TYPE_MOBILE on save.
+ */
+data class PhoneEntry(
+    val number: String,
+    val type: PhoneType = PhoneType.MOBILE,
+    val customLabel: String? = null,
+)
+
+/** The phone-type labels exposed in the editor. Mirrors the common subset of
+ *  ContactsContract.CommonDataKinds.Phone.TYPE_* that everyone actually uses. */
+enum class PhoneType { MOBILE, HOME, WORK, MAIN, OTHER, CUSTOM }
 
 /** What [ContactWriter] should do with the photo on save. */
 sealed interface PhotoChange {
@@ -242,21 +258,29 @@ class ContactWriter @Inject constructor(
                     .build(),
             )
         }
-        form.phones.map { it.trim() }.filter { it.isNotBlank() }.forEach { number ->
-            ops.add(
-                attach(ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI))
+        form.phones
+            .map { it.copy(number = it.number.trim()) }
+            .filter { it.number.isNotBlank() }
+            .forEach { entry ->
+                val builder = attach(
+                    ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI),
+                )
                     .withValue(
                         ContactsContract.Data.MIMETYPE,
                         ContactsContract.CommonDataKinds.Phone.CONTENT_ITEM_TYPE,
                     )
-                    .withValue(ContactsContract.CommonDataKinds.Phone.NUMBER, number)
+                    .withValue(ContactsContract.CommonDataKinds.Phone.NUMBER, entry.number)
                     .withValue(
                         ContactsContract.CommonDataKinds.Phone.TYPE,
-                        ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE,
+                        entry.type.toContactsContractType(),
                     )
-                    .build(),
-            )
-        }
+                if (entry.type == PhoneType.CUSTOM) {
+                    // Provider requires a non-null LABEL when TYPE is CUSTOM.
+                    val label = entry.customLabel?.trim().orEmpty()
+                    builder.withValue(ContactsContract.CommonDataKinds.Phone.LABEL, label)
+                }
+                ops.add(builder.build())
+            }
         form.emails.map { it.trim() }.filter { it.isNotBlank() }.forEach { address ->
             ops.add(
                 attach(ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI))
@@ -357,4 +381,25 @@ class ContactWriter @Inject constructor(
             ContactsContract.CommonDataKinds.Organization.CONTENT_ITEM_TYPE,
         )
     }
+}
+
+/** Map our editor-facing [PhoneType] to ContactsContract's int TYPE column. */
+internal fun PhoneType.toContactsContractType(): Int = when (this) {
+    PhoneType.MOBILE -> ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE
+    PhoneType.HOME -> ContactsContract.CommonDataKinds.Phone.TYPE_HOME
+    PhoneType.WORK -> ContactsContract.CommonDataKinds.Phone.TYPE_WORK
+    PhoneType.MAIN -> ContactsContract.CommonDataKinds.Phone.TYPE_MAIN
+    PhoneType.OTHER -> ContactsContract.CommonDataKinds.Phone.TYPE_OTHER
+    PhoneType.CUSTOM -> ContactsContract.CommonDataKinds.Phone.TYPE_CUSTOM
+}
+
+/** Inverse: from ContactsContract int TYPE to our enum. Unknown types fall
+ *  through to OTHER so we don't lose the number — just the niche label. */
+internal fun phoneTypeFromContactsContract(type: Int): PhoneType = when (type) {
+    ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE -> PhoneType.MOBILE
+    ContactsContract.CommonDataKinds.Phone.TYPE_HOME -> PhoneType.HOME
+    ContactsContract.CommonDataKinds.Phone.TYPE_WORK -> PhoneType.WORK
+    ContactsContract.CommonDataKinds.Phone.TYPE_MAIN -> PhoneType.MAIN
+    ContactsContract.CommonDataKinds.Phone.TYPE_CUSTOM -> PhoneType.CUSTOM
+    else -> PhoneType.OTHER
 }

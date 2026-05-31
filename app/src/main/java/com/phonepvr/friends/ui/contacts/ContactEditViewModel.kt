@@ -9,6 +9,8 @@ import com.phonepvr.friends.data.contacts.ContactForm
 import com.phonepvr.friends.data.contacts.ContactPhotoProcessor
 import com.phonepvr.friends.data.contacts.ContactTracker
 import com.phonepvr.friends.data.contacts.ContactWriter
+import com.phonepvr.friends.data.contacts.PhoneEntry
+import com.phonepvr.friends.data.contacts.PhoneType
 import com.phonepvr.friends.data.contacts.PhotoChange
 import com.phonepvr.friends.data.contacts.SystemContactsRepository
 import com.phonepvr.friends.ui.navigation.Routes
@@ -62,7 +64,7 @@ class ContactEditViewModel @Inject constructor(
             // new-contact case so the user has somewhere to type without
             // tapping "Add phone" first.
             form = if (mode == ContactEditMode.NEW) {
-                ContactForm(phones = listOf(prefillNumber ?: ""))
+                ContactForm(phones = listOf(PhoneEntry(number = prefillNumber ?: "")))
             } else {
                 ContactForm()
             },
@@ -82,14 +84,14 @@ class ContactEditViewModel @Inject constructor(
                     // create a duplicate).
                     val withPrefill = if (prefillNumber != null) {
                         val existingDigits = loaded.phones
-                            .map { p -> p.filter(Char::isDigit) }
+                            .map { p -> p.number.filter(Char::isDigit) }
                         val incomingDigits = prefillNumber.filter(Char::isDigit)
                         if (incomingDigits.isNotBlank() &&
                             existingDigits.none { d -> d == incomingDigits }
                         ) {
                             loaded.copy(
-                                phones = loaded.phones.filter { p -> p.isNotBlank() } +
-                                    prefillNumber,
+                                phones = loaded.phones.filter { it.number.isNotBlank() } +
+                                    PhoneEntry(number = prefillNumber),
                             )
                         } else {
                             loaded
@@ -146,12 +148,28 @@ class ContactEditViewModel @Inject constructor(
         _state.update { it.copy(form = it.form.copy(displayName = value)) }
 
     fun onPhoneChange(index: Int, value: String) = _state.update { s ->
-        val updated = s.form.phones.toMutableList().apply { this[index] = value }
+        val updated = s.form.phones.toMutableList().apply {
+            this[index] = this[index].copy(number = value)
+        }
+        s.copy(form = s.form.copy(phones = updated))
+    }
+
+    fun onPhoneTypeChange(index: Int, type: PhoneType) = _state.update { s ->
+        val updated = s.form.phones.toMutableList().apply {
+            this[index] = this[index].copy(type = type)
+        }
+        s.copy(form = s.form.copy(phones = updated))
+    }
+
+    fun onPhoneLabelChange(index: Int, label: String) = _state.update { s ->
+        val updated = s.form.phones.toMutableList().apply {
+            this[index] = this[index].copy(customLabel = label)
+        }
         s.copy(form = s.form.copy(phones = updated))
     }
 
     fun onAddPhone() = _state.update { s ->
-        s.copy(form = s.form.copy(phones = s.form.phones + ""))
+        s.copy(form = s.form.copy(phones = s.form.phones + PhoneEntry(number = "")))
     }
 
     fun onRemovePhone(index: Int) = _state.update { s ->
@@ -235,7 +253,9 @@ class ContactEditViewModel @Inject constructor(
 
 private fun ContactDetails.toForm(): ContactForm = ContactForm(
     displayName = displayName,
-    phones = phoneNumbers.ifEmpty { listOf("") },
+    phones = phoneEntries
+        .map { PhoneEntry(number = it.number, type = it.type, customLabel = it.customLabel) }
+        .ifEmpty { listOf(PhoneEntry(number = "")) },
     emails = emails,
     notes = notes.orEmpty(),
     organization = organization.orEmpty(),

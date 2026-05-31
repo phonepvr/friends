@@ -222,7 +222,13 @@ fun FriendsNavHost(
             ContactDetailScreen(
                 onBack = { navController.popBackStack() },
                 onOpenPerson = { personId ->
-                    navController.navigate(Routes.personDetail(personId))
+                    // Bonded contacts redirect to the unified bonded profile;
+                    // pop this transient contact view so Back skips it and
+                    // returns to wherever the user came from.
+                    navController.navigate(Routes.personDetail(personId)) {
+                        popUpTo(Routes.CONTACT_DETAIL) { inclusive = true }
+                        launchSingleTop = true
+                    }
                 },
                 onEdit = { contactId ->
                     navController.navigate(Routes.contactEdit(contactId))

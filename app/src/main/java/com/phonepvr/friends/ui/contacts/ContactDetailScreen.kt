@@ -99,6 +99,17 @@ fun ContactDetailScreen(
 ) {
     val context = LocalContext.current
     val state by viewModel.state.collectAsStateWithLifecycle()
+
+    // Bonded contacts have a single unified home: the bonded profile. When
+    // this contact turns out to be tracked, hand off to the person screen
+    // (replacing this entry so Back returns to wherever the user came from,
+    // not to this transient contact view). Non-bonded contacts stay here.
+    val trackedId = state.trackedPersonId
+    LaunchedEffect(state.isTracked, trackedId) {
+        if (state.isTracked && trackedId != null) {
+            onOpenPerson(trackedId)
+        }
+    }
     val snackbarState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var showDeleteDialog by remember { mutableStateOf(false) }

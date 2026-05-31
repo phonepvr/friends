@@ -24,6 +24,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import android.media.RingtoneManager
 import android.os.Build
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Email
@@ -37,7 +38,9 @@ import androidx.core.net.toUri
 import com.phonepvr.friends.data.contacts.ContactDetails
 import com.phonepvr.friends.data.contacts.VCardBuilder
 import java.io.File
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -60,6 +63,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -129,9 +134,12 @@ fun PersonDetailScreen(
     val editEventTarget by viewModel.editEventTarget.collectAsStateWithLifecycle()
     val contactDetails by viewModel.contactDetails.collectAsStateWithLifecycle()
     val contactId by viewModel.contactId.collectAsStateWithLifecycle()
+    val isFavourite by viewModel.isFavourite.collectAsStateWithLifecycle()
+    var showDeleteContactDialog by remember { mutableStateOf(false) }
     val today = remember { LocalDate.now() }
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val isSelectionMode = selectedTimelineIds.isNotEmpty()
     BackHandler(enabled = isSelectionMode) { viewModel.clearTimelineSelection() }
 
@@ -174,6 +182,29 @@ fun PersonDetailScreen(
                         }
                     },
                     actions = {
+                        // Pin to favourites — only when the person is linked to
+                        // a system contact (needs a lookupKey + number).
+                        if (contactDetails?.phoneNumbers?.isNotEmpty() == true) {
+                            IconButton(onClick = viewModel::toggleFavourite) {
+                                Icon(
+                                    imageVector = if (isFavourite) {
+                                        Icons.Filled.Star
+                                    } else {
+                                        Icons.Filled.StarBorder
+                                    },
+                                    contentDescription = if (isFavourite) {
+                                        "Unpin from favourites"
+                                    } else {
+                                        "Pin to favourites"
+                                    },
+                                    tint = if (isFavourite) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        Color.Unspecified
+                                    },
+                                )
+                            }
+                        }
                         TextButton(onClick = { onEdit(viewModel.personId) }) { Text("Edit") }
                     },
                 )
@@ -300,10 +331,25 @@ fun PersonDetailScreen(
                     item {
                         ContactInfoSection(
                             details = details,
+                            canBlock = viewModel.canBlock(),
+                            onCallNumber = viewModel::callNumber,
                             onSetPrimary = viewModel::setPrimaryContactNumber,
                             onSetRingtone = viewModel::setCustomRingtone,
                             onEditContact = contactId?.let { id -> { onEditContact(id) } },
                             onShareContact = { shareBondedContact(context, details) },
+                            isBlocked = { viewModel.isPrimaryBlocked() },
+                            onSetBlocked = { blocked ->
+                                scope.launch {
+                                    val ok = viewModel.setPrimaryBlocked(blocked)
+                                    val msg = when {
+                                        !ok -> "Couldn't update the block list"
+                                        blocked -> "Number blocked"
+                                        else -> "Number unblocked"
+                                    }
+                                    snackbarHostState.showSnackbar(msg)
+                                }
+                            },
+                            onDeleteContact = { showDeleteContactDialog = true },
                         )
                     }
                 }
@@ -368,6 +414,36 @@ fun PersonDetailScreen(
             onSave = { day, month, year -> viewModel.saveEvent(type, day, month, year) },
             onDismiss = viewModel::dismissAddEventSheet,
         )
+    }
+
+    if (showDeleteContactDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteContactDialog = false },
+            title = { Text("Delete contact?") },
+            text = {
+                Text(
+                    "This removes the contact from your phone's address book. " +
+                        "Their bond, cadence and timeline in Bondwidth stay — only " +
+                        "the contact-card details (numbers, email, etc.) go.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteContactDialog = false
+                        viewModel.deleteContact()
+                    },
+                ) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteContactDialog = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    val deleted by viewModel.contactDeleted.collectAsStateWithLifecycle()
+    LaunchedEffect(deleted) {
+        if (deleted) snackbarHostState.showSnackbar("Contact deleted")
     }
 }
 
@@ -985,10 +1061,15 @@ private fun formatEventDate(event: EventEntity): String =
 @Composable
 private fun ContactInfoSection(
     details: ContactDetails,
+    canBlock: Boolean,
+    onCallNumber: (String) -> Unit,
     onSetPrimary: (Long) -> Unit,
     onSetRingtone: (android.net.Uri?) -> Unit,
     onEditContact: (() -> Unit)?,
     onShareContact: () -> Unit,
+    isBlocked: suspend () -> Boolean,
+    onSetBlocked: (Boolean) -> Unit,
+    onDeleteContact: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Contact info", style = MaterialTheme.typography.titleMedium)
@@ -999,6 +1080,7 @@ private fun ContactInfoSection(
                     number = phone.number,
                     isPrimary = phone.isPrimary,
                     canSetPrimary = multiple && !phone.isPrimary,
+                    onCall = { onCallNumber(phone.number) },
                     onSetPrimary = { onSetPrimary(phone.dataId) },
                 )
             }
@@ -1021,6 +1103,32 @@ private fun ContactInfoSection(
             customRingtone = details.customRingtone,
             onPicked = onSetRingtone,
         )
+        // Block / unblock the primary number. Loads the current state once
+        // and flips the label; hidden when blocking isn't available.
+        if (canBlock && details.phoneNumbers.isNotEmpty()) {
+            var blocked by remember(details.lookupKey) { mutableStateOf<Boolean?>(null) }
+            LaunchedEffect(details.lookupKey) { blocked = isBlocked() }
+            blocked?.let { isB ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            val next = !isB
+                            blocked = next
+                            onSetBlocked(next)
+                        }
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Filled.Block, contentDescription = null)
+                    Spacer(Modifier.width(16.dp))
+                    Text(
+                        text = if (isB) "Unblock number" else "Block number",
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                }
+            }
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1038,6 +1146,20 @@ private fun ContactInfoSection(
                 Text("Share contact")
             }
         }
+        TextButton(
+            onClick = onDeleteContact,
+            colors = ButtonDefaults.textButtonColors(
+                contentColor = MaterialTheme.colorScheme.error,
+            ),
+        ) {
+            Icon(
+                Icons.Filled.Delete,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(Modifier.width(6.dp))
+            Text("Delete contact")
+        }
         HorizontalDivider()
     }
 }
@@ -1047,11 +1169,10 @@ private fun ContactPhoneRow(
     number: String,
     isPrimary: Boolean,
     canSetPrimary: Boolean,
+    onCall: () -> Unit,
     onSetPrimary: () -> Unit,
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(Icons.Filled.Call, contentDescription = null)
-        Spacer(Modifier.width(16.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(number, style = MaterialTheme.typography.bodyLarge)
             if (isPrimary) {
@@ -1062,20 +1183,27 @@ private fun ContactPhoneRow(
                 )
             }
         }
-        if (isPrimary) {
-            Icon(
-                imageVector = Icons.Filled.Star,
-                contentDescription = "Default number",
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(20.dp),
-            )
-        } else if (canSetPrimary) {
+        if (canSetPrimary) {
             IconButton(onClick = onSetPrimary) {
                 Icon(
                     imageVector = Icons.Filled.StarBorder,
                     contentDescription = "Set as default",
                 )
             }
+        } else if (isPrimary) {
+            Icon(
+                imageVector = Icons.Filled.Star,
+                contentDescription = "Default number",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+        IconButton(onClick = onCall) {
+            Icon(
+                imageVector = Icons.Filled.Call,
+                contentDescription = "Call $number",
+                tint = MaterialTheme.colorScheme.primary,
+            )
         }
     }
 }

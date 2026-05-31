@@ -1,6 +1,10 @@
 package com.phonepvr.friends.ui.onboarding
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,24 +20,34 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.phonepvr.friends.domain.quotes.Quote
+import com.phonepvr.friends.ui.permissions.PermissionInfoList
+import com.phonepvr.friends.ui.permissions.onboardingRuntimePermissions
 import kotlinx.coroutines.launch
 
-private const val SLIDE_COUNT = 6
+private const val SLIDE_COUNT = 7
+
+/** The last slide gathers permissions + the default-phone-app role. */
+private const val PERMISSIONS_PAGE = SLIDE_COUNT - 1
 
 @Composable
 fun OnboardingScreen(
@@ -65,7 +79,11 @@ fun OnboardingScreen(
                     .weight(1f)
                     .fillMaxWidth(),
             ) { page ->
-                OnboardingSlide(page = page, quote = quote)
+                if (page == PERMISSIONS_PAGE) {
+                    PermissionsSlide(viewModel = viewModel)
+                } else {
+                    OnboardingSlide(page = page, quote = quote)
+                }
             }
             Row(
                 modifier = Modifier
@@ -214,4 +232,101 @@ private fun TitleBodySlide(title: String, body: String) {
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         textAlign = TextAlign.Center,
     )
+}
+
+/**
+ * Final onboarding slide: explains every permission group up front and
+ * requests them together, plus offers the default-phone-app role. Nothing
+ * here blocks finishing — the bottom "Get started" button always works, and
+ * anything declined falls back to the in-context prompts elsewhere.
+ */
+@Composable
+private fun PermissionsSlide(viewModel: OnboardingViewModel) {
+    val context = LocalContext.current
+    val isDefaultDialer by viewModel.isDefaultDialer.collectAsStateWithLifecycle()
+
+    var requested by rememberSaveable { mutableStateOf(false) }
+    var allGranted by rememberSaveable { mutableStateOf(false) }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { result ->
+        requested = true
+        allGranted = result.values.all { it }
+    }
+    val roleLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { viewModel.refreshDefaultDialer() }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 32.dp, vertical = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            text = "A few permissions",
+            style = MaterialTheme.typography.headlineSmall,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(12.dp))
+        Text(
+            text = "Friends is your phone and contacts app, so it needs a few " +
+                "things to work. Here's what, and why — you can change any of " +
+                "these later in Settings.",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(24.dp))
+        PermissionInfoList()
+        Spacer(Modifier.height(24.dp))
+        Button(
+            onClick = {
+                permissionLauncher.launch(onboardingRuntimePermissions().toTypedArray())
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(if (allGranted) "Permissions granted" else "Grant permissions")
+        }
+        Spacer(Modifier.height(8.dp))
+        if (isDefaultDialer) {
+            Text(
+                text = "Friends is your default phone app.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
+                textAlign = TextAlign.Center,
+            )
+        } else {
+            OutlinedButton(
+                onClick = { viewModel.makeDialerRoleIntent()?.let(roleLauncher::launch) },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Set as default phone app")
+            }
+        }
+        if (requested && !allGranted) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "Some permissions weren't granted. Friends still works — " +
+                    "you can enable them anytime.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+            TextButton(onClick = { openAppInfo(context) }) {
+                Text("Open app settings")
+            }
+        }
+    }
+}
+
+private fun openAppInfo(context: android.content.Context) {
+    val intent = android.content.Intent(
+        android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+    )
+        .setData(android.net.Uri.fromParts("package", context.packageName, null))
+        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+    runCatching { context.startActivity(intent) }
 }

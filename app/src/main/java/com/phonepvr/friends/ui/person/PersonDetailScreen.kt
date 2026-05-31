@@ -230,7 +230,7 @@ fun PersonDetailScreen(
                             onDismissRequest = { menuOpen = false },
                         ) {
                             DropdownMenuItem(
-                                text = { Text("Edit person") },
+                                text = { Text("Edit bond") },
                                 leadingIcon = {
                                     Icon(Icons.Filled.Edit, contentDescription = null)
                                 },

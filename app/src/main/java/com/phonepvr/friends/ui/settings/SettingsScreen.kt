@@ -191,9 +191,6 @@ fun SettingsScreen(
                 supportingContent = { Text(formatHour(settings.notificationHour)) },
                 modifier = Modifier.clickable { activeDialog = SettingsDialog.HOUR },
             )
-
-            HorizontalDivider()
-            SectionHeader("New people")
             ListItem(
                 headlineContent = { Text("Default check-in cadence") },
                 supportingContent = {
@@ -327,7 +324,7 @@ fun SettingsScreen(
             )
 
             HorizontalDivider()
-            SectionHeader("Personalisation")
+            SectionHeader("About & more")
             ListItem(
                 headlineContent = { Text("My quotes") },
                 supportingContent = {
@@ -342,9 +339,6 @@ fun SettingsScreen(
                 },
                 modifier = Modifier.clickable { onReplayOnboarding() },
             )
-
-            HorizontalDivider()
-            SectionHeader("About")
             ListItem(
                 headlineContent = { Text("About Bondwidth") },
                 supportingContent = {

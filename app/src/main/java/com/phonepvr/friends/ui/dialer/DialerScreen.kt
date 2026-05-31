@@ -42,10 +42,13 @@ import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CallMade
 import androidx.compose.material.icons.filled.CallMissed
 import androidx.compose.material.icons.filled.CallReceived
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Dialpad
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
@@ -57,6 +60,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -150,13 +154,6 @@ fun DialerScreen(
         viewModel.onPermissionState(hasCallLog, hasContacts)
     }
 
-    LaunchedEffect(state.placeError) {
-        state.placeError?.let { msg ->
-            snackbarState.showSnackbar(msg)
-            viewModel.dismissPlaceError()
-        }
-    }
-
     if (showRationale) {
         PermissionRationaleSheet(
             title = "A few phone permissions",
@@ -183,7 +180,9 @@ fun DialerScreen(
         )
     }
 
+    var lastDialedNumber by remember { mutableStateOf<String?>(null) }
     val placeCall: (String) -> Unit = { number ->
+        lastDialedNumber = number
         if (hasCallPhone) {
             tryPlace(viewModel, number, snackbarState, scope)
         } else {
@@ -277,11 +276,22 @@ fun DialerScreen(
             }
         },
     ) { padding ->
-        Box(
+        Column(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize(),
         ) {
+            // A failed call attempt surfaces a persistent, dismissible banner.
+            // (The old behaviour flashed a snackbar that auto-dismissed before
+            // it could be read.) Retry re-dials the last attempted number.
+            state.placeError?.let { msg ->
+                DialerErrorBanner(
+                    message = msg,
+                    onRetry = lastDialedNumber?.let { number -> { placeCall(number) } },
+                    onDismiss = { viewModel.dismissPlaceError() },
+                )
+            }
+            Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
             // Crossfade between the permission gate and the recents list —
             // smoother than a hard swap after the user grants access.
             Crossfade(
@@ -315,6 +325,7 @@ fun DialerScreen(
                         onLongPress = { entry -> sheetEntry = entry },
                     )
                 }
+            }
             }
         }
     }
@@ -688,6 +699,61 @@ private fun secondaryLine(entry: RecentEntry): String {
         "${entry.number} · $time"
     } else {
         time
+    }
+}
+
+/**
+ * Persistent, dismissible error banner for a failed call attempt. Replaces a
+ * self-dismissing snackbar so a placement failure stays visible until the user
+ * acts. [onRetry] is null when there's no number to re-dial (no Retry shown).
+ */
+@Composable
+private fun DialerErrorBanner(
+    message: String,
+    onRetry: (() -> Unit)?,
+    onDismiss: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        color = MaterialTheme.colorScheme.errorContainer,
+        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        shape = RoundedCornerShape(12.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Warning,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(Modifier.width(12.dp))
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f),
+            )
+            if (onRetry != null) {
+                TextButton(
+                    onClick = onRetry,
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                    ),
+                ) {
+                    Text("Retry")
+                }
+            }
+            IconButton(onClick = onDismiss) {
+                Icon(
+                    imageVector = Icons.Filled.Close,
+                    contentDescription = "Dismiss error",
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        }
     }
 }
 

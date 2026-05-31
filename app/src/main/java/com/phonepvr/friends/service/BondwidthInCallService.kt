@@ -178,7 +178,7 @@ class BondwidthInCallService : InCallService() {
         // every state-change re-post.
         val isIncomingRing = snapshot.state == CallSimpleState.RINGING &&
             snapshot.direction == CallDirection.INCOMING
-        if (isIncomingRing) ringer.start() else ringer.stop()
+        if (isIncomingRing) ringer.start(snapshot.number) else ringer.stop()
 
         // Resolve the caller's name off the main thread, then re-post.
         scope.launch {

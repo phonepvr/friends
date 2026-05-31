@@ -182,6 +182,14 @@ class ContactDetailViewModel @Inject constructor(
         }
     }
 
+    /** Sets the per-contact ringtone (or null to revert to the system default). */
+    fun setCustomRingtone(uri: android.net.Uri?) {
+        viewModelScope.launch {
+            contactWriter.setCustomRingtone(contactId, uri)
+            details.value = systemContactsRepository.details(contactId)
+        }
+    }
+
     /** Most recent call-log timestamp matching any of [numbers], or null. */
     private fun latestCallTimestampFor(numbers: List<String>): Long? {
         val suffixes = numbers

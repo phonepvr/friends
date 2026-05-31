@@ -129,6 +129,29 @@ class ContactWriter @Inject constructor(
             }.isSuccess
         }
 
+    /**
+     * Writes [ringtoneUri] (or null = system default) to the contact's
+     * CUSTOM_RINGTONE column. Lives on the Contacts row itself rather than
+     * in a Data sub-row, so we update the Contacts content URI directly.
+     */
+    suspend fun setCustomRingtone(contactId: Long, ringtoneUri: android.net.Uri?): Boolean =
+        withContext(Dispatchers.IO) {
+            val values = android.content.ContentValues().apply {
+                if (ringtoneUri == null) {
+                    putNull(ContactsContract.Contacts.CUSTOM_RINGTONE)
+                } else {
+                    put(ContactsContract.Contacts.CUSTOM_RINGTONE, ringtoneUri.toString())
+                }
+            }
+            val uri = ContentUris.withAppendedId(
+                ContactsContract.Contacts.CONTENT_URI,
+                contactId,
+            )
+            runCatching {
+                resolver.update(uri, values, null, null) > 0
+            }.getOrElse { false }
+        }
+
     suspend fun delete(contactId: Long, lookupKey: String): Boolean =
         withContext(Dispatchers.IO) {
             runCatching {

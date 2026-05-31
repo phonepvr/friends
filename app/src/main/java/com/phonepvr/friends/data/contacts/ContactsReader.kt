@@ -46,6 +46,8 @@ data class ContactDetails(
     val anniversary: ContactDate?,
     /** System contact photo content:// URI, or null when the contact has none. */
     val photoUri: String? = null,
+    /** Per-contact ringtone URI (content://...), or null = system default. */
+    val customRingtone: String? = null,
 )
 
 /** A single phone number of a contact, with its provider Data row id. */
@@ -131,12 +133,14 @@ class ContactsReader @Inject constructor(
         var lookupKey = ""
         var displayName = ""
         var photoUri: String? = null
+        var customRingtone: String? = null
         resolver.query(
             ContactsContract.Contacts.CONTENT_URI,
             arrayOf(
                 ContactsContract.Contacts.LOOKUP_KEY,
                 ContactsContract.Contacts.DISPLAY_NAME_PRIMARY,
                 ContactsContract.Contacts.PHOTO_URI,
+                ContactsContract.Contacts.CUSTOM_RINGTONE,
             ),
             "${ContactsContract.Contacts._ID} = ?",
             arrayOf(contactId.toString()),
@@ -146,6 +150,7 @@ class ContactsReader @Inject constructor(
                 lookupKey = cursor.getString(0).orEmpty()
                 displayName = cursor.getString(1).orEmpty()
                 photoUri = cursor.getString(2)?.takeIf { it.isNotBlank() }
+                customRingtone = cursor.getString(3)?.takeIf { it.isNotBlank() }
             }
         }
         if (displayName.isBlank()) return null
@@ -248,6 +253,7 @@ class ContactsReader @Inject constructor(
             birthday = birthday,
             anniversary = anniversary,
             photoUri = photoUri,
+            customRingtone = customRingtone,
         )
     }
 

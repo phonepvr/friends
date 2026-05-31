@@ -5,10 +5,12 @@ import android.media.AudioAttributes
 import android.media.AudioManager
 import android.media.MediaPlayer
 import android.media.RingtoneManager
+import android.net.Uri
 import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.provider.ContactsContract
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -34,14 +36,22 @@ class Ringer @Inject constructor(
     private val vibrationPattern = longArrayOf(0L, 1000L, 1000L)
     private val vibrationAmps = intArrayOf(0, 255, 0)
 
+    /**
+     * Start ringing. When [callerNumber] resolves to a contact with a
+     * custom ringtone, that URI plays instead of the system default —
+     * mirroring stock-dialer behaviour. A null or unknown number falls
+     * back to the system default.
+     */
     @Synchronized
-    fun start() {
+    fun start(callerNumber: String? = null) {
         if (player != null) return
         val audioManager =
             context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
         val mode = audioManager.ringerMode
         if (mode == AudioManager.RINGER_MODE_SILENT) return
-        if (mode == AudioManager.RINGER_MODE_NORMAL) playRingtone()
+        if (mode == AudioManager.RINGER_MODE_NORMAL) {
+            playRingtone(lookupCustomRingtone(callerNumber))
+        }
         startVibration()
     }
 
@@ -56,11 +66,44 @@ class Ringer @Inject constructor(
         vibrator = null
     }
 
-    private fun playRingtone() {
-        val uri = RingtoneManager.getActualDefaultRingtoneUri(
-            context,
-            RingtoneManager.TYPE_RINGTONE,
-        ) ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE) ?: return
+    /**
+     * Resolves [number] to its system contact and returns the custom
+     * ringtone URI when one is set. PhoneLookup handles formatting
+     * variants on the platform side so we don't have to normalise here.
+     * Null means "use the default" — covers unknown callers, contacts
+     * without a custom tone, and any provider error.
+     */
+    private fun lookupCustomRingtone(number: String?): Uri? {
+        if (number.isNullOrBlank()) return null
+        val lookupUri = Uri.withAppendedPath(
+            ContactsContract.PhoneLookup.CONTENT_FILTER_URI,
+            Uri.encode(number),
+        )
+        return runCatching {
+            context.contentResolver.query(
+                lookupUri,
+                arrayOf(ContactsContract.PhoneLookup.CUSTOM_RINGTONE),
+                null,
+                null,
+                null,
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    cursor.getString(0)?.takeIf { it.isNotBlank() }?.let { Uri.parse(it) }
+                } else {
+                    null
+                }
+            }
+        }.getOrNull()
+    }
+
+    private fun playRingtone(customUri: Uri? = null) {
+        val uri = customUri
+            ?: RingtoneManager.getActualDefaultRingtoneUri(
+                context,
+                RingtoneManager.TYPE_RINGTONE,
+            )
+            ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+            ?: return
         runCatching {
             player = MediaPlayer().apply {
                 setAudioAttributes(

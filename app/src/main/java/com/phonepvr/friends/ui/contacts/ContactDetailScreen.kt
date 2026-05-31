@@ -4,6 +4,8 @@ import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.RingtoneManager
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -32,6 +34,7 @@ import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Share
@@ -342,10 +345,101 @@ fun ContactDetailScreen(
                                     Text(notes, style = MaterialTheme.typography.bodyLarge)
                                 }
                             }
+                            RingtoneRow(
+                                customRingtone = d.customRingtone,
+                                contactName = d.displayName,
+                                onPicked = viewModel::setCustomRingtone,
+                            )
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun RingtoneRow(
+    customRingtone: String?,
+    contactName: String,
+    onPicked: (android.net.Uri?) -> Unit,
+) {
+    val context = LocalContext.current
+    // Resolve the URI to a human label. getRingtone() can hit MediaStore so
+    // we cache the result per URI via remember.
+    val title = remember(customRingtone) {
+        if (customRingtone == null) {
+            "Default ringtone"
+        } else {
+            runCatching {
+                RingtoneManager.getRingtone(context, customRingtone.toUri())
+                    ?.getTitle(context)
+            }.getOrNull() ?: "Custom ringtone"
+        }
+    }
+    val launcher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val picked: android.net.Uri? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                result.data?.getParcelableExtra(
+                    RingtoneManager.EXTRA_RINGTONE_PICKED_URI,
+                    android.net.Uri::class.java,
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                result.data?.getParcelableExtra<android.net.Uri>(
+                    RingtoneManager.EXTRA_RINGTONE_PICKED_URI,
+                )
+            }
+            // The picker returns the system default URI when "Default" is
+            // selected. Translate that back to null so our DB stores
+            // "use whatever the system default is right now" rather than
+            // pinning a copy of it.
+            val systemDefault = RingtoneManager.getActualDefaultRingtoneUri(
+                context,
+                RingtoneManager.TYPE_RINGTONE,
+            ) ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+            onPicked(if (picked == systemDefault) null else picked)
+        }
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable {
+                val intent = Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
+                    putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_RINGTONE)
+                    putExtra(
+                        RingtoneManager.EXTRA_RINGTONE_TITLE,
+                        "Ringtone for $contactName",
+                    )
+                    putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
+                    putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false)
+                    customRingtone?.let {
+                        putExtra(
+                            RingtoneManager.EXTRA_RINGTONE_EXISTING_URI,
+                            it.toUri(),
+                        )
+                    }
+                }
+                runCatching { launcher.launch(intent) }
+            }
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Filled.Notifications, contentDescription = null)
+        Spacer(Modifier.width(16.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                text = "Tap to choose ringtone",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (customRingtone != null) {
+            TextButton(onClick = { onPicked(null) }) { Text("Reset") }
         }
     }
 }

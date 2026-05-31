@@ -135,6 +135,23 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="tel" />
             </intent-filter>
+            <!--
+              Opening a .vcf attachment (email, file manager, Bluetooth
+              transfer) routes here. deepLinkFor() detects the vCard mime /
+              extension and sends the user to the import-preview screen. Both
+              content:// and file:// are covered; the three mime types are
+              the ones contacts apps stamp on vCards in the wild.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="text/x-vcard" />
+                <data android:mimeType="text/vcard" />
+                <data android:mimeType="text/directory" />
+            </intent-filter>
         </activity>
 
         <!--

@@ -141,7 +141,34 @@ class MainActivity : FragmentActivity() {
                 ?.trim()
             return Routes.dialpad(number)
         }
+        // Opening a .vcf attachment: VIEW on a content/file URI whose type or
+        // extension is a vCard. Route to the import-preview screen with the
+        // URI carried as an arg. The read grant rides on this Activity for
+        // its lifetime (singleTop keeps the instance alive), and the import
+        // ViewModel reads the file a moment later while it's still valid —
+        // no persistable grant needed, which matters because attachment
+        // intents rarely offer one.
+        if (intent.action == Intent.ACTION_VIEW) {
+            val data = intent.data
+            if (data != null && isVCardIntent(intent)) {
+                return Routes.importVcard(data.toString())
+            }
+        }
         return null
+    }
+
+    /**
+     * True when [intent] looks like a vCard open: a recognised vCard mime
+     * type, or a .vcf path when the sender didn't set a useful type (common
+     * for file managers, which often send application/octet-stream).
+     */
+    private fun isVCardIntent(intent: Intent): Boolean {
+        val type = intent.type ?: contentResolver.getType(intent.data ?: return false)
+        if (type != null && VCARD_MIME_TYPES.any { type.equals(it, ignoreCase = true) }) {
+            return true
+        }
+        val path = intent.data?.toString()?.lowercase().orEmpty()
+        return path.endsWith(".vcf")
     }
 
     companion object {
@@ -150,6 +177,13 @@ class MainActivity : FragmentActivity() {
 
         /** Person id (Long) carried by widget-row deep links. */
         const val EXTRA_OPEN_PERSON_ID = "com.phonepvr.friends.OPEN_PERSON_ID"
+
+        /** Mime types contacts apps stamp on vCard files. */
+        private val VCARD_MIME_TYPES = listOf(
+            "text/x-vcard",
+            "text/vcard",
+            "text/directory",
+        )
     }
 }
 

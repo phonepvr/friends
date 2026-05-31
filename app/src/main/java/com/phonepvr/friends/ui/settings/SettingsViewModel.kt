@@ -5,11 +5,9 @@ import android.content.Intent
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.phonepvr.friends.data.contacts.ContactForm
-import com.phonepvr.friends.data.contacts.ContactWriter
 import com.phonepvr.friends.data.contacts.ContactsReader
 import com.phonepvr.friends.data.contacts.VCardBuilder
-import com.phonepvr.friends.data.contacts.VCardParser
+import com.phonepvr.friends.data.contacts.VCardImporter
 import com.phonepvr.friends.data.settings.AppSettings
 import com.phonepvr.friends.data.settings.SettingsRepository
 import com.phonepvr.friends.domain.model.ThemeMode
@@ -49,7 +47,7 @@ class SettingsViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val dialerRoleManager: DialerRoleManager,
     private val contactsReader: ContactsReader,
-    private val contactWriter: ContactWriter,
+    private val vCardImporter: VCardImporter,
     @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
 
@@ -172,32 +170,12 @@ class SettingsViewModel @Inject constructor(
         _importState.value = ImportState.Reading
         viewModelScope.launch {
             val outcome = runCatching {
-                withContext(Dispatchers.IO) {
-                    val text = appContext.contentResolver.openInputStream(source)?.use {
-                        it.bufferedReader(Charsets.UTF_8).readText()
-                    } ?: throw IllegalStateException("Couldn't open the vCard file.")
-                    val cards = VCardParser.parse(text)
-                    if (cards.isEmpty()) return@withContext IntArray(2)
-                    var imported = 0
-                    var skipped = 0
-                    cards.forEachIndexed { index, card ->
-                        _importState.value = ImportState.Importing(index, cards.size)
-                        val form = ContactForm(
-                            displayName = card.displayName,
-                            phones = card.phones,
-                            emails = card.emails,
-                            notes = card.notes.orEmpty(),
-                            organization = card.organization.orEmpty(),
-                            birthday = card.birthday,
-                        )
-                        val created = contactWriter.create(form)
-                        if (created != null) imported++ else skipped++
-                    }
-                    intArrayOf(imported, skipped)
+                vCardImporter.importFrom(source) { index, total ->
+                    _importState.value = ImportState.Importing(index, total)
                 }
             }
             _importState.value = outcome.fold(
-                onSuccess = { ImportState.Done(imported = it[0], skipped = it[1]) },
+                onSuccess = { ImportState.Done(imported = it.imported, skipped = it.skipped) },
                 onFailure = { ImportState.Error(it.message ?: "Import failed") },
             )
         }

@@ -21,6 +21,7 @@ import com.phonepvr.friends.ui.contacts.ContactDetailScreen
 import com.phonepvr.friends.ui.contacts.ContactEditScreen
 import com.phonepvr.friends.ui.contacts.ContactsBrowserScreen
 import com.phonepvr.friends.ui.contacts.ImportContactsScreen
+import com.phonepvr.friends.ui.contacts.ImportVCardScreen
 import com.phonepvr.friends.ui.contacts.SaveNumberScreen
 import com.phonepvr.friends.ui.dialer.CallHistoryScreen
 import com.phonepvr.friends.ui.dialer.DialerScreen
@@ -42,6 +43,8 @@ object Routes {
     const val LOG_INTERACTION = "interaction/log/{personId}"
     const val EDIT_INTERACTION = "interaction/edit/{entryId}"
     const val IMPORT_CONTACTS = "contacts/import"
+    const val IMPORT_VCARD = "contacts/import-vcard?uri={uri}"
+    const val IMPORT_VCARD_URI_ARG = "uri"
     const val CONTACTS_BROWSER = "contacts/browse"
     const val CONTACT_DETAIL = "contacts/detail/{contactId}"
     const val NEW_CONTACT = "contacts/new?number={number}"
@@ -89,6 +92,9 @@ object Routes {
 
     fun callHistory(number: String): String =
         "dialer/history?number=${android.net.Uri.encode(number)}"
+
+    fun importVcard(uri: String): String =
+        "contacts/import-vcard?uri=${android.net.Uri.encode(uri)}"
 }
 
 @Composable
@@ -205,6 +211,26 @@ fun FriendsNavHost(
         }
         composable(Routes.IMPORT_CONTACTS) {
             ImportContactsScreen(onDone = { navController.popBackStack() })
+        }
+        composable(
+            route = Routes.IMPORT_VCARD,
+            arguments = listOf(
+                navArgument(Routes.IMPORT_VCARD_URI_ARG) {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+            ),
+        ) {
+            ImportVCardScreen(
+                onDone = {
+                    // Pop back if there's a stack; otherwise (app launched
+                    // cold straight into this) fall back to the people list.
+                    if (!navController.popBackStack()) {
+                        navController.navigate(Routes.PEOPLE_LIST)
+                    }
+                },
+            )
         }
         composable(Routes.CONTACTS_BROWSER) {
             ContactsBrowserScreen(

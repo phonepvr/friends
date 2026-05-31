@@ -23,6 +23,8 @@ data class ContactForm(
     val emails: List<String> = emptyList(),
     val notes: String = "",
     val organization: String = "",
+    /** Birthday to write on create; ignored on update so existing dates survive. */
+    val birthday: ContactDate? = null,
     /** What to do with the contact's photo on save. Defaults to "leave it". */
     val photoChange: PhotoChange = PhotoChange.Unchanged,
 )
@@ -224,6 +226,29 @@ class ContactWriter @Inject constructor(
                         ContactsContract.CommonDataKinds.Organization.CONTENT_ITEM_TYPE,
                     )
                     .withValue(ContactsContract.CommonDataKinds.Organization.COMPANY, company)
+                    .build(),
+            )
+        }
+        form.birthday?.let { bday ->
+            // ContactsContract stores birthdays as Event rows with
+            // TYPE_BIRTHDAY. START_DATE accepts "yyyy-MM-dd" or "--MM-dd"
+            // when the year is unknown — the same shapes vCard uses.
+            val date = if (bday.year != null) {
+                "%04d-%02d-%02d".format(bday.year, bday.month, bday.day)
+            } else {
+                "--%02d-%02d".format(bday.month, bday.day)
+            }
+            ops.add(
+                attach(ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI))
+                    .withValue(
+                        ContactsContract.Data.MIMETYPE,
+                        ContactsContract.CommonDataKinds.Event.CONTENT_ITEM_TYPE,
+                    )
+                    .withValue(ContactsContract.CommonDataKinds.Event.START_DATE, date)
+                    .withValue(
+                        ContactsContract.CommonDataKinds.Event.TYPE,
+                        ContactsContract.CommonDataKinds.Event.TYPE_BIRTHDAY,
+                    )
                     .build(),
             )
         }

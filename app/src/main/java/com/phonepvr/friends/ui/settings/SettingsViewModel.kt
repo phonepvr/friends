@@ -5,8 +5,11 @@ import android.content.Intent
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.phonepvr.friends.data.contacts.ContactForm
+import com.phonepvr.friends.data.contacts.ContactWriter
 import com.phonepvr.friends.data.contacts.ContactsReader
 import com.phonepvr.friends.data.contacts.VCardBuilder
+import com.phonepvr.friends.data.contacts.VCardParser
 import com.phonepvr.friends.data.settings.AppSettings
 import com.phonepvr.friends.data.settings.SettingsRepository
 import com.phonepvr.friends.domain.model.ThemeMode
@@ -32,11 +35,21 @@ sealed interface ExportState {
     data class Error(val message: String) : ExportState
 }
 
+/** Lifecycle of the "import contacts from vCard" flow. */
+sealed interface ImportState {
+    data object Idle : ImportState
+    data object Reading : ImportState
+    data class Importing(val done: Int, val total: Int) : ImportState
+    data class Done(val imported: Int, val skipped: Int) : ImportState
+    data class Error(val message: String) : ImportState
+}
+
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val dialerRoleManager: DialerRoleManager,
     private val contactsReader: ContactsReader,
+    private val contactWriter: ContactWriter,
     @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
 
@@ -141,6 +154,57 @@ class SettingsViewModel @Inject constructor(
     fun defaultExportFileName(): String {
         val date = java.time.LocalDate.now().toString()
         return "bondwidth-contacts-$date.vcf"
+    }
+
+    // --- Import contacts from a vCard file ---
+
+    private val _importState = MutableStateFlow<ImportState>(ImportState.Idle)
+    val importState: StateFlow<ImportState> = _importState.asStateFlow()
+
+    /**
+     * Reads [source] as a vCard 3.0 stream and inserts each card as a new
+     * system contact via [ContactWriter]. Cards without a usable display
+     * name are skipped. Auto-tracking is deliberately not applied — a bulk
+     * import of 500 contacts shouldn't drown the Bonds list.
+     */
+    fun importContactsFromVcf(source: Uri) {
+        if (_importState.value !is ImportState.Idle) return
+        _importState.value = ImportState.Reading
+        viewModelScope.launch {
+            val outcome = runCatching {
+                withContext(Dispatchers.IO) {
+                    val text = appContext.contentResolver.openInputStream(source)?.use {
+                        it.bufferedReader(Charsets.UTF_8).readText()
+                    } ?: throw IllegalStateException("Couldn't open the vCard file.")
+                    val cards = VCardParser.parse(text)
+                    if (cards.isEmpty()) return@withContext IntArray(2)
+                    var imported = 0
+                    var skipped = 0
+                    cards.forEachIndexed { index, card ->
+                        _importState.value = ImportState.Importing(index, cards.size)
+                        val form = ContactForm(
+                            displayName = card.displayName,
+                            phones = card.phones,
+                            emails = card.emails,
+                            notes = card.notes.orEmpty(),
+                            organization = card.organization.orEmpty(),
+                            birthday = card.birthday,
+                        )
+                        val created = contactWriter.create(form)
+                        if (created != null) imported++ else skipped++
+                    }
+                    intArrayOf(imported, skipped)
+                }
+            }
+            _importState.value = outcome.fold(
+                onSuccess = { ImportState.Done(imported = it[0], skipped = it[1]) },
+                onFailure = { ImportState.Error(it.message ?: "Import failed") },
+            )
+        }
+    }
+
+    fun acknowledgeImportResult() {
+        _importState.value = ImportState.Idle
     }
 
     private fun runUpdate(block: suspend () -> Unit) {

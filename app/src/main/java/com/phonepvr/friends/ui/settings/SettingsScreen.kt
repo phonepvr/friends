@@ -78,6 +78,7 @@ fun SettingsScreen(
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val isDefaultDialer by viewModel.isDefaultDialer.collectAsStateWithLifecycle()
     val exportState by viewModel.exportState.collectAsStateWithLifecycle()
+    val importState by viewModel.importState.collectAsStateWithLifecycle()
     var activeDialog by remember { mutableStateOf<SettingsDialog?>(null) }
     var showLockUnavailable by remember { mutableStateOf(false) }
     var showUpdateDialog by remember { mutableStateOf(false) }
@@ -89,6 +90,15 @@ fun SettingsScreen(
         ActivityResultContracts.CreateDocument("text/x-vcard"),
     ) { destination ->
         if (destination != null) viewModel.exportContactsToVcf(destination)
+    }
+
+    // Mime-type filter is lenient (*/*) because many devices report .vcf
+    // files as application/octet-stream and the picker would hide them
+    // otherwise. The parser validates the content itself.
+    val importContactsLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { source ->
+        if (source != null) viewModel.importContactsFromVcf(source)
     }
 
     // Re-read the default-dialer state every time Settings becomes
@@ -295,6 +305,21 @@ fun SettingsScreen(
                 },
                 modifier = Modifier.clickable {
                     exportContactsLauncher.launch(viewModel.defaultExportFileName())
+                },
+            )
+            ListItem(
+                headlineContent = { Text("Import contacts from vCard") },
+                supportingContent = {
+                    Text(
+                        "Pick a .vcf file (from another phone, an email, a backup) " +
+                            "and add every card in it to your contacts. Won't touch " +
+                            "the ones you already have.",
+                    )
+                },
+                modifier = Modifier.clickable {
+                    importContactsLauncher.launch(
+                        arrayOf("text/x-vcard", "text/vcard", "text/directory", "*/*"),
+                    )
                 },
             )
 
@@ -519,6 +544,70 @@ fun SettingsScreen(
             text = { Text(s.message) },
             confirmButton = {
                 TextButton(onClick = { viewModel.acknowledgeExportResult() }) { Text("OK") }
+            },
+        )
+    }
+
+    when (val s = importState) {
+        ImportState.Idle -> Unit
+        ImportState.Reading -> AlertDialog(
+            onDismissRequest = {},
+            title = { Text("Reading vCard file") },
+            text = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.height(20.dp).width(20.dp),
+                        strokeWidth = 2.dp,
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Text("Parsing the file…")
+                }
+            },
+            confirmButton = {},
+        )
+        is ImportState.Importing -> AlertDialog(
+            onDismissRequest = {},
+            title = { Text("Importing contacts") },
+            text = {
+                Column {
+                    Text("Adding ${s.done + 1} of ${s.total}…")
+                }
+            },
+            confirmButton = {},
+        )
+        is ImportState.Done -> AlertDialog(
+            onDismissRequest = { viewModel.acknowledgeImportResult() },
+            title = { Text("Import complete") },
+            text = {
+                Column {
+                    Text(
+                        if (s.imported == 1) {
+                            "1 contact added."
+                        } else {
+                            "${s.imported} contacts added."
+                        },
+                    )
+                    if (s.skipped > 0) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = "${s.skipped} skipped " +
+                                "(usually because they had no name or your contacts app refused).",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { viewModel.acknowledgeImportResult() }) { Text("OK") }
+            },
+        )
+        is ImportState.Error -> AlertDialog(
+            onDismissRequest = { viewModel.acknowledgeImportResult() },
+            title = { Text("Import failed") },
+            text = { Text(s.message) },
+            confirmButton = {
+                TextButton(onClick = { viewModel.acknowledgeImportResult() }) { Text("OK") }
             },
         )
     }

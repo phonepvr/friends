@@ -89,6 +89,11 @@ class ContactWriter @Inject constructor(
         }.getOrNull() ?: return@withContext null
         val rawContactUri = results.firstOrNull()?.uri ?: return@withContext null
         val rawContactId = ContentUris.parseId(rawContactUri)
+        // Photo is streamed in after the raw contact exists (see update()),
+        // not inserted as a Data blob in the batch.
+        (form.photoChange as? PhotoChange.Replace)?.let {
+            writeDisplayPhoto(rawContactId, it.bytes)
+        }
         val contactId = rawContactToContactId(rawContactId) ?: return@withContext null
         val lookupKey = lookupKeyOf(contactId).orEmpty()
         CreatedContact(contactId = contactId, lookupKey = lookupKey)
@@ -105,6 +110,10 @@ class ContactWriter @Inject constructor(
             val rawContactId = reader.firstRawContactId(contactId)
                 ?: return@withContext false
             val ops = arrayListOf<ContentProviderOperation>()
+            // The photo is written separately (see writeDisplayPhoto) via the
+            // DisplayPhoto asset stream, not as a Data-row blob — that's the
+            // reliable path on aggregated / synced contacts. The batch only
+            // deletes the old photo row when we're replacing or removing.
             val mimeTypesToDelete = if (form.photoChange == PhotoChange.Unchanged) {
                 EDITABLE_MIME_TYPES
             } else {
@@ -124,10 +133,43 @@ class ContactWriter @Inject constructor(
             addDataRows(ops, form) {
                 it.withValue(ContactsContract.Data.RAW_CONTACT_ID, rawContactId)
             }
-            runCatching {
+            val batchOk = runCatching {
                 resolver.applyBatch(ContactsContract.AUTHORITY, ops)
             }.isSuccess
+            if (!batchOk) return@withContext false
+            // Now stream the new photo (if any) onto the raw contact. A failure
+            // here shouldn't fail the whole save — the text fields are already
+            // written — but Replace failing is the user's headline action, so
+            // report it.
+            when (val change = form.photoChange) {
+                is PhotoChange.Replace -> writeDisplayPhoto(rawContactId, change.bytes)
+                else -> true
+            }
         }
+
+    /**
+     * Writes [bytes] as the raw contact's photo through the DisplayPhoto
+     * asset stream. The provider stores the full-size image, regenerates the
+     * thumbnail, and refreshes the aggregate contact's PHOTO_URI — none of
+     * which a plain Photo.PHOTO data-row blob reliably triggers once a
+     * contact is aggregated or account-synced.
+     */
+    private fun writeDisplayPhoto(rawContactId: Long, bytes: ByteArray): Boolean {
+        val rawContactUri = ContentUris.withAppendedId(
+            ContactsContract.RawContacts.CONTENT_URI,
+            rawContactId,
+        )
+        val photoUri = android.net.Uri.withAppendedPath(
+            rawContactUri,
+            ContactsContract.RawContacts.DisplayPhoto.CONTENT_DIRECTORY,
+        )
+        return runCatching {
+            resolver.openAssetFileDescriptor(photoUri, "rw")?.use { fd ->
+                fd.createOutputStream().use { it.write(bytes) }
+            }
+            true
+        }.getOrElse { false }
+    }
 
     /**
      * Writes [ringtoneUri] (or null = system default) to the contact's
@@ -275,23 +317,9 @@ class ContactWriter @Inject constructor(
                     .build(),
             )
         }
-        (form.photoChange as? PhotoChange.Replace)?.let { replace ->
-            ops.add(
-                attach(ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI))
-                    .withValue(
-                        ContactsContract.Data.MIMETYPE,
-                        ContactsContract.CommonDataKinds.Photo.CONTENT_ITEM_TYPE,
-                    )
-                    // The provider takes the raw bytes and generates its own
-                    // thumbnail + full-size storage on the receiving end, so
-                    // we just hand it the scaled JPEG.
-                    .withValue(
-                        ContactsContract.CommonDataKinds.Photo.PHOTO,
-                        replace.bytes,
-                    )
-                    .build(),
-            )
-        }
+        // Photo is intentionally NOT added here — it's streamed onto the raw
+        // contact via writeDisplayPhoto() after this batch, which is the
+        // reliable path for aggregated / synced contacts.
     }
 
     private fun rawContactToContactId(rawContactId: Long): Long? {

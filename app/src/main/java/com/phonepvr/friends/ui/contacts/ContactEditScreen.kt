@@ -3,7 +3,6 @@ package com.phonepvr.friends.ui.contacts
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -287,8 +286,13 @@ private fun PhotoHeader(
     onPickPhoto: (android.net.Uri) -> Unit,
     onRemovePhoto: () -> Unit,
 ) {
+    // GetContent("image/*") raises the system source chooser, so the user
+    // can pick from ANY gallery / file app on the device — not just the one
+    // backing the modern Photo Picker (which is Google Photos on most
+    // devices). We persist the bytes immediately, so we don't need a durable
+    // URI permission grant.
     val pickerLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.PickVisualMedia(),
+        ActivityResultContracts.GetContent(),
     ) { uri ->
         if (uri != null) onPickPhoto(uri)
     }
@@ -298,11 +302,7 @@ private fun PhotoHeader(
         ?: state.existingPhotoUri?.takeIf { it.isNotBlank() }?.toUri()
     val hasPhoto = previewModel != null
     val initial = state.form.displayName.trim().firstOrNull()?.uppercase() ?: "?"
-    val launchPicker = {
-        pickerLauncher.launch(
-            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
-        )
-    }
+    val launchPicker = { pickerLauncher.launch("image/*") }
 
     Column(
         modifier = Modifier.fillMaxWidth(),

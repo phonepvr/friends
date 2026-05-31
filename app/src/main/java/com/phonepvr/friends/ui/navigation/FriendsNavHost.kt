@@ -37,7 +37,6 @@ import com.phonepvr.friends.ui.timeline.LogInteractionScreen
 
 object Routes {
     const val PEOPLE_LIST = "people"
-    const val ADD_PERSON = "person/add"
     const val EDIT_PERSON = "person/edit/{personId}"
     const val PERSON_DETAIL = "person/detail/{personId}"
     const val LOG_INTERACTION = "interaction/log/{personId}"
@@ -155,16 +154,13 @@ fun FriendsNavHost(
                 onOpenPerson = { personId ->
                     navController.navigate(Routes.personDetail(personId))
                 },
-                // The Bonds "+" is now a contacts-import flow — no manual-add
-                // screen. (ADD_PERSON stays only for internal/edit reuse.)
+                // The Bonds "+" is a contacts-import flow — there's no manual
+                // add screen; bonds are only ever created from a contact.
                 onImportContacts = { navController.navigate(Routes.IMPORT_CONTACTS) },
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
                 onOpenBackup = { navController.navigate(Routes.BACKUP) },
                 bottomBar = { FriendsBottomBar(TopLevelTab.PEOPLE, onSelectTab) },
             )
-        }
-        composable(Routes.ADD_PERSON) {
-            AddEditPersonScreen(onDone = { navController.popBackStack() })
         }
         composable(
             route = Routes.EDIT_PERSON,

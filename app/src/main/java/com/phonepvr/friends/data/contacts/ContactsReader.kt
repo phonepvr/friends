@@ -183,7 +183,12 @@ class ContactsReader @Inject constructor(
         // Primary number first so callers that take "the" number (favourites,
         // tap-to-call) honour the user's choice.
         val sortedPhones = phoneEntries.sortedByDescending { it.isPrimary }
-        val phoneNumbers = sortedPhones.map { it.number }.distinct()
+        // Then collapse rows that refer to the same number under different
+        // types (MOBILE + HOME for the same digits, or the same number with
+        // and without a country code). Suffix-match on the last 9 digits
+        // matches everywhere else in the app and handles +44 7… vs 07… too.
+        val dedupedPhones = sortedPhones.dedupByDigits()
+        val phoneNumbers = dedupedPhones.map { it.number }
 
         var birthday: ContactDate? = null
         var anniversary: ContactDate? = null
@@ -236,7 +241,7 @@ class ContactsReader @Inject constructor(
             lookupKey = lookupKey,
             displayName = displayName,
             phoneNumbers = phoneNumbers,
-            phoneEntries = sortedPhones,
+            phoneEntries = dedupedPhones,
             emails = emails.distinct(),
             notes = notes,
             organization = organization,
@@ -375,4 +380,23 @@ class ContactsReader @Inject constructor(
             null
         }
     }
+}
+
+/**
+ * Collapse phone entries that point at the same number under different
+ * types or formats. Suffix-match on the last 9 digits — the same key the
+ * call-history / dialer match use — so "+44 7700 900000" and "07700 900000"
+ * land in the same bucket. Short codes (911, 411) digit-collapse to
+ * themselves and stay distinct. Within each group the first entry wins;
+ * the caller pre-sorts so the primary-tagged row comes first.
+ */
+private fun List<ContactPhone>.dedupByDigits(): List<ContactPhone> {
+    val seen = HashSet<String>()
+    val out = ArrayList<ContactPhone>(size)
+    for (entry in this) {
+        val digits = entry.number.filter(Char::isDigit)
+        val key = if (digits.length >= 4) digits.takeLast(9) else entry.number
+        if (seen.add(key)) out += entry
+    }
+    return out
 }

@@ -2,6 +2,7 @@ package com.phonepvr.friends.ui.dialer
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.phonepvr.friends.data.blocking.BlockedNumberManager
 import com.phonepvr.friends.data.contacts.ContactPhone
 import com.phonepvr.friends.data.contacts.DeviceContact
 import com.phonepvr.friends.data.contacts.SystemContactsRepository
@@ -72,7 +73,19 @@ class DialerViewModel @Inject constructor(
     personDao: PersonDao,
     favouritesRepository: FavouritesRepository,
     private val callPlacer: CallPlacer,
+    private val blockedNumberManager: BlockedNumberManager,
 ) : ViewModel() {
+
+    /** True iff blocking is supported on this device + we're the default dialer. */
+    fun canBlock(): Boolean = blockedNumberManager.canBlock()
+
+    suspend fun isBlocked(number: String): Boolean = blockedNumberManager.isBlocked(number)
+
+    suspend fun setBlocked(number: String, blocked: Boolean): Boolean = if (blocked) {
+        blockedNumberManager.block(number)
+    } else {
+        blockedNumberManager.unblock(number)
+    }
 
     private val callLogGranted = MutableStateFlow(false)
     private val contactsGranted = MutableStateFlow(false)

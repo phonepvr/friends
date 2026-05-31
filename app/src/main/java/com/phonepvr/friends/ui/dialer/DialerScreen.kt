@@ -37,6 +37,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Message
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CallMade
 import androidx.compose.material.icons.filled.CallMissed
@@ -206,8 +207,20 @@ fun DialerScreen(
     }
 
     sheetEntry?.let { entry ->
+        val canBlock = remember { viewModel.canBlock() }
+        // Loads asynchronously the first time the sheet opens for this
+        // number. Null hides the row; true / false picks Unblock vs Block.
+        var blockedStatus by remember(entry.number) { mutableStateOf<Boolean?>(null) }
+        LaunchedEffect(entry.number) {
+            blockedStatus = if (canBlock && entry.number.isNotBlank()) {
+                viewModel.isBlocked(entry.number)
+            } else {
+                null
+            }
+        }
         RecentActionsSheet(
             entry = entry,
+            blockedStatus = blockedStatus,
             onDismiss = { sheetEntry = null },
             onCall = {
                 sheetEntry = null
@@ -229,6 +242,20 @@ fun DialerScreen(
                 { sheetEntry = null; onSaveNumber(entry.number) }
             } else {
                 null
+            },
+            onToggleBlock = {
+                val number = entry.number
+                val nextBlocked = !(blockedStatus ?: false)
+                sheetEntry = null
+                scope.launch {
+                    val ok = viewModel.setBlocked(number, nextBlocked)
+                    val msg = when {
+                        !ok -> "Couldn't update the block list"
+                        nextBlocked -> "$number blocked"
+                        else -> "$number unblocked"
+                    }
+                    snackbarState.showSnackbar(msg)
+                }
             },
         )
     }
@@ -556,12 +583,14 @@ private fun NumberPickerSheet(
 @Composable
 private fun RecentActionsSheet(
     entry: RecentEntry,
+    blockedStatus: Boolean?,
     onDismiss: () -> Unit,
     onCall: () -> Unit,
     onMessage: () -> Unit,
     onCopy: () -> Unit,
     onOpenContact: (() -> Unit)?,
     onAddContact: (() -> Unit)?,
+    onToggleBlock: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(modifier = Modifier.padding(bottom = 24.dp)) {
@@ -597,6 +626,15 @@ private fun RecentActionsSheet(
             SheetAction(Icons.Filled.ContentCopy, "Copy number", onCopy)
             onOpenContact?.let { SheetAction(Icons.Filled.Person, "View contact", it) }
             onAddContact?.let { SheetAction(Icons.Filled.PersonAdd, "Add to contacts", it) }
+            // Block / Unblock — hidden when the device can't block (tablet,
+            // not default dialer) or while the current state is still loading.
+            blockedStatus?.let { blocked ->
+                SheetAction(
+                    icon = Icons.Filled.Block,
+                    label = if (blocked) "Unblock this number" else "Block this number",
+                    onClick = onToggleBlock,
+                )
+            }
         }
     }
 }

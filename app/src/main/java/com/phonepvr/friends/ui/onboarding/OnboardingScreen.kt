@@ -44,7 +44,9 @@ import com.phonepvr.friends.ui.permissions.PermissionInfoList
 import com.phonepvr.friends.ui.permissions.onboardingRuntimePermissions
 import kotlinx.coroutines.launch
 
-private const val SLIDE_COUNT = 7
+// Welcome, cadence, events, privacy+permissions intro, then the permissions
+// action page. Kept tight so users reach the app fast.
+private const val SLIDE_COUNT = 5
 
 /** The last slide gathers permissions + the default-phone-app role. */
 private const val PERMISSIONS_PAGE = SLIDE_COUNT - 1
@@ -158,24 +160,12 @@ private fun OnboardingSlide(page: Int, quote: Quote?) {
                     "for the day itself.",
             )
             3 -> TitleBodySlide(
-                title = "Your timeline. Just yours.",
-                body = "Every call, message and meet-up gets logged on this device. " +
-                    "No accounts, no analytics, no servers. Friends doesn't even ask " +
-                    "for an internet permission — we couldn't phone home if we wanted to.",
-            )
-            4 -> TitleBodySlide(
-                title = "A couple of permissions make this sing.",
-                body = "Bondwidth works best as your phone and contacts app: it reads " +
-                    "your contacts so you can add the people you already know, and your " +
-                    "call log so check-ins are counted automatically — no manual logging. " +
-                    "Granting these on the next screen gives you the smoothest experience. " +
-                    "It all stays on this device.",
-            )
-            5 -> TitleBodySlide(
-                title = "There's a widget, too.",
-                body = "Long-press your home screen and drop a Bondwidth widget there. " +
-                    "Upcoming birthdays, anniversaries, who's overdue for a check-in " +
-                    "— at a glance.",
+                title = "Private by design — and better with a couple of permissions.",
+                body = "Everything stays on this device: no accounts, no servers, not " +
+                    "even an internet permission. As your phone and contacts app, " +
+                    "Bondwidth reads your contacts (to add people you know) and your " +
+                    "call log (so check-ins count automatically). Granting these on the " +
+                    "next screen gives you the smoothest experience.",
             )
         }
     }

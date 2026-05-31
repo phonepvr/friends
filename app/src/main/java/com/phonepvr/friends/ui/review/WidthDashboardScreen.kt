@@ -27,6 +27,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.TrendingFlat
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -42,9 +43,13 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -87,6 +92,7 @@ fun WidthDashboardScreen(
     val availableYears by reviewViewModel.availableYears.collectAsStateWithLifecycle()
     val includeSilent by reviewViewModel.includeSilent.collectAsStateWithLifecycle()
     val reviewState by reviewViewModel.uiState.collectAsStateWithLifecycle()
+    var reviewExpanded by rememberSaveable { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -143,28 +149,36 @@ fun WidthDashboardScreen(
             item {
                 SectionHeader(text = "Call activity")
             }
-            item { CallAnalyticsSection() }
+            item { CallAnalyticsSection(onOpenPerson = onOpenPerson) }
 
-            // --- Existing reflection content, no longer behind a toggle ---
+            // --- Year in review: a reflective deep-dive, tucked behind a
+            // "More" expander so the actionable dashboard above stays the
+            // focus. Collapsed by default. ---
             item {
-                SectionHeader(text = "Year in review")
-            }
-            item {
-                YearChipRow(
-                    years = availableYears,
-                    selected = selectedYear,
-                    onSelect = reviewViewModel::setYear,
+                ExpanderHeader(
+                    text = "Year in review",
+                    expanded = reviewExpanded,
+                    onToggle = { reviewExpanded = !reviewExpanded },
                 )
             }
-            when (val s = reviewState) {
-                ReviewUiState.Loading -> Unit
-                is ReviewUiState.Sparse -> item { SparsePlaceholder(year = s.year) }
-                is ReviewUiState.Loaded -> item {
-                    ReviewBody(
-                        review = s.review,
-                        includeSilent = includeSilent,
-                        onIncludeSilentChange = reviewViewModel::setIncludeSilent,
+            if (reviewExpanded) {
+                item {
+                    YearChipRow(
+                        years = availableYears,
+                        selected = selectedYear,
+                        onSelect = reviewViewModel::setYear,
                     )
+                }
+                when (val s = reviewState) {
+                    ReviewUiState.Loading -> Unit
+                    is ReviewUiState.Sparse -> item { SparsePlaceholder(year = s.year) }
+                    is ReviewUiState.Loaded -> item {
+                        ReviewBody(
+                            review = s.review,
+                            includeSilent = includeSilent,
+                            onIncludeSilentChange = reviewViewModel::setIncludeSilent,
+                        )
+                    }
                 }
             }
         }
@@ -691,6 +705,42 @@ private fun SectionHeader(text: String) {
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp),
         )
+    }
+}
+
+/** A [SectionHeader] that toggles a collapsible block; chevron flips on expand. */
+@Composable
+private fun ExpanderHeader(text: String, expanded: Boolean, onToggle: () -> Unit) {
+    val rotation by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        animationSpec = tween(250),
+        label = "expanderChevron",
+    )
+    Column {
+        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(
+                    onClickLabel = if (expanded) "Collapse $text" else "Expand $text",
+                    role = Role.Button,
+                    onClick = onToggle,
+                )
+                .defaultMinSize(minHeight = 48.dp)
+                .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.weight(1f),
+            )
+            Icon(
+                imageVector = Icons.Filled.ExpandMore,
+                contentDescription = null,
+                modifier = Modifier.rotate(rotation),
+            )
+        }
     }
 }
 

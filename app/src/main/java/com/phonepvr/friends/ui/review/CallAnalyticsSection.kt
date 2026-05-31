@@ -7,6 +7,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,6 +43,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -58,6 +62,7 @@ import com.phonepvr.friends.ui.components.PersonAvatar
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CallAnalyticsSection(
+    onOpenPerson: (Long) -> Unit,
     viewModel: CallAnalyticsViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
@@ -109,7 +114,7 @@ fun CallAnalyticsSection(
                 if (s.result.isEmpty) {
                     EmptyCard(window)
                 } else {
-                    Cards(s.result)
+                    Cards(s.result, onOpenPerson)
                 }
             }
         }
@@ -117,7 +122,7 @@ fun CallAnalyticsSection(
 }
 
 @Composable
-private fun Cards(result: CallAnalyticsResult) {
+private fun Cards(result: CallAnalyticsResult, onOpenPerson: (Long) -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -126,7 +131,7 @@ private fun Cards(result: CallAnalyticsResult) {
     ) {
         BondsVsOthersCard(result)
         BondedReachCard(result)
-        if (result.topParties.isNotEmpty()) TopCallersCard(result.topParties)
+        if (result.topParties.isNotEmpty()) TopCallersCard(result.topParties, onOpenPerson)
         DirectionAndMissedCard(result)
         OthersBreakdownCard(result)
     }
@@ -264,16 +269,35 @@ private fun BondedReachCard(result: CallAnalyticsResult) {
 }
 
 @Composable
-private fun TopCallersCard(parties: List<CallPartyStat>) {
+private fun TopCallersCard(parties: List<CallPartyStat>, onOpenPerson: (Long) -> Unit) {
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             CardLabel("Top callers")
             Spacer(Modifier.height(8.dp))
             parties.forEach { party ->
-                Row(
-                    modifier = Modifier
+                val name = party.displayName ?: party.number
+                // Bonded callers carry a personId → tap through to their
+                // profile. Unknown numbers stay static (nowhere to go).
+                val personId = party.personId
+                val rowModifier = if (personId != null) {
+                    Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 6.dp),
+                        .semantics(mergeDescendants = true) {
+                            contentDescription = "$name, ${party.callCount} calls"
+                        }
+                        .clickable(
+                            onClickLabel = "Open $name",
+                            role = Role.Button,
+                            onClick = { onOpenPerson(personId) },
+                        )
+                        .padding(vertical = 6.dp)
+                } else {
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 6.dp)
+                }
+                Row(
+                    modifier = rowModifier,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     PersonAvatar(

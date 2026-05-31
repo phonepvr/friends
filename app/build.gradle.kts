@@ -105,6 +105,11 @@ dependencies {
     implementation(libs.androidx.biometric)
     implementation(libs.androidx.fragment)
     implementation(libs.coil.compose)
+    // Installs the bundled baseline profile on first run and lets the Play
+    // Store apply cloud profiles, improving cold-start / first-frame jank.
+    // The profile itself is generated separately on a device/emulator via
+    // ./gradlew :app:generateBaselineProfile.
+    implementation(libs.androidx.profileinstaller)
 
     testImplementation(libs.junit)
 }

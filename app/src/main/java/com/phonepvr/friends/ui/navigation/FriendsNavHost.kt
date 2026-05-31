@@ -152,10 +152,11 @@ fun FriendsNavHost(
     ) {
         composable(Routes.PEOPLE_LIST) {
             PeopleListScreen(
-                onAddPerson = { navController.navigate(Routes.ADD_PERSON) },
                 onOpenPerson = { personId ->
                     navController.navigate(Routes.personDetail(personId))
                 },
+                // The Bonds "+" is now a contacts-import flow — no manual-add
+                // screen. (ADD_PERSON stays only for internal/edit reuse.)
                 onImportContacts = { navController.navigate(Routes.IMPORT_CONTACTS) },
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
                 onOpenBackup = { navController.navigate(Routes.BACKUP) },

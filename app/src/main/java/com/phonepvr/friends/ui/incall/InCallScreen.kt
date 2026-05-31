@@ -51,7 +51,9 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import android.os.Build
 import android.view.HapticFeedbackConstants
+import android.view.View
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -73,6 +75,7 @@ import com.phonepvr.friends.data.incall.CallSnapshot
 import com.phonepvr.friends.domain.cadence.CadenceState
 import com.phonepvr.friends.domain.cadence.CadenceStatus
 import com.phonepvr.friends.ui.components.PersonAvatar
+import com.phonepvr.friends.ui.theme.LocalCallColors
 import kotlinx.coroutines.delay
 import java.util.Locale
 
@@ -406,13 +409,15 @@ private fun IncomingControls(
                 contentColor = MaterialTheme.colorScheme.onError,
                 onClick = onReject,
                 onLongClick = { showQuickReplies = true },
+                haptic = ActionHaptic.Reject,
             )
             ActionButton(
                 icon = Icons.Filled.Call,
                 label = "Accept",
-                containerColor = AcceptGreen,
-                contentColor = Color.White,
+                containerColor = LocalCallColors.current.accept,
+                contentColor = LocalCallColors.current.onAccept,
                 onClick = onAccept,
+                haptic = ActionHaptic.Confirm,
             )
         }
     }
@@ -570,6 +575,7 @@ private fun OngoingControls(
             containerColor = MaterialTheme.colorScheme.error,
             contentColor = MaterialTheme.colorScheme.onError,
             onClick = onEnd,
+            haptic = ActionHaptic.Reject,
         )
     }
 }
@@ -741,6 +747,33 @@ private fun InCallDialpad(
     }
 }
 
+/** Which tactile signal a call action should give. */
+private enum class ActionHaptic { Confirm, Reject, Neutral }
+
+/**
+ * CONFIRM / REJECT (API 30+) make "accept" and "decline" feel distinct under
+ * the thumb; older devices fall back to a plain key tap. Honours the system
+ * haptic setting and needs no VIBRATE permission.
+ */
+private fun View.performActionHaptic(kind: ActionHaptic) {
+    val constant = when (kind) {
+        ActionHaptic.Confirm ->
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                HapticFeedbackConstants.CONFIRM
+            } else {
+                HapticFeedbackConstants.VIRTUAL_KEY
+            }
+        ActionHaptic.Reject ->
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                HapticFeedbackConstants.REJECT
+            } else {
+                HapticFeedbackConstants.VIRTUAL_KEY
+            }
+        ActionHaptic.Neutral -> HapticFeedbackConstants.VIRTUAL_KEY
+    }
+    performHapticFeedback(constant)
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ActionButton(
@@ -750,6 +783,7 @@ private fun ActionButton(
     contentColor: Color,
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
+    haptic: ActionHaptic = ActionHaptic.Neutral,
 ) {
     val view = LocalView.current
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -759,7 +793,7 @@ private fun ActionButton(
                 .clip(CircleShape)
                 .combinedClickable(
                     onClick = {
-                        view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                        view.performActionHaptic(haptic)
                         onClick()
                     },
                     onLongClick = onLongClick,
@@ -787,9 +821,13 @@ private fun ToggleButton(
     active: Boolean,
     onClick: () -> Unit,
 ) {
+    val view = LocalView.current
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         FilledIconButton(
-            onClick = onClick,
+            onClick = {
+                view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                onClick()
+            },
             modifier = Modifier.size(64.dp),
             colors = if (active) {
                 IconButtonDefaults.filledIconButtonColors(
@@ -849,5 +887,3 @@ private fun CallSimpleState.label(direction: CallDirection): String = when (this
     CallSimpleState.HOLDING -> "On hold"
     CallSimpleState.DISCONNECTED -> "Disconnected"
 }
-
-private val AcceptGreen = Color(0xFF1B873A)

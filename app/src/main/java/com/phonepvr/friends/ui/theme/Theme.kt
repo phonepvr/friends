@@ -8,8 +8,28 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import com.phonepvr.friends.domain.model.ThemeMode
+
+/**
+ * Semantic colours that sit alongside the M3 [androidx.compose.material3.ColorScheme]
+ * but have no role in it — currently just the call-accept accent. Read via
+ * [LocalCallColors]; provided by [FriendsTheme] so they track light/dark.
+ */
+@Immutable
+data class CallColors(
+    val accept: Color,
+    val onAccept: Color,
+)
+
+private val LightCallColors = CallColors(accept = LightCallAccept, onAccept = LightOnCallAccept)
+private val DarkCallColors = CallColors(accept = DarkCallAccept, onAccept = DarkOnCallAccept)
+
+val LocalCallColors = staticCompositionLocalOf { LightCallColors }
 
 private val LightColors = lightColorScheme(
     primary = LightPrimary,
@@ -91,10 +111,14 @@ fun FriendsTheme(
         darkTheme -> DarkColors
         else -> LightColors
     }
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
-        shapes = FriendsShapes,
-        content = content,
-    )
+    CompositionLocalProvider(
+        LocalCallColors provides if (darkTheme) DarkCallColors else LightCallColors,
+    ) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = Typography,
+            shapes = FriendsShapes,
+            content = content,
+        )
+    }
 }

@@ -29,10 +29,11 @@ data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     /**
      * When true on Android 12+, the OS wallpaper-derived palette wins over the
-     * app's hand-tuned warm palette. Default is false — the bundled palette is
-     * the intended look.
+     * app's hand-tuned warm palette. Default is true — Material You by default;
+     * the Settings → Appearance toggle switches back to the bundled palette.
+     * (No effect below Android 12, which always uses the bundled palette.)
      */
-    val dynamicColorEnabled: Boolean = false,
+    val dynamicColorEnabled: Boolean = true,
     val defaultCadenceDays: Int = 30,
     /** Epoch millis of the most recent successful export, null if there isn't one yet. */
     val lastSuccessfulBackupAt: Long? = null,

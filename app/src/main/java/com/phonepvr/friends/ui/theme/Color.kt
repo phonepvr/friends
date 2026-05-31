@@ -68,3 +68,13 @@ val DarkSurfaceVariant = Color(0xFF53433E)
 val DarkOnSurfaceVariant = Color(0xFFD8C2BB)
 val DarkOutline = Color(0xFFA18C86)
 val DarkOutlineVariant = Color(0xFF53433E)
+
+// ─── Call-control accents ───────────────────────────────────────────────────
+// Telephony convention is green = accept, red = decline. Decline reuses the
+// M3 `error` role; "accept" has no equivalent positive role, so it gets its
+// own token here. Intentionally NOT derived from dynamic colour — an accept
+// button should stay green even under Material You.
+val LightCallAccept = Color(0xFF1B873A)
+val LightOnCallAccept = Color(0xFFFFFFFF)
+val DarkCallAccept = Color(0xFF6FD58A)
+val DarkOnCallAccept = Color(0xFF00391A)

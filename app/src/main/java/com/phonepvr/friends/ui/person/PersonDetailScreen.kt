@@ -27,6 +27,8 @@ import android.os.Build
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.Contacts
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Share
@@ -40,7 +42,8 @@ import com.phonepvr.friends.data.contacts.VCardBuilder
 import java.io.File
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -136,6 +139,16 @@ fun PersonDetailScreen(
     val contactId by viewModel.contactId.collectAsStateWithLifecycle()
     val isFavourite by viewModel.isFavourite.collectAsStateWithLifecycle()
     var showDeleteContactDialog by remember { mutableStateOf(false) }
+    // Block state for the overflow menu's label. Re-queried whenever the
+    // linked contact changes; the menu item flips it optimistically on tap.
+    var isPrimaryBlocked by remember(contactDetails?.lookupKey) { mutableStateOf(false) }
+    LaunchedEffect(contactDetails?.lookupKey) {
+        isPrimaryBlocked = if (contactDetails?.phoneNumbers?.isNotEmpty() == true && viewModel.canBlock()) {
+            viewModel.isPrimaryBlocked()
+        } else {
+            false
+        }
+    }
     val today = remember { LocalDate.now() }
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
@@ -205,7 +218,98 @@ fun PersonDetailScreen(
                                 )
                             }
                         }
-                        TextButton(onClick = { onEdit(viewModel.personId) }) { Text("Edit") }
+                        // One overflow menu gathers every verb — the screen
+                        // body stays data, the actions live here, matching how
+                        // a stock contacts app reads.
+                        var menuOpen by remember { mutableStateOf(false) }
+                        IconButton(onClick = { menuOpen = true }) {
+                            Icon(Icons.Filled.MoreVert, contentDescription = "More")
+                        }
+                        DropdownMenu(
+                            expanded = menuOpen,
+                            onDismissRequest = { menuOpen = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Edit person") },
+                                leadingIcon = {
+                                    Icon(Icons.Filled.Edit, contentDescription = null)
+                                },
+                                onClick = {
+                                    menuOpen = false
+                                    onEdit(viewModel.personId)
+                                },
+                            )
+                            val cid = contactId
+                            if (cid != null) {
+                                DropdownMenuItem(
+                                    text = { Text("Edit contact") },
+                                    leadingIcon = {
+                                        Icon(Icons.Filled.Contacts, contentDescription = null)
+                                    },
+                                    onClick = {
+                                        menuOpen = false
+                                        onEditContact(cid)
+                                    },
+                                )
+                            }
+                            contactDetails?.let { d ->
+                                DropdownMenuItem(
+                                    text = { Text("Share contact") },
+                                    leadingIcon = {
+                                        Icon(Icons.Filled.Share, contentDescription = null)
+                                    },
+                                    onClick = {
+                                        menuOpen = false
+                                        shareBondedContact(context, d)
+                                    },
+                                )
+                                if (viewModel.canBlock() && d.phoneNumbers.isNotEmpty()) {
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(if (isPrimaryBlocked) "Unblock number" else "Block number")
+                                        },
+                                        leadingIcon = {
+                                            Icon(Icons.Filled.Block, contentDescription = null)
+                                        },
+                                        onClick = {
+                                            menuOpen = false
+                                            val next = !isPrimaryBlocked
+                                            isPrimaryBlocked = next
+                                            scope.launch {
+                                                val ok = viewModel.setPrimaryBlocked(next)
+                                                if (!ok) isPrimaryBlocked = !next
+                                                snackbarHostState.showSnackbar(
+                                                    when {
+                                                        !ok -> "Couldn't update the block list"
+                                                        next -> "Number blocked"
+                                                        else -> "Number unblocked"
+                                                    },
+                                                )
+                                            }
+                                        },
+                                    )
+                                }
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            "Delete contact",
+                                            color = MaterialTheme.colorScheme.error,
+                                        )
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Filled.Delete,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.error,
+                                        )
+                                    },
+                                    onClick = {
+                                        menuOpen = false
+                                        showDeleteContactDialog = true
+                                    },
+                                )
+                            }
+                        }
                     },
                 )
             }
@@ -331,25 +435,9 @@ fun PersonDetailScreen(
                     item {
                         ContactInfoSection(
                             details = details,
-                            canBlock = viewModel.canBlock(),
                             onCallNumber = viewModel::callNumber,
                             onSetPrimary = viewModel::setPrimaryContactNumber,
                             onSetRingtone = viewModel::setCustomRingtone,
-                            onEditContact = contactId?.let { id -> { onEditContact(id) } },
-                            onShareContact = { shareBondedContact(context, details) },
-                            isBlocked = { viewModel.isPrimaryBlocked() },
-                            onSetBlocked = { blocked ->
-                                scope.launch {
-                                    val ok = viewModel.setPrimaryBlocked(blocked)
-                                    val msg = when {
-                                        !ok -> "Couldn't update the block list"
-                                        blocked -> "Number blocked"
-                                        else -> "Number unblocked"
-                                    }
-                                    snackbarHostState.showSnackbar(msg)
-                                }
-                            },
-                            onDeleteContact = { showDeleteContactDialog = true },
                         )
                     }
                 }
@@ -1061,106 +1149,52 @@ private fun formatEventDate(event: EventEntity): String =
 @Composable
 private fun ContactInfoSection(
     details: ContactDetails,
-    canBlock: Boolean,
     onCallNumber: (String) -> Unit,
     onSetPrimary: (Long) -> Unit,
     onSetRingtone: (android.net.Uri?) -> Unit,
-    onEditContact: (() -> Unit)?,
-    onShareContact: () -> Unit,
-    isBlocked: suspend () -> Boolean,
-    onSetBlocked: (Boolean) -> Unit,
-    onDeleteContact: () -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    // Card to match the cadence / summary / event surfaces above; the screen
+    // reads as a stack of cards rather than a wall of bare rows. Actions
+    // (edit / share / block / delete) live in the top-bar overflow menu.
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Contact info", style = MaterialTheme.typography.titleMedium)
-        if (details.phoneEntries.isNotEmpty()) {
-            val multiple = details.phoneEntries.size > 1
-            details.phoneEntries.forEach { phone ->
-                ContactPhoneRow(
-                    number = phone.number,
-                    isPrimary = phone.isPrimary,
-                    canSetPrimary = multiple && !phone.isPrimary,
-                    onCall = { onCallNumber(phone.number) },
-                    onSetPrimary = { onSetPrimary(phone.dataId) },
-                )
-            }
-        }
-        details.emails.forEach { address ->
-            IconValueRow(icon = Icons.Filled.Email, value = address)
-        }
-        details.organization?.let { company ->
-            IconValueRow(icon = Icons.Filled.Business, value = company)
-        }
-        details.notes?.let { notes ->
-            Row(verticalAlignment = Alignment.Top) {
-                Icon(Icons.AutoMirrored.Filled.Notes, contentDescription = null)
-                Spacer(Modifier.width(16.dp))
-                Text(notes, style = MaterialTheme.typography.bodyMedium)
-            }
-        }
-        ContactRingtoneRow(
-            displayName = details.displayName,
-            customRingtone = details.customRingtone,
-            onPicked = onSetRingtone,
-        )
-        // Block / unblock the primary number. Loads the current state once
-        // and flips the label; hidden when blocking isn't available.
-        if (canBlock && details.phoneNumbers.isNotEmpty()) {
-            var blocked by remember(details.lookupKey) { mutableStateOf<Boolean?>(null) }
-            LaunchedEffect(details.lookupKey) { blocked = isBlocked() }
-            blocked?.let { isB ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            val next = !isB
-                            blocked = next
-                            onSetBlocked(next)
-                        }
-                        .padding(vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(Icons.Filled.Block, contentDescription = null)
-                    Spacer(Modifier.width(16.dp))
-                    Text(
-                        text = if (isB) "Unblock number" else "Block number",
-                        style = MaterialTheme.typography.bodyLarge,
-                    )
+        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                if (details.phoneEntries.isNotEmpty()) {
+                    val multiple = details.phoneEntries.size > 1
+                    details.phoneEntries.forEach { phone ->
+                        ContactPhoneRow(
+                            number = phone.number,
+                            isPrimary = phone.isPrimary,
+                            canSetPrimary = multiple && !phone.isPrimary,
+                            onCall = { onCallNumber(phone.number) },
+                            onSetPrimary = { onSetPrimary(phone.dataId) },
+                        )
+                    }
                 }
-            }
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            onEditContact?.let { edit ->
-                TextButton(onClick = edit) { Text("Edit contact") }
-            }
-            TextButton(onClick = onShareContact) {
-                Icon(
-                    Icons.Filled.Share,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
+                details.emails.forEach { address ->
+                    IconValueRow(icon = Icons.Filled.Email, value = address)
+                }
+                details.organization?.let { company ->
+                    IconValueRow(icon = Icons.Filled.Business, value = company)
+                }
+                details.notes?.let { notes ->
+                    Row(verticalAlignment = Alignment.Top) {
+                        Icon(Icons.AutoMirrored.Filled.Notes, contentDescription = null)
+                        Spacer(Modifier.width(16.dp))
+                        Text(notes, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+                ContactRingtoneRow(
+                    displayName = details.displayName,
+                    customRingtone = details.customRingtone,
+                    onPicked = onSetRingtone,
                 )
-                Spacer(Modifier.width(6.dp))
-                Text("Share contact")
             }
         }
-        TextButton(
-            onClick = onDeleteContact,
-            colors = ButtonDefaults.textButtonColors(
-                contentColor = MaterialTheme.colorScheme.error,
-            ),
-        ) {
-            Icon(
-                Icons.Filled.Delete,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp),
-            )
-            Spacer(Modifier.width(6.dp))
-            Text("Delete contact")
-        }
-        HorizontalDivider()
     }
 }
 

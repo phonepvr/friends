@@ -62,7 +62,9 @@ private val HOUR_OPTIONS = (0..23).toList()
 private val CADENCE_OPTIONS = listOf(1, 3, 7, 14, 30, 45, 60, 90, 120, 180, 270, 360)
 private val BACKUP_NUDGE_OPTIONS = listOf(7, 14, 21, 30, 60, 90)
 
-private enum class SettingsDialog { THEME, LEAD_DAYS, HOUR, CADENCE, BACKUP_NUDGE }
+private enum class SettingsDialog {
+    THEME, LEAD_DAYS, HOUR, CADENCE, BACKUP_NUDGE, IMPORT_BACKUP_WARN,
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -316,10 +318,11 @@ fun SettingsScreen(
                             "the ones you already have.",
                     )
                 },
+                // Importing can change your on-device data and there's no
+                // cloud copy (the app is fully offline), so nudge a backup
+                // first rather than launching the picker straight away.
                 modifier = Modifier.clickable {
-                    importContactsLauncher.launch(
-                        arrayOf("text/x-vcard", "text/vcard", "text/directory", "*/*"),
-                    )
+                    activeDialog = SettingsDialog.IMPORT_BACKUP_WARN
                 },
             )
 
@@ -396,6 +399,32 @@ fun SettingsScreen(
             labelOf = { "Every ${daysLabel(it)}" },
             onSelect = { viewModel.setBackupNudgeIntervalDays(it) },
             onDismiss = { activeDialog = null },
+        )
+
+        SettingsDialog.IMPORT_BACKUP_WARN -> AlertDialog(
+            onDismissRequest = { activeDialog = null },
+            title = { Text("Back up first?") },
+            text = {
+                Text(
+                    "Friends keeps everything on this device — there's no cloud " +
+                        "copy. Importing can change your data, so it's safest to " +
+                        "export a backup before you do.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    activeDialog = null
+                    onOpenBackup()
+                }) { Text("Back up first") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    activeDialog = null
+                    importContactsLauncher.launch(
+                        arrayOf("text/x-vcard", "text/vcard", "text/directory", "*/*"),
+                    )
+                }) { Text("Import anyway") }
+            },
         )
 
         null -> Unit

@@ -9,10 +9,6 @@ import com.phonepvr.friends.domain.review.BondHealth
 import com.phonepvr.friends.domain.review.BondInfo
 import com.phonepvr.friends.domain.review.ConnectionHealth
 import com.phonepvr.friends.domain.review.HealthWithTrend
-import com.phonepvr.friends.domain.review.Momentum
-import com.phonepvr.friends.domain.review.MomentumCalculator
-import com.phonepvr.friends.domain.review.SlippingBond
-import com.phonepvr.friends.domain.review.SlippingDetector
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -38,10 +34,7 @@ class WidthDashboardViewModel @Inject constructor(
     /** Everything the dashboard derives from, computed once per data change. */
     private data class Inputs(
         val bonds: List<BondInfo>,
-        val nameById: Map<Long, String>,
-        val photoById: Map<Long, String?>,
         val contactDatesByPerson: Map<Long, List<LocalDate>>,
-        val allContactDates: List<LocalDate>,
     )
 
     private val inputs: StateFlow<Inputs?> = combine(
@@ -57,17 +50,11 @@ class WidthDashboardViewModel @Inject constructor(
                 bondedAt = p.person.createdAt.toLocalDate(),
             )
         }
-        val contacts = timeline.filter { it.countsAsContact }
-        val datesByPerson = contacts
+        val datesByPerson = timeline
+            .filter { it.countsAsContact }
             .groupBy { it.personId }
             .mapValues { (_, entries) -> entries.map { it.occurredAt.toLocalDate() } }
-        Inputs(
-            bonds = bonds,
-            nameById = people.associate { it.person.id to it.person.displayName },
-            photoById = people.associate { it.person.id to it.person.photoRelativePath },
-            contactDatesByPerson = datesByPerson,
-            allContactDates = contacts.map { it.occurredAt.toLocalDate() },
-        )
+        Inputs(bonds = bonds, contactDatesByPerson = datesByPerson)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     val health: StateFlow<HealthWithTrend?> = inputs
@@ -99,26 +86,6 @@ class WidthDashboardViewModel @Inject constructor(
                 .take(6)
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-
-    /** Last-14-days contact rhythm across all bonds. */
-    val momentum: StateFlow<Momentum?> = inputs
-        .map { i -> i?.let { MomentumCalculator.compute(LocalDate.now(), it.allContactDates) } }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
-
-    /**
-     * Bonds going quiet vs their own rhythm, excluding anyone already in the
-     * needs-you rail so the same person never shows in two attention lists.
-     */
-    val slipping: StateFlow<List<SlippingBond>> = combine(inputs, needsYou) { i, needs ->
-        i ?: return@combine emptyList()
-        SlippingDetector.detect(
-            today = LocalDate.now(),
-            contactDatesByPerson = i.contactDatesByPerson,
-            nameById = i.nameById,
-            photoById = i.photoById,
-            excludePersonIds = needs.mapTo(HashSet()) { it.personId },
-        )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private fun Long.toLocalDate(): LocalDate =
         Instant.ofEpochMilli(this).atZone(zone).toLocalDate()

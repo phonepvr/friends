@@ -92,8 +92,14 @@ class CallHistoryViewModel @Inject constructor(
         initialValue = CallHistoryUiState(number = number),
     )
 
-    fun placeCall(): CallPlacer.PlaceResult {
-        val result = callPlacer.place(number)
+    fun callCapableAccounts(): List<CallPlacer.SimAccount> = callPlacer.callCapableAccounts()
+
+    fun needsSimChoice(): Boolean = callPlacer.needsSimChoice()
+
+    fun placeCall(
+        account: android.telecom.PhoneAccountHandle? = null,
+    ): CallPlacer.PlaceResult {
+        val result = callPlacer.place(number, account)
         placeError.value = when (result) {
             CallPlacer.PlaceResult.OK,
             CallPlacer.PlaceResult.NO_PERMISSION -> null

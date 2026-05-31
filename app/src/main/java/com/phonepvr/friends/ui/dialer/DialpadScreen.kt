@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -59,7 +58,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.phonepvr.friends.data.dialer.CallPlacer
 import com.phonepvr.friends.ui.components.PersonAvatar
 import com.phonepvr.friends.ui.permissions.PermissionRationaleSheet
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -93,6 +91,19 @@ fun DialpadScreen(
     var showRationale by remember { mutableStateOf(false) }
     var pendingCallNumber by remember { mutableStateOf<String?>(null) }
 
+    // Routes the actual placement, showing the SIM chooser first on a
+    // multi-SIM device with no default. Single-SIM users go straight through.
+    val simLauncher = rememberSimCallLauncher(
+        accounts = viewModel::callCapableAccounts,
+        needsChoice = viewModel::needsSimChoice,
+        call = { number, account ->
+            val result = viewModel.place(number, account)
+            if (result == CallPlacer.PlaceResult.NO_PERMISSION) {
+                scope.launch { snackbarState.showSnackbar("Grant Call permission to dial.") }
+            }
+        },
+    )
+
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { grants ->
@@ -101,7 +112,7 @@ fun DialpadScreen(
         viewModel.onContactsPermissionState(hasContacts)
         pendingCallNumber?.let { number ->
             pendingCallNumber = null
-            if (hasCallPhone) tryPlace(viewModel, number, snackbarState, scope)
+            if (hasCallPhone) simLauncher.launch(number)
         }
     }
 
@@ -143,7 +154,7 @@ fun DialpadScreen(
 
     val placeCall: (String) -> Unit = { number ->
         if (hasCallPhone) {
-            tryPlace(viewModel, number, snackbarState, scope)
+            simLauncher.launch(number)
         } else {
             pendingCallNumber = number
             showRationale = true
@@ -221,18 +232,6 @@ fun DialpadScreen(
                 }
             }
         }
-    }
-}
-
-private fun tryPlace(
-    viewModel: DialpadViewModel,
-    number: String,
-    snackbarHostState: SnackbarHostState,
-    scope: CoroutineScope,
-) {
-    val result = viewModel.place(number)
-    if (result == CallPlacer.PlaceResult.NO_PERMISSION) {
-        scope.launch { snackbarHostState.showSnackbar("Grant Call permission to dial.") }
     }
 }
 

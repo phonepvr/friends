@@ -125,13 +125,29 @@ fun ContactDetailScreen(
     var showCallPermissionSheet by remember { mutableStateOf(false) }
     var pendingNumber by remember { mutableStateOf<String?>(null) }
 
+    // Shows the SIM chooser first on a multi-SIM device with no default.
+    val simLauncher = rememberSimCallLauncher(
+        accounts = viewModel::callCapableAccounts,
+        needsChoice = viewModel::needsSimChoice,
+        call = { number, account ->
+            val msg = when (viewModel.placeCall(number, account)) {
+                CallPlacer.PlaceResult.OK -> null
+                CallPlacer.PlaceResult.NO_PERMISSION ->
+                    "Couldn't dial — Call permission missing."
+                CallPlacer.PlaceResult.INVALID_NUMBER -> "Invalid number."
+                CallPlacer.PlaceResult.ERROR -> "Couldn't place the call. Try again."
+            }
+            if (msg != null) scope.launch { snackbarState.showSnackbar(msg) }
+        },
+    )
+
     val callPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
         hasCallPhone = granted
         pendingNumber?.let { num ->
             pendingNumber = null
-            if (granted) placeCall(viewModel, num, snackbarState, scope)
+            if (granted) simLauncher.launch(num)
         }
     }
 
@@ -165,7 +181,7 @@ fun ContactDetailScreen(
 
     val onCallNumber: (String) -> Unit = { number ->
         if (hasCallPhone) {
-            placeCall(viewModel, number, snackbarState, scope)
+            simLauncher.launch(number)
         } else {
             pendingNumber = number
             showCallPermissionSheet = true
@@ -739,23 +755,6 @@ private fun DateRow(label: String, date: ContactDate, icon: ImageVector) {
             Text(formatDate(date), style = MaterialTheme.typography.bodyLarge)
         }
     }
-}
-
-private fun placeCall(
-    viewModel: ContactDetailViewModel,
-    number: String,
-    snackbarHost: SnackbarHostState,
-    scope: kotlinx.coroutines.CoroutineScope,
-) {
-    val result = viewModel.placeCall(number)
-    val msg = when (result) {
-        CallPlacer.PlaceResult.OK -> null
-        CallPlacer.PlaceResult.NO_PERMISSION ->
-            "Couldn't dial — Call permission missing."
-        CallPlacer.PlaceResult.INVALID_NUMBER -> "Invalid number."
-        CallPlacer.PlaceResult.ERROR -> "Couldn't place the call. Try again."
-    }
-    if (msg != null) scope.launch { snackbarHost.showSnackbar(msg) }
 }
 
 private fun formatDate(date: ContactDate): String {

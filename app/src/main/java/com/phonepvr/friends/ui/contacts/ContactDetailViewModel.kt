@@ -172,7 +172,14 @@ class ContactDetailViewModel @Inject constructor(
      * launch — tapping a number on a contact you're looking at is intent
      * enough to dial.
      */
-    fun placeCall(number: String): CallPlacer.PlaceResult = callPlacer.place(number)
+    fun callCapableAccounts(): List<CallPlacer.SimAccount> = callPlacer.callCapableAccounts()
+
+    fun needsSimChoice(): Boolean = callPlacer.needsSimChoice()
+
+    fun placeCall(
+        number: String,
+        account: android.telecom.PhoneAccountHandle? = null,
+    ): CallPlacer.PlaceResult = callPlacer.place(number, account)
 
     /** Sets which of the contact's numbers is the default, then reloads. */
     fun setPrimaryNumber(dataId: Long) {

@@ -165,8 +165,15 @@ class DialerViewModel @Inject constructor(
         contactsGranted.value = contacts
     }
 
-    fun place(number: String): CallPlacer.PlaceResult {
-        val result = callPlacer.place(number)
+    fun callCapableAccounts(): List<CallPlacer.SimAccount> = callPlacer.callCapableAccounts()
+
+    fun needsSimChoice(): Boolean = callPlacer.needsSimChoice()
+
+    fun place(
+        number: String,
+        account: android.telecom.PhoneAccountHandle? = null,
+    ): CallPlacer.PlaceResult {
+        val result = callPlacer.place(number, account)
         placeError.value = when (result) {
             CallPlacer.PlaceResult.OK,
             CallPlacer.PlaceResult.NO_PERMISSION -> null

@@ -47,7 +47,6 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -75,7 +74,6 @@ import com.phonepvr.friends.data.dialer.CallPlacer
 import com.phonepvr.friends.domain.model.CallType
 import com.phonepvr.friends.ui.components.PersonAvatar
 import com.phonepvr.friends.ui.permissions.PermissionRationaleSheet
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
@@ -106,11 +104,23 @@ fun CallHistoryScreen(
     }
     var showCallRationale by remember { mutableStateOf(false) }
 
+    // Shows the SIM chooser first on a multi-SIM device with no default.
+    val simLauncher = rememberSimCallLauncher(
+        accounts = viewModel::callCapableAccounts,
+        needsChoice = viewModel::needsSimChoice,
+        call = { _, account ->
+            val result = viewModel.placeCall(account)
+            if (result == CallPlacer.PlaceResult.NO_PERMISSION) {
+                scope.launch { snackbarState.showSnackbar("Grant Call permission to dial.") }
+            }
+        },
+    )
+
     val callPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
         hasCallPhone = granted
-        if (granted) tryPlace(viewModel, snackbarState, scope)
+        if (granted) simLauncher.launch(viewModel.number)
     }
 
     LaunchedEffect(state.placeError) {
@@ -143,7 +153,7 @@ fun CallHistoryScreen(
 
     val onCallTap: () -> Unit = {
         if (hasCallPhone) {
-            tryPlace(viewModel, snackbarState, scope)
+            simLauncher.launch(viewModel.number)
         } else {
             showCallRationale = true
         }
@@ -415,17 +425,6 @@ private fun formatDuration(seconds: Long): String {
 
 private val historyTimestampFormat: DateFormat by lazy {
     DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT)
-}
-
-private fun tryPlace(
-    viewModel: CallHistoryViewModel,
-    snackbarHost: SnackbarHostState,
-    scope: CoroutineScope,
-) {
-    val result = viewModel.placeCall()
-    if (result == CallPlacer.PlaceResult.NO_PERMISSION) {
-        scope.launch { snackbarHost.showSnackbar("Grant Call permission to dial.") }
-    }
 }
 
 private fun openSms(context: Context, number: String) {

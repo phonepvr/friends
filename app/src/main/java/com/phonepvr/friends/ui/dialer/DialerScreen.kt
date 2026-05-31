@@ -90,7 +90,6 @@ import com.phonepvr.friends.data.dialer.CallPlacer
 import com.phonepvr.friends.domain.model.CallType
 import com.phonepvr.friends.ui.components.PersonAvatar
 import com.phonepvr.friends.ui.permissions.PermissionRationaleSheet
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
@@ -137,6 +136,19 @@ fun DialerScreen(
     var showRationale by remember { mutableStateOf(false) }
     var pendingCallNumber by remember { mutableStateOf<String?>(null) }
 
+    // Shows the SIM chooser first on a multi-SIM device with no default;
+    // single-SIM users dial straight through.
+    val simLauncher = rememberSimCallLauncher(
+        accounts = viewModel::callCapableAccounts,
+        needsChoice = viewModel::needsSimChoice,
+        call = { number, account ->
+            val result = viewModel.place(number, account)
+            if (result == CallPlacer.PlaceResult.NO_PERMISSION) {
+                scope.launch { snackbarState.showSnackbar("Grant Call permission to dial.") }
+            }
+        },
+    )
+
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { grants ->
@@ -146,7 +158,7 @@ fun DialerScreen(
         viewModel.onPermissionState(hasCallLog, hasContacts)
         pendingCallNumber?.let { number ->
             pendingCallNumber = null
-            if (hasCallPhone) tryPlace(viewModel, number, snackbarState, scope)
+            if (hasCallPhone) simLauncher.launch(number)
         }
     }
 
@@ -184,7 +196,7 @@ fun DialerScreen(
     val placeCall: (String) -> Unit = { number ->
         lastDialedNumber = number
         if (hasCallPhone) {
-            tryPlace(viewModel, number, snackbarState, scope)
+            simLauncher.launch(number)
         } else {
             pendingCallNumber = number
             showRationale = true
@@ -341,17 +353,6 @@ private fun copyToClipboard(context: Context, number: String) {
     clipboard?.setPrimaryClip(ClipData.newPlainText("Phone number", number))
 }
 
-private fun tryPlace(
-    viewModel: DialerViewModel,
-    number: String,
-    snackbarHostState: SnackbarHostState,
-    scope: CoroutineScope,
-) {
-    val result = viewModel.place(number)
-    if (result == CallPlacer.PlaceResult.NO_PERMISSION) {
-        scope.launch { snackbarHostState.showSnackbar("Grant Call permission to dial.") }
-    }
-}
 
 @Composable
 private fun RecentsContent(

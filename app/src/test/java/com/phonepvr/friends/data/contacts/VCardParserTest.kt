@@ -69,7 +69,7 @@ class VCardParserTest {
         assertTrue(VCardParser.parse(text).isEmpty())
     }
 
-    @Test fun `unescapes commas, semicolons, backslashes and \\n`() {
+    @Test fun `unescapes vCard escape sequences`() {
         val text = """
             BEGIN:VCARD
             VERSION:3.0

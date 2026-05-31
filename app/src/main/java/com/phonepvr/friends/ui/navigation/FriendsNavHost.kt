@@ -186,6 +186,9 @@ fun FriendsNavHost(
                 onEditInteraction = { entryId ->
                     navController.navigate(Routes.editInteraction(entryId))
                 },
+                onEditContact = { contactId ->
+                    navController.navigate(Routes.contactEdit(contactId))
+                },
             )
         }
         composable(

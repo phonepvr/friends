@@ -48,4 +48,17 @@ class SystemContactsRepository @Inject constructor(
 
     suspend fun details(contactId: Long): ContactDetails? =
         withContext(Dispatchers.IO) { reader.readDetails(contactId) }
+
+    /**
+     * Convenience for the bonded surfaces, which keep the contact's
+     * lookupKey (stable across aggregate-id changes) rather than the
+     * numeric id. Returns null if the contact has been deleted or the
+     * lookup key never matched anything.
+     */
+    suspend fun detailsByLookupKey(lookupKey: String): Pair<Long, ContactDetails>? =
+        withContext(Dispatchers.IO) {
+            val id = reader.findContactIdByLookupKey(lookupKey) ?: return@withContext null
+            val details = reader.readDetails(id) ?: return@withContext null
+            id to details
+        }
 }

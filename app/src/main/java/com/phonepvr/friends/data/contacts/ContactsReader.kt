@@ -277,6 +277,25 @@ class ContactsReader @Inject constructor(
         return null
     }
 
+    /**
+     * Resolves a stable lookupKey back to a Contacts._ID. The aggregate id
+     * can change when contacts merge; lookupKey is the long-lived handle the
+     * person table stores, so reading back a contact starts here.
+     */
+    fun findContactIdByLookupKey(lookupKey: String): Long? {
+        if (lookupKey.isBlank()) return null
+        val lookupUri = android.net.Uri.withAppendedPath(
+            ContactsContract.Contacts.CONTENT_LOOKUP_URI,
+            lookupKey,
+        )
+        // lookupContact follows the lookup key through any merges and
+        // returns the current canonical Contacts URI.
+        val canonical = runCatching {
+            ContactsContract.Contacts.lookupContact(resolver, lookupUri)
+        }.getOrNull() ?: return null
+        return runCatching { android.content.ContentUris.parseId(canonical) }.getOrNull()
+    }
+
     private fun readSingleColumn(
         uri: android.net.Uri,
         column: String,

@@ -1,9 +1,13 @@
 package com.phonepvr.friends.ui.person
 
 import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.phonepvr.friends.data.contacts.ContactDetails
+import com.phonepvr.friends.data.contacts.ContactWriter
+import com.phonepvr.friends.data.contacts.SystemContactsRepository
 import com.phonepvr.friends.data.db.entity.EventEntity
 import com.phonepvr.friends.data.db.entity.TimelineEntryEntity
 import com.phonepvr.friends.data.db.relation.PersonWithDetails
@@ -49,6 +53,8 @@ class PersonDetailViewModel @Inject constructor(
     private val peopleRepository: PeopleRepository,
     private val timelineRepository: TimelineRepository,
     private val settingsRepository: SettingsRepository,
+    private val systemContactsRepository: SystemContactsRepository,
+    private val contactWriter: ContactWriter,
     @ApplicationContext private val appContext: Context,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
@@ -58,6 +64,63 @@ class PersonDetailViewModel @Inject constructor(
     val person: StateFlow<PersonWithDetails?> =
         peopleRepository.observePersonWithDetails(personId)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /**
+     * The bonded person's system contact resolved by lookupKey, paired with
+     * its current numeric id (the id can change as the platform merges /
+     * splits aggregates). Null until loaded, or when the person isn't linked
+     * to a system contact (rare — most bonded people come through the
+     * import / save-number flows that always carry a lookupKey).
+     */
+    private val _contactSnapshot = MutableStateFlow<Pair<Long, ContactDetails>?>(null)
+    val contactDetails: StateFlow<ContactDetails?> = _contactSnapshot
+        .map { it?.second }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** The contact id that backs [contactDetails], for navigating to its editor. */
+    val contactId: StateFlow<Long?> = _contactSnapshot
+        .map { it?.first }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    init {
+        viewModelScope.launch {
+            // Re-load whenever the lookupKey changes — covers the
+            // rename-on-bond flow where the key fills in after the person
+            // is first inserted.
+            person
+                .map { it?.person?.contactLookupKey?.takeIf { k -> k.isNotBlank() } }
+                .collect { key ->
+                    _contactSnapshot.value =
+                        if (key == null) null else systemContactsRepository.detailsByLookupKey(key)
+                }
+        }
+    }
+
+    /** Re-reads the contact after a write so the UI picks up the change. */
+    private fun refreshContact() {
+        viewModelScope.launch {
+            val key = person.value?.person?.contactLookupKey?.takeIf { it.isNotBlank() }
+                ?: return@launch
+            _contactSnapshot.value = systemContactsRepository.detailsByLookupKey(key)
+        }
+    }
+
+    /** Marks [dataId] as the contact's default number and reloads details. */
+    fun setPrimaryContactNumber(dataId: Long) {
+        viewModelScope.launch {
+            contactWriter.setPrimaryNumber(dataId)
+            refreshContact()
+        }
+    }
+
+    /** Per-contact ringtone — null reverts to system default. */
+    fun setCustomRingtone(uri: Uri?) {
+        viewModelScope.launch {
+            val id = _contactSnapshot.value?.first ?: return@launch
+            contactWriter.setCustomRingtone(id, uri)
+            refreshContact()
+        }
+    }
 
     val timeline: StateFlow<List<TimelineEntryEntity>> =
         timelineRepository.observeForPerson(personId)

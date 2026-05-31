@@ -9,6 +9,10 @@ import com.phonepvr.friends.domain.review.BondHealth
 import com.phonepvr.friends.domain.review.BondInfo
 import com.phonepvr.friends.domain.review.ConnectionHealth
 import com.phonepvr.friends.domain.review.HealthWithTrend
+import com.phonepvr.friends.domain.review.Momentum
+import com.phonepvr.friends.domain.review.MomentumCalculator
+import com.phonepvr.friends.domain.review.SlippingBond
+import com.phonepvr.friends.domain.review.SlippingDetector
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -29,43 +33,58 @@ class WidthDashboardViewModel @Inject constructor(
     timelineRepository: TimelineRepository,
 ) : ViewModel() {
 
-    val health: StateFlow<HealthWithTrend?> = combine(
+    private val zone: ZoneId = ZoneId.systemDefault()
+
+    /** Everything the dashboard derives from, computed once per data change. */
+    private data class Inputs(
+        val bonds: List<BondInfo>,
+        val nameById: Map<Long, String>,
+        val photoById: Map<Long, String?>,
+        val contactDatesByPerson: Map<Long, List<LocalDate>>,
+        val allContactDates: List<LocalDate>,
+    )
+
+    private val inputs: StateFlow<Inputs?> = combine(
         peopleRepository.observeActiveWithDetails(),
         timelineRepository.observeAll(),
     ) { people, timeline ->
-        val zone = ZoneId.systemDefault()
         val bonds = people.map { p ->
             BondInfo(
                 personId = p.person.id,
                 displayName = p.person.displayName,
                 photoRelativePath = p.person.photoRelativePath,
                 cadenceTargetDays = p.person.cadenceTargetDays,
-                bondedAt = Instant.ofEpochMilli(p.person.createdAt)
-                    .atZone(zone)
-                    .toLocalDate(),
+                bondedAt = p.person.createdAt.toLocalDate(),
             )
         }
-        val contactDatesByPerson = timeline
-            .asSequence()
-            .filter { it.countsAsContact }
+        val contacts = timeline.filter { it.countsAsContact }
+        val datesByPerson = contacts
             .groupBy { it.personId }
-            .mapValues { (_, entries) ->
-                entries.map {
-                    Instant.ofEpochMilli(it.occurredAt).atZone(zone).toLocalDate()
-                }
-            }
-        ConnectionHealth.computeWithTrend(
-            today = LocalDate.now(),
+            .mapValues { (_, entries) -> entries.map { it.occurredAt.toLocalDate() } }
+        Inputs(
             bonds = bonds,
-            contactDatesByPerson = contactDatesByPerson,
-            lookbackDays = HEALTH_TREND_LOOKBACK_DAYS,
+            nameById = people.associate { it.person.id to it.person.displayName },
+            photoById = people.associate { it.person.id to it.person.photoRelativePath },
+            contactDatesByPerson = datesByPerson,
+            allContactDates = contacts.map { it.occurredAt.toLocalDate() },
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
+    val health: StateFlow<HealthWithTrend?> = inputs
+        .map { i ->
+            i ?: return@map null
+            ConnectionHealth.computeWithTrend(
+                today = LocalDate.now(),
+                bonds = i.bonds,
+                contactDatesByPerson = i.contactDatesByPerson,
+                lookbackDays = HEALTH_TREND_LOOKBACK_DAYS,
+            )
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
     /**
-     * The bonds that need attention right now — most-overdue first, then due
-     * soon, then never-contacted. Capped at 6 so the carousel stays glanceable;
-     * the full overdue list is the Bonds tab itself.
+     * Bonds that need attention right now — most-overdue first, then due soon,
+     * then never-contacted. Capped at 6 so the carousel stays glanceable.
      */
     val needsYou: StateFlow<List<BondHealth>> = health
         .map { it?.now?.byBond.orEmpty() }
@@ -80,6 +99,29 @@ class WidthDashboardViewModel @Inject constructor(
                 .take(6)
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Last-14-days contact rhythm across all bonds. */
+    val momentum: StateFlow<Momentum?> = inputs
+        .map { i -> i?.let { MomentumCalculator.compute(LocalDate.now(), it.allContactDates) } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /**
+     * Bonds going quiet vs their own rhythm, excluding anyone already in the
+     * needs-you rail so the same person never shows in two attention lists.
+     */
+    val slipping: StateFlow<List<SlippingBond>> = combine(inputs, needsYou) { i, needs ->
+        i ?: return@combine emptyList()
+        SlippingDetector.detect(
+            today = LocalDate.now(),
+            contactDatesByPerson = i.contactDatesByPerson,
+            nameById = i.nameById,
+            photoById = i.photoById,
+            excludePersonIds = needs.mapTo(HashSet()) { it.personId },
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    private fun Long.toLocalDate(): LocalDate =
+        Instant.ofEpochMilli(this).atZone(zone).toLocalDate()
 
     /**
      * Most-overdue first, then due-soon by closest-to-due, then

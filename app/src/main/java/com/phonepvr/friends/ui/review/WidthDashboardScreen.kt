@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -44,6 +46,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -56,7 +62,10 @@ import com.phonepvr.friends.domain.review.BondHealth
 import com.phonepvr.friends.domain.review.GapStat
 import com.phonepvr.friends.domain.review.HealthSnapshot
 import com.phonepvr.friends.domain.review.HealthWithTrend
+import com.phonepvr.friends.domain.review.Momentum
+import com.phonepvr.friends.domain.review.MomentumDay
 import com.phonepvr.friends.domain.review.ReviewYear
+import com.phonepvr.friends.domain.review.SlippingBond
 import com.phonepvr.friends.ui.common.formatDate
 import com.phonepvr.friends.ui.components.PersonAvatar
 
@@ -71,6 +80,8 @@ fun WidthDashboardScreen(
 ) {
     val health by dashboardViewModel.health.collectAsStateWithLifecycle()
     val needsYou by dashboardViewModel.needsYou.collectAsStateWithLifecycle()
+    val momentum by dashboardViewModel.momentum.collectAsStateWithLifecycle()
+    val slipping by dashboardViewModel.slipping.collectAsStateWithLifecycle()
 
     val selectedYear by reviewViewModel.selectedYear.collectAsStateWithLifecycle()
     val availableYears by reviewViewModel.availableYears.collectAsStateWithLifecycle()
@@ -115,6 +126,17 @@ fun WidthDashboardScreen(
                         onOpenPerson = onOpenPerson,
                     )
                 }
+            }
+            if (slipping.isNotEmpty()) {
+                item {
+                    GoingQuietSection(
+                        bonds = slipping,
+                        onOpenPerson = onOpenPerson,
+                    )
+                }
+            }
+            momentum?.takeIf { it.hasActivity }?.let { m ->
+                item { MomentumSection(momentum = m) }
             }
 
             // --- Existing call analytics, untouched ---
@@ -351,21 +373,12 @@ private fun NeedsYouCarousel(
     onOpenPerson: (Long) -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = when (bonds.size) {
-                    1 -> "1 bond needs you"
-                    else -> "${bonds.size} bonds need you"
-                },
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.weight(1f),
-            )
-        }
+        BlockTitle(
+            text = when (bonds.size) {
+                1 -> "1 bond needs you"
+                else -> "${bonds.size} bonds need you"
+            },
+        )
         Spacer(Modifier.height(8.dp))
         LazyRow(
             contentPadding = PaddingValues(horizontal = 16.dp),
@@ -384,7 +397,16 @@ private fun NeedsYouCard(bond: BondHealth, onClick: () -> Unit) {
     ElevatedCard(
         modifier = Modifier
             .width(132.dp)
-            .clickable(onClick = onClick),
+            // One spoken node ("Alice, 5d overdue") with a clear tap action,
+            // instead of TalkBack reading avatar/name/chip as separate items.
+            .semantics(mergeDescendants = true) {
+                contentDescription = "${bond.displayName}, $urgencyLabel"
+            }
+            .clickable(
+                onClickLabel = "Open ${bond.displayName}",
+                role = Role.Button,
+                onClick = onClick,
+            ),
     ) {
         Column(
             modifier = Modifier
@@ -451,8 +473,214 @@ private fun urgencyFor(bond: BondHealth): Pair<String, Color> {
 }
 
 // ============================================================
+// "Going quiet" early-warning section
+// ============================================================
+
+@Composable
+private fun GoingQuietSection(
+    bonds: List<SlippingBond>,
+    onOpenPerson: (Long) -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        BlockTitle(text = "Going quiet")
+        Spacer(Modifier.height(8.dp))
+        ElevatedCard(
+            modifier = Modifier
+                .padding(horizontal = 16.dp)
+                .fillMaxWidth(),
+        ) {
+            Column {
+                bonds.forEachIndexed { index, bond ->
+                    SlippingRow(bond = bond, onClick = { onOpenPerson(bond.personId) })
+                    if (index < bonds.lastIndex) {
+                        HorizontalDivider(modifier = Modifier.padding(start = 68.dp))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SlippingRow(bond: SlippingBond, onClick: () -> Unit) {
+    val detail = "Usually every ~${bond.baselineGapDays}d · quiet ${bond.openGapDays}d"
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics(mergeDescendants = true) {
+                contentDescription = "${bond.displayName}, $detail"
+            }
+            .clickable(
+                onClickLabel = "Open ${bond.displayName}",
+                role = Role.Button,
+                onClick = onClick,
+            )
+            .defaultMinSize(minHeight = 56.dp)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        PersonAvatar(
+            photoRelativePath = bond.photoRelativePath,
+            displayName = bond.displayName,
+            diameter = 40.dp,
+        )
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = bond.displayName,
+                style = MaterialTheme.typography.bodyLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = detail,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+// ============================================================
+// Momentum strip (last 14 days)
+// ============================================================
+
+@Composable
+private fun MomentumSection(momentum: Momentum) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        BlockTitle(text = "Your momentum")
+        Spacer(Modifier.height(8.dp))
+        ElevatedCard(
+            modifier = Modifier
+                .padding(horizontal = 16.dp)
+                .fillMaxWidth(),
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                MomentumBars(momentum)
+                Spacer(Modifier.height(12.dp))
+                MomentumStats(momentum)
+            }
+        }
+    }
+}
+
+@Composable
+private fun MomentumBars(momentum: Momentum) {
+    val maxCount = momentum.maxCount.coerceAtLeast(1)
+    val spoken = momentumA11yLabel(momentum)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(56.dp)
+            // The bars are a visual; give TalkBack one concise summary instead.
+            .clearAndSetSemantics { contentDescription = spoken },
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+        verticalAlignment = Alignment.Bottom,
+    ) {
+        momentum.days.forEach { day ->
+            MomentumBar(
+                day = day,
+                fraction = day.count.toFloat() / maxCount.toFloat(),
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun MomentumBar(day: MomentumDay, fraction: Float, modifier: Modifier) {
+    val animated by animateFloatAsState(
+        targetValue = fraction.coerceIn(0f, 1f),
+        animationSpec = tween(600),
+        label = "momentumBar",
+    )
+    val barColor = when {
+        day.count == 0 -> MaterialTheme.colorScheme.surfaceVariant
+        day.isToday -> MaterialTheme.colorScheme.primary
+        else -> MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
+    }
+    // Empty days keep a thin track so the rhythm is still legible.
+    val heightFraction = if (day.count == 0) 0.06f else (0.12f + 0.88f * animated)
+    Box(
+        modifier = modifier.fillMaxHeight(),
+        contentAlignment = Alignment.BottomCenter,
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(heightFraction)
+                .clip(RoundedCornerShape(3.dp))
+                .background(barColor),
+        )
+    }
+}
+
+@Composable
+private fun MomentumStats(momentum: Momentum) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = "${momentum.last7Count} this week",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
+        if (momentum.weekDelta != 0) {
+            Spacer(Modifier.width(8.dp))
+            WeekDeltaChip(momentum.weekDelta)
+        }
+        Spacer(Modifier.weight(1f))
+        Text(
+            text = "Active ${momentum.activeDays}/${momentum.windowDays}d",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun WeekDeltaChip(delta: Int) {
+    val up = delta > 0
+    val tint = if (up) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+            imageVector = if (up) Icons.Filled.ArrowUpward else Icons.Filled.ArrowDownward,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(14.dp),
+        )
+        Spacer(Modifier.width(2.dp))
+        Text(
+            text = "${if (up) "+" else ""}$delta vs last week",
+            style = MaterialTheme.typography.labelMedium,
+            color = tint,
+        )
+    }
+}
+
+private fun momentumA11yLabel(m: Momentum): String {
+    val deltaPart = when {
+        m.weekDelta > 0 -> ", up ${m.weekDelta} from the week before"
+        m.weekDelta < 0 -> ", down ${-m.weekDelta} from the week before"
+        else -> ""
+    }
+    return "Contact activity, last ${m.windowDays} days: " +
+        "${m.last7Count} in the last week$deltaPart. " +
+        "Active on ${m.activeDays} of ${m.windowDays} days."
+}
+
+// ============================================================
 // Shared layout pieces
 // ============================================================
+
+@Composable
+private fun BlockTitle(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.titleMedium,
+        modifier = Modifier.padding(horizontal = 16.dp),
+    )
+}
 
 @Composable
 private fun SectionHeader(text: String) {

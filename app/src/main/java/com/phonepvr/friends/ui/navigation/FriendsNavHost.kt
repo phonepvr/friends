@@ -31,7 +31,7 @@ import com.phonepvr.friends.ui.people.AddEditPersonScreen
 import com.phonepvr.friends.ui.people.PeopleListScreen
 import com.phonepvr.friends.ui.person.PersonDetailScreen
 import com.phonepvr.friends.ui.quotes.MyQuotesScreen
-import com.phonepvr.friends.ui.review.YearInReviewScreen
+import com.phonepvr.friends.ui.review.WidthDashboardScreen
 import com.phonepvr.friends.ui.settings.SettingsScreen
 import com.phonepvr.friends.ui.timeline.LogInteractionScreen
 
@@ -383,8 +383,10 @@ fun FriendsNavHost(
             BackupScreen(onBack = { navController.popBackStack() })
         }
         composable(Routes.YEAR_IN_REVIEW) {
-            YearInReviewScreen(
-                onBack = { navController.popBackStack() },
+            WidthDashboardScreen(
+                onOpenPerson = { personId ->
+                    navController.navigate(Routes.personDetail(personId))
+                },
                 bottomBar = { FriendsBottomBar(TopLevelTab.YEAR_IN_REVIEW, onSelectTab) },
             )
         }

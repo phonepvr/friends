@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -112,9 +113,17 @@ fun WidthDashboardScreen(
         },
         bottomBar = bottomBar,
     ) { padding ->
-        LazyColumn(
+        Box(
             modifier = Modifier
                 .padding(padding)
+                .fillMaxSize(),
+            contentAlignment = Alignment.TopCenter,
+        ) {
+        LazyColumn(
+            modifier = Modifier
+                // Cap reading width on tablets / foldables / landscape so the
+                // single-column dashboard stays comfortable, not stretched.
+                .widthIn(max = 640.dp)
                 .fillMaxSize(),
             contentPadding = PaddingValues(vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -181,6 +190,7 @@ fun WidthDashboardScreen(
                     }
                 }
             }
+        }
         }
     }
 }

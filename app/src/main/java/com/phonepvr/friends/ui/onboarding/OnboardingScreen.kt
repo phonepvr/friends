@@ -164,11 +164,12 @@ private fun OnboardingSlide(page: Int, quote: Quote?) {
                     "for an internet permission — we couldn't phone home if we wanted to.",
             )
             4 -> TitleBodySlide(
-                title = "Two doors you can leave shut.",
-                body = "Bondwidth can ask for contacts (to import the people you already " +
-                    "know) and the call log (to count calls automatically). Both are " +
-                    "optional. Say no and the app still works — add anyone by hand, " +
-                    "log every conversation yourself.",
+                title = "A couple of permissions make this sing.",
+                body = "Bondwidth works best as your phone and contacts app: it reads " +
+                    "your contacts so you can add the people you already know, and your " +
+                    "call log so check-ins are counted automatically — no manual logging. " +
+                    "Granting these on the next screen gives you the smoothest experience. " +
+                    "It all stays on this device.",
             )
             5 -> TitleBodySlide(
                 title = "There's a widget, too.",
@@ -266,15 +267,16 @@ private fun PermissionsSlide(viewModel: OnboardingViewModel) {
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
-            text = "A few permissions",
+            text = "Let's get you set up",
             style = MaterialTheme.typography.headlineSmall,
             textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(12.dp))
         Text(
-            text = "Friends is your phone and contacts app, so it needs a few " +
-                "things to work. Here's what, and why — you can change any of " +
-                "these later in Settings.",
+            text = "Friends is your phone and contacts app, so granting these " +
+                "gives you the full, smooth experience — calls, contacts and " +
+                "automatic check-ins all working from the start. Here's what, " +
+                "and why. It all stays on this device.",
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,

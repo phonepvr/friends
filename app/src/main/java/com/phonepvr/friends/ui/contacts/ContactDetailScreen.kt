@@ -85,6 +85,7 @@ import com.phonepvr.friends.data.contacts.ContactDetails
 import com.phonepvr.friends.data.contacts.PhoneType
 import com.phonepvr.friends.data.contacts.VCardBuilder
 import com.phonepvr.friends.data.dialer.CallPlacer
+import com.phonepvr.friends.ui.dialer.rememberSimCallLauncher
 import com.phonepvr.friends.ui.permissions.PermissionRationaleSheet
 import kotlinx.coroutines.launch
 import java.io.File

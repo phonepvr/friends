@@ -9,6 +9,7 @@ import com.phonepvr.friends.data.db.dao.PersonDao
 import com.phonepvr.friends.data.db.entity.PersonEntity
 import com.phonepvr.friends.data.dialer.CallPlacer
 import com.phonepvr.friends.data.dialer.T9
+import com.phonepvr.friends.data.settings.SettingsRepository
 import com.phonepvr.friends.ui.navigation.Routes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -22,6 +23,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class DialpadMatch(
@@ -54,7 +56,18 @@ class DialpadViewModel @Inject constructor(
     systemContactsRepository: SystemContactsRepository,
     personDao: PersonDao,
     private val callPlacer: CallPlacer,
+    private val settingsRepository: SettingsRepository,
 ) : ViewModel() {
+
+    /** Speed-dial assignments (digit 1–9 → number) for dialpad long-press. */
+    val speedDial: StateFlow<Map<Int, String>> = settingsRepository.settings
+        .map { it.speedDial }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+
+    /** Assign (or clear, when [number] is null/blank) a speed-dial key. */
+    fun setSpeedDial(key: Int, number: String?) {
+        viewModelScope.launch { settingsRepository.setSpeedDial(key, number) }
+    }
 
     private val contactsGranted = MutableStateFlow(false)
     private val placeError = MutableStateFlow<String?>(null)

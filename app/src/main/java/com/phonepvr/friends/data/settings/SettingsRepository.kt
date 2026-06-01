@@ -79,6 +79,11 @@ data class AppSettings(
      * stored list wins, even if they empty it (= hide the long-press hint).
      */
     val quickReplyMessages: List<String> = DEFAULT_QUICK_REPLIES,
+    /**
+     * Speed-dial assignments: dialpad digit (1–9) → phone number. Long-press
+     * the key on the dialpad to call it. Empty by default.
+     */
+    val speedDial: Map<Int, String> = emptyMap(),
 )
 
 /** First-launch defaults for [AppSettings.quickReplyMessages]. */
@@ -133,6 +138,7 @@ class SettingsRepository @Inject constructor(
                 quickReplyMessages = prefs[Keys.QUICK_REPLIES]
                     ?.let { decodeQuickReplies(it) }
                     ?: DEFAULT_QUICK_REPLIES,
+                speedDial = prefs[Keys.SPEED_DIAL]?.let { decodeSpeedDial(it) } ?: emptyMap(),
             )
         }
 
@@ -226,6 +232,17 @@ class SettingsRepository @Inject constructor(
         dataStore.edit { it[Keys.QUICK_REPLIES] = encodeQuickReplies(cleaned) }
     }
 
+    /** Assigns [number] to speed-dial [key] (1–9), or clears it when blank. */
+    suspend fun setSpeedDial(key: Int, number: String?) {
+        dataStore.edit { prefs ->
+            val current = prefs[Keys.SPEED_DIAL]?.let { decodeSpeedDial(it) }.orEmpty()
+            val updated = current.toMutableMap()
+            val cleaned = number?.trim().orEmpty()
+            if (cleaned.isEmpty()) updated.remove(key) else updated[key] = cleaned
+            prefs[Keys.SPEED_DIAL] = encodeSpeedDial(updated)
+        }
+    }
+
     /**
      * Serialisable snapshot of all user-configurable settings, used by the
      * backup JSON to round-trip across devices. The transient nudge-dismissed
@@ -308,6 +325,7 @@ class SettingsRepository @Inject constructor(
         val DISMISSED_TOOLTIPS = stringSetPreferencesKey("dismissed_tooltips")
         val HIDE_FROM_SCREENSHOTS = booleanPreferencesKey("hide_from_screenshots")
         val QUICK_REPLIES = stringPreferencesKey("quick_reply_messages")
+        val SPEED_DIAL = stringPreferencesKey("speed_dial_map")
     }
 
     private object Snapshot {
@@ -336,5 +354,21 @@ class SettingsRepository @Inject constructor(
 
         fun decodeQuickReplies(stored: String): List<String> =
             if (stored.isEmpty()) emptyList() else stored.split(QUICK_REPLY_SEP)
+
+        // Speed dial map encoded as "key=number" entries joined by RS. Numbers
+        // never contain '=' or RS, so this round-trips cleanly.
+        fun encodeSpeedDial(map: Map<Int, String>): String =
+            map.entries.joinToString(QUICK_REPLY_SEP) { "${it.key}=${it.value}" }
+
+        fun decodeSpeedDial(stored: String): Map<Int, String> {
+            if (stored.isEmpty()) return emptyMap()
+            return stored.split(QUICK_REPLY_SEP).mapNotNull { entry ->
+                val eq = entry.indexOf('=')
+                if (eq <= 0) return@mapNotNull null
+                val key = entry.substring(0, eq).toIntOrNull() ?: return@mapNotNull null
+                val number = entry.substring(eq + 1)
+                if (number.isBlank()) null else key to number
+            }.toMap()
+        }
     }
 }

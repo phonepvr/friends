@@ -74,6 +74,7 @@ fun SettingsScreen(
     onOpenBackup: () -> Unit,
     onOpenMyQuotes: () -> Unit,
     onOpenQuickReplies: () -> Unit,
+    onOpenSpeedDial: () -> Unit,
     onReplayOnboarding: () -> Unit,
     onOpenAbout: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
@@ -260,6 +261,13 @@ fun SettingsScreen(
                     Text("Pre-written messages for declining a call when you can't talk.")
                 },
                 modifier = Modifier.clickable { onOpenQuickReplies() },
+            )
+            ListItem(
+                headlineContent = { Text("Speed dial") },
+                supportingContent = {
+                    Text("Assign contacts to keys 1–9; long-press on the dialpad to call.")
+                },
+                modifier = Modifier.clickable { onOpenSpeedDial() },
             )
 
             HorizontalDivider()

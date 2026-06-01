@@ -1,7 +1,10 @@
 package com.phonepvr.friends.ui.dialer
 
 import android.Manifest
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.provider.ContactsContract
 import android.view.HapticFeedbackConstants
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -161,6 +164,44 @@ fun DialpadScreen(
         }
     }
 
+    val speedDial by viewModel.speedDial.collectAsStateWithLifecycle()
+    // Which key we're picking a contact for, so the picker callback knows
+    // where to store the chosen number.
+    var pendingAssignKey by remember { mutableStateOf<Int?>(null) }
+    val contactPickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        val key = pendingAssignKey
+        pendingAssignKey = null
+        val uri = result.data?.data
+        if (result.resultCode == android.app.Activity.RESULT_OK && key != null && uri != null) {
+            val number = readPickedPhoneNumber(context, uri)
+            if (number != null) {
+                viewModel.setSpeedDial(key, number)
+                scope.launch { snackbarState.showSnackbar("Speed dial $key set") }
+            } else {
+                scope.launch { snackbarState.showSnackbar("Couldn't read that number") }
+            }
+        }
+    }
+
+    // Long-press a digit: dial its speed-dial number if assigned, otherwise
+    // open the contact picker to assign one. (0 keeps its '+' long-press.)
+    val onLongPressKey: (Char) -> Unit = { digit ->
+        val key = digit.digitToIntOrNull()
+        if (key != null && key in 1..9) {
+            val assigned = speedDial[key]
+            if (assigned != null) {
+                placeCall(assigned)
+            } else {
+                pendingAssignKey = key
+                val pick = Intent(Intent.ACTION_PICK)
+                    .setData(ContactsContract.CommonDataKinds.Phone.CONTENT_URI)
+                runCatching { contactPickerLauncher.launch(pick) }
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -213,7 +254,11 @@ fun DialpadScreen(
                     }
                 }
             }
-            DialpadGrid(onDigit = viewModel::onDigit)
+            DialpadGrid(
+                onDigit = viewModel::onDigit,
+                onLongPressKey = onLongPressKey,
+                speedDialKeys = speedDial.keys,
+            )
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -296,9 +341,13 @@ private fun MatchRow(
 }
 
 @Composable
-private fun DialpadGrid(onDigit: (Char) -> Unit) {
+private fun DialpadGrid(
+    onDigit: (Char) -> Unit,
+    onLongPressKey: (Char) -> Unit,
+    speedDialKeys: Set<Int>,
+) {
     // Long-press '0' enters '+' (international prefix), matching every other
-    // dialer in the world.
+    // dialer in the world. Long-press 1–9 triggers speed dial.
     val rows = listOf(
         listOf(KeyDef('1', ""), KeyDef('2', "ABC"), KeyDef('3', "DEF")),
         listOf(KeyDef('4', "GHI"), KeyDef('5', "JKL"), KeyDef('6', "MNO")),
@@ -317,11 +366,22 @@ private fun DialpadGrid(onDigit: (Char) -> Unit) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 for (key in row) {
+                    val digit = key.digit
+                    val longPressDigit = key.longPressDigit
+                    val digitValue = digit.digitToIntOrNull()
+                    val hasSpeedDial = digitValue != null && digitValue in speedDialKeys
+                    // '0' keeps its '+' shortcut; 1–9 trigger speed dial.
+                    val longClick: (() -> Unit)? = when {
+                        longPressDigit != null -> ({ onDigit(longPressDigit) })
+                        digit in '1'..'9' -> ({ onLongPressKey(digit) })
+                        else -> null
+                    }
                     DialpadKey(
                         key = key,
                         modifier = Modifier.weight(1f),
-                        onClick = { onDigit(key.digit) },
-                        onLongClick = key.longPressDigit?.let { d -> { onDigit(d) } },
+                        hasSpeedDial = hasSpeedDial,
+                        onClick = { onDigit(digit) },
+                        onLongClick = longClick,
                     )
                 }
             }
@@ -336,11 +396,35 @@ private data class KeyDef(
     val longPressDigit: Char? = null,
 )
 
+/**
+ * Reads the phone NUMBER from the URI returned by the system contact picker
+ * (ACTION_PICK on Phone.CONTENT_URI points straight at a phone-data row). The
+ * picker grants temporary read on that URI, so no contacts permission of our
+ * own is required. Returns null on any provider error.
+ */
+private fun readPickedPhoneNumber(context: Context, uri: android.net.Uri): String? =
+    runCatching {
+        context.contentResolver.query(
+            uri,
+            arrayOf(ContactsContract.CommonDataKinds.Phone.NUMBER),
+            null,
+            null,
+            null,
+        )?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                cursor.getString(0)?.trim()?.takeIf { it.isNotBlank() }
+            } else {
+                null
+            }
+        }
+    }.getOrNull()
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun DialpadKey(
     key: KeyDef,
     modifier: Modifier = Modifier,
+    hasSpeedDial: Boolean = false,
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
 ) {
@@ -373,6 +457,14 @@ private fun DialpadKey(
                     text = key.letters,
                     fontSize = 10.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else if (hasSpeedDial) {
+                // A small dot hints "this key has a speed-dial assignment"
+                // when there are no letters to show (the '1' key).
+                Text(
+                    text = "•",
+                    fontSize = 10.sp,
+                    color = MaterialTheme.colorScheme.primary,
                 )
             }
         }

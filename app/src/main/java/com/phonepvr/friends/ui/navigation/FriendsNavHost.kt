@@ -26,6 +26,7 @@ import com.phonepvr.friends.ui.contacts.SaveNumberScreen
 import com.phonepvr.friends.ui.dialer.CallHistoryScreen
 import com.phonepvr.friends.ui.dialer.DialerScreen
 import com.phonepvr.friends.ui.dialer.DialpadScreen
+import com.phonepvr.friends.ui.dialer.SpeedDialScreen
 import com.phonepvr.friends.ui.onboarding.OnboardingScreen
 import com.phonepvr.friends.ui.people.AddEditPersonScreen
 import com.phonepvr.friends.ui.people.PeopleListScreen
@@ -59,6 +60,7 @@ object Routes {
     const val YEAR_IN_REVIEW = "year-in-review"
     const val MY_QUOTES = "quotes/my"
     const val QUICK_REPLIES = "settings/quick-replies"
+    const val SPEED_DIAL = "settings/speed-dial"
     const val ONBOARDING = "onboarding"
     const val ABOUT = "about"
     const val PERSON_ID_ARG = "personId"
@@ -375,12 +377,16 @@ fun FriendsNavHost(
                 onOpenBackup = { navController.navigate(Routes.BACKUP) },
                 onOpenMyQuotes = { navController.navigate(Routes.MY_QUOTES) },
                 onOpenQuickReplies = { navController.navigate(Routes.QUICK_REPLIES) },
+                onOpenSpeedDial = { navController.navigate(Routes.SPEED_DIAL) },
                 onReplayOnboarding = { navController.navigate(Routes.ONBOARDING) },
                 onOpenAbout = { navController.navigate(Routes.ABOUT) },
             )
         }
         composable(Routes.QUICK_REPLIES) {
             QuickRepliesScreen(onBack = { navController.popBackStack() })
+        }
+        composable(Routes.SPEED_DIAL) {
+            SpeedDialScreen(onBack = { navController.popBackStack() })
         }
         composable(Routes.BACKUP) {
             BackupScreen(onBack = { navController.popBackStack() })

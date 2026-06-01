@@ -220,6 +220,9 @@
             android:exported="false"
             android:launchMode="singleInstance"
             android:excludeFromRecents="true"
+            android:supportsPictureInPicture="true"
+            android:resizeableActivity="true"
+            android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|keyboardHidden"
             android:theme="@style/Theme.Friends" />
 
         <!--

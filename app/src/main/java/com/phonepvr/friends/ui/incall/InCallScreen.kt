@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PhoneInTalk
+import androidx.compose.material.icons.filled.PictureInPictureAlt
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SwapCalls
 import androidx.compose.material.icons.filled.VolumeUp
@@ -83,6 +84,9 @@ import java.util.Locale
 @Composable
 fun InCallScreen(
     state: InCallUiState,
+    isInPip: Boolean,
+    canMinimize: Boolean,
+    onMinimize: () -> Unit,
     onAccept: () -> Unit,
     onReject: () -> Unit,
     onRejectWith: (String) -> Unit,
@@ -96,6 +100,14 @@ fun InCallScreen(
     onMerge: () -> Unit,
     onAddCall: () -> Unit,
 ) {
+    // PiP renders a compact, tap-to-expand card. All controls are gone from
+    // the small window — there's no room and Telecom keeps audio routing
+    // unaffected — but the user can see who they're on a call with at a
+    // glance while doing other things in the app.
+    if (isInPip) {
+        PipCard(state = state)
+        return
+    }
     val snapshot = state.snapshot
     var showKeypad by remember { mutableStateOf(false) }
     var dtmfDigits by remember { mutableStateOf("") }
@@ -159,6 +171,66 @@ fun InCallScreen(
                     onAddCall = onAddCall,
                 )
             }
+        }
+        // "Minimize" floats top-right over the call card and only appears
+        // for an ongoing (non-ringing, non-ended) call on a PiP-capable
+        // device. Tapping it shrinks the call to a floating PiP window so
+        // the rest of Bondwidth becomes navigable.
+        if (canMinimize &&
+            !state.callEnded &&
+            snapshot != null &&
+            snapshot.state != CallSimpleState.RINGING
+        ) {
+            IconButton(
+                onClick = onMinimize,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 24.dp, end = 16.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.PictureInPictureAlt,
+                    contentDescription = "Minimize call",
+                )
+            }
+        }
+    }
+}
+
+/** Compact card rendered while the activity is in Picture-in-Picture mode. */
+@Composable
+private fun PipCard(state: InCallUiState) {
+    val snapshot = state.snapshot
+    val name = state.bondedPerson?.displayName
+        ?: state.callerName
+        ?: snapshot?.callerDisplayName
+        ?: snapshot?.number?.takeIf { it.isNotBlank() }
+        ?: "Call"
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Icon(
+            imageVector = Icons.Filled.PhoneInTalk,
+            contentDescription = null,
+            modifier = Modifier.size(36.dp),
+            tint = MaterialTheme.colorScheme.primary,
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = name,
+            style = MaterialTheme.typography.titleMedium,
+            maxLines = 1,
+        )
+        if (state.audio.isMuted) {
+            Text(
+                text = "Muted",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.error,
+            )
         }
     }
 }

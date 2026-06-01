@@ -1,11 +1,15 @@
 package com.phonepvr.friends.ui.incall
 
+import android.app.PictureInPictureParams
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
+import android.util.Rational
 import android.view.KeyEvent
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
@@ -14,8 +18,11 @@ import androidx.activity.viewModels
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.phonepvr.friends.MainActivity
+import com.phonepvr.friends.data.incall.CallSimpleState
 import com.phonepvr.friends.ui.theme.FriendsTheme
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.delay
@@ -33,6 +40,11 @@ import kotlinx.coroutines.delay
 class InCallActivity : ComponentActivity() {
 
     private val viewModel: InCallViewModel by viewModels()
+
+    // Drives the compact-vs-full UI swap and tracks PiP transitions so the
+    // screen knows which layout to show. Composed-state-friendly because the
+    // setContent block reads it.
+    private var isInPip by mutableStateOf(false)
 
     // The power button doesn't deliver a key event to a foreground activity —
     // it turns the screen off. We listen for ACTION_SCREEN_OFF instead and
@@ -79,6 +91,9 @@ class InCallActivity : ComponentActivity() {
                 Surface {
                     InCallScreen(
                         state = state,
+                        isInPip = isInPip,
+                        canMinimize = pipSupported(),
+                        onMinimize = ::enterPip,
                         onAccept = viewModel::accept,
                         onReject = viewModel::reject,
                         onRejectWith = viewModel::rejectWith,
@@ -126,6 +141,43 @@ class InCallActivity : ComponentActivity() {
             }
         }
         return super.onKeyDown(keyCode, event)
+    }
+
+    /**
+     * Auto-enter Picture-in-Picture when the user navigates Home during an
+     * active call. Without this, pressing Home over an in-progress call
+     * would just leave them with a tiny status-bar icon and no obvious way
+     * to do anything with the call while using the rest of Bondwidth.
+     * Skipped while the call is still ringing (no point shrinking a screen
+     * the user might immediately answer or reject) or already PiP'd.
+     */
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        val snap = viewModel.state.value.snapshot ?: return
+        if (snap.state == CallSimpleState.RINGING || isInPip || !pipSupported()) return
+        enterPip()
+    }
+
+    override fun onPictureInPictureModeChanged(
+        isInPictureInPictureMode: Boolean,
+        newConfig: Configuration,
+    ) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        isInPip = isInPictureInPictureMode
+    }
+
+    /** True iff the device advertises PiP support — wears, some TVs, and a
+     *  handful of OEM builds disable it. */
+    private fun pipSupported(): Boolean =
+        packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
+
+    /** Enters PiP at a portrait-ish aspect that fits a phone-call card. */
+    private fun enterPip() {
+        if (!pipSupported()) return
+        val params = PictureInPictureParams.Builder()
+            .setAspectRatio(Rational(3, 4))
+            .build()
+        runCatching { enterPictureInPictureMode(params) }
     }
 
     /**

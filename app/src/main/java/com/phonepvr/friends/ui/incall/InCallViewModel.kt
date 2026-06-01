@@ -1,7 +1,5 @@
 package com.phonepvr.friends.ui.incall
 
-import android.content.Context
-import android.telecom.TelecomManager
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.phonepvr.friends.data.blocking.BlockedNumberManager
@@ -14,12 +12,12 @@ import com.phonepvr.friends.data.incall.CallSession
 import com.phonepvr.friends.data.incall.CallSimpleState
 import com.phonepvr.friends.data.incall.CallSnapshot
 import com.phonepvr.friends.data.incall.CallerIdentityResolver
+import com.phonepvr.friends.data.incall.Ringer
 import com.phonepvr.friends.data.settings.DEFAULT_QUICK_REPLIES
 import com.phonepvr.friends.data.settings.SettingsRepository
 import com.phonepvr.friends.domain.cadence.CadenceCalculator
 import com.phonepvr.friends.domain.cadence.CadenceStatus
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -85,7 +83,7 @@ class InCallViewModel @Inject constructor(
     private val callerIdentityResolver: CallerIdentityResolver,
     private val blockedNumberManager: BlockedNumberManager,
     private val settingsRepository: SettingsRepository,
-    @ApplicationContext private val appContext: Context,
+    private val ringer: Ringer,
 ) : ViewModel() {
 
     // Default-dialer role + device capability can't change mid-call, so
@@ -210,17 +208,18 @@ class InCallViewModel @Inject constructor(
 
     /**
      * Silences the ringtone for the current incoming call, without rejecting
-     * it. No-op when there isn't a ringing call — calling silenceRinger
-     * mid-conversation is harmless but pointless. Wired to volume keys and
+     * it. No-op when there isn't a ringing call. Wired to volume keys and
      * the screen turning off (power button) by [InCallActivity].
+     *
+     * Note: TelecomManager.silenceRinger() is intentionally NOT used here —
+     * it only silences the system-generated ringtone, and as the default
+     * dialer Bondwidth plays its own via [Ringer]. We have to stop our
+     * own MediaPlayer + vibration source.
      */
     fun silenceRinger() {
         val snap = state.value.snapshot ?: return
         if (snap.state != CallSimpleState.RINGING) return
-        runCatching {
-            val telecom = appContext.getSystemService(Context.TELECOM_SERVICE) as? TelecomManager
-            telecom?.silenceRinger()
-        }
+        ringer.silence()
     }
 
     /**

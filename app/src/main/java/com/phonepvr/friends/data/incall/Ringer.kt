@@ -32,6 +32,16 @@ class Ringer @Inject constructor(
     private var player: MediaPlayer? = null
     private var vibrator: Vibrator? = null
 
+    /**
+     * Persists across snapshot republishes within a single incoming-call
+     * session. When the user silences the ringer (volume / power button),
+     * the InCallService can still re-publish the RINGING snapshot for any
+     * reason — without this guard, [start] would just begin ringing again.
+     * Cleared by [stop] when the ringing session is truly over (call
+     * answered, rejected, or hung up).
+     */
+    private var silenced = false
+
     // 0ms wait, 1s buzz, 1s silence — the canonical incoming-call cadence.
     private val vibrationPattern = longArrayOf(0L, 1000L, 1000L)
     private val vibrationAmps = intArrayOf(0, 255, 0)
@@ -44,7 +54,7 @@ class Ringer @Inject constructor(
      */
     @Synchronized
     fun start(callerNumber: String? = null) {
-        if (player != null) return
+        if (silenced || player != null) return
         val audioManager =
             context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
         val mode = audioManager.ringerMode
@@ -55,8 +65,27 @@ class Ringer @Inject constructor(
         startVibration()
     }
 
+    /**
+     * User asked to silence the ringer (volume / power button on the
+     * incoming-call screen). Kills audio and vibration immediately AND
+     * latches the silenced flag so a subsequent snapshot republish doesn't
+     * restart it. The call itself keeps ringing for the network until the
+     * user accepts / rejects / it times out.
+     */
+    @Synchronized
+    fun silence() {
+        stopInternal()
+        silenced = true
+    }
+
     @Synchronized
     fun stop() {
+        stopInternal()
+        // Ringing session over — reset so the next incoming call rings.
+        silenced = false
+    }
+
+    private fun stopInternal() {
         runCatching {
             player?.stop()
             player?.release()

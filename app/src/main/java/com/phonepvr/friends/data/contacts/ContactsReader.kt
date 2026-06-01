@@ -40,6 +40,8 @@ data class ContactDetails(
     /** Phone rows with their data IDs + which is the contact's default. */
     val phoneEntries: List<ContactPhone> = emptyList(),
     val emails: List<String> = emptyList(),
+    /** Email rows with their type, for the editor's type-aware round-trip. */
+    val emailEntries: List<ContactEmail> = emptyList(),
     val notes: String? = null,
     val organization: String? = null,
     val birthday: ContactDate?,
@@ -58,6 +60,14 @@ data class ContactPhone(
     /** Mobile/Home/Work/etc. — round-tripped so the editor preserves it. */
     val type: PhoneType = PhoneType.MOBILE,
     /** Provider LABEL column, used when [type] is CUSTOM. */
+    val customLabel: String? = null,
+)
+
+/** A single email of a contact, with its Home/Work/Other/Custom type so the
+ *  editor can preserve it on save. */
+data class ContactEmail(
+    val address: String,
+    val type: EmailType = EmailType.HOME,
     val customLabel: String? = null,
 )
 
@@ -237,12 +247,38 @@ class ContactsReader @Inject constructor(
             }
         }
 
-        val emails = readSingleColumn(
-            uri = ContactsContract.CommonDataKinds.Email.CONTENT_URI,
-            column = ContactsContract.CommonDataKinds.Email.ADDRESS,
-            contactIdColumn = ContactsContract.CommonDataKinds.Email.CONTACT_ID,
-            contactId = contactId,
-        )
+        val emailEntries = mutableListOf<ContactEmail>()
+        resolver.query(
+            ContactsContract.CommonDataKinds.Email.CONTENT_URI,
+            arrayOf(
+                ContactsContract.CommonDataKinds.Email.ADDRESS,
+                ContactsContract.CommonDataKinds.Email.TYPE,
+                ContactsContract.CommonDataKinds.Email.LABEL,
+            ),
+            "${ContactsContract.CommonDataKinds.Email.CONTACT_ID} = ?",
+            arrayOf(contactId.toString()),
+            null,
+        )?.use { cursor ->
+            val addressCol =
+                cursor.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Email.ADDRESS)
+            val typeCol =
+                cursor.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Email.TYPE)
+            val labelCol =
+                cursor.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Email.LABEL)
+            while (cursor.moveToNext()) {
+                val address = cursor.getString(addressCol)?.trim()?.takeIf { it.isNotBlank() }
+                    ?: continue
+                emailEntries.add(
+                    ContactEmail(
+                        address = address,
+                        type = emailTypeFromContactsContract(cursor.getInt(typeCol)),
+                        customLabel = cursor.getString(labelCol),
+                    ),
+                )
+            }
+        }
+        // Keep the plain address list (distinct) for existing display paths.
+        val emails = emailEntries.map { it.address }.distinct()
         val notes = readSingleData(
             contactId = contactId,
             mimeType = ContactsContract.CommonDataKinds.Note.CONTENT_ITEM_TYPE,
@@ -259,7 +295,8 @@ class ContactsReader @Inject constructor(
             displayName = displayName,
             phoneNumbers = phoneNumbers,
             phoneEntries = dedupedPhones,
-            emails = emails.distinct(),
+            emails = emails,
+            emailEntries = emailEntries,
             notes = notes,
             organization = organization,
             birthday = birthday,

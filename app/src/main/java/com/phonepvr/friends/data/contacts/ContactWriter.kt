@@ -20,7 +20,7 @@ import javax.inject.Singleton
 data class ContactForm(
     val displayName: String = "",
     val phones: List<PhoneEntry> = emptyList(),
-    val emails: List<String> = emptyList(),
+    val emails: List<EmailEntry> = emptyList(),
     val notes: String = "",
     val organization: String = "",
     /** Birthday to write on create; ignored on update so existing dates survive. */
@@ -28,6 +28,21 @@ data class ContactForm(
     /** What to do with the contact's photo on save. Defaults to "leave it". */
     val photoChange: PhotoChange = PhotoChange.Unchanged,
 )
+
+/**
+ * One editable email row: the address, the chosen [type], and a [customLabel]
+ * used when type is [EmailType.CUSTOM]. Round-trips through [ContactWriter]
+ * so editing a contact no longer flattens every address to TYPE_HOME on save.
+ */
+data class EmailEntry(
+    val address: String,
+    val type: EmailType = EmailType.HOME,
+    val customLabel: String? = null,
+)
+
+/** Email-type labels exposed in the editor — the common subset of
+ *  ContactsContract.CommonDataKinds.Email.TYPE_* people actually use. */
+enum class EmailType { HOME, WORK, OTHER, CUSTOM }
 
 /**
  * One editable phone number row: the digits, the chosen [type], and a
@@ -281,21 +296,28 @@ class ContactWriter @Inject constructor(
                 }
                 ops.add(builder.build())
             }
-        form.emails.map { it.trim() }.filter { it.isNotBlank() }.forEach { address ->
-            ops.add(
-                attach(ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI))
+        form.emails
+            .map { it.copy(address = it.address.trim()) }
+            .filter { it.address.isNotBlank() }
+            .forEach { entry ->
+                val builder = attach(
+                    ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI),
+                )
                     .withValue(
                         ContactsContract.Data.MIMETYPE,
                         ContactsContract.CommonDataKinds.Email.CONTENT_ITEM_TYPE,
                     )
-                    .withValue(ContactsContract.CommonDataKinds.Email.ADDRESS, address)
+                    .withValue(ContactsContract.CommonDataKinds.Email.ADDRESS, entry.address)
                     .withValue(
                         ContactsContract.CommonDataKinds.Email.TYPE,
-                        ContactsContract.CommonDataKinds.Email.TYPE_HOME,
+                        entry.type.toContactsContractType(),
                     )
-                    .build(),
-            )
-        }
+                if (entry.type == EmailType.CUSTOM) {
+                    val label = entry.customLabel?.trim().orEmpty()
+                    builder.withValue(ContactsContract.CommonDataKinds.Email.LABEL, label)
+                }
+                ops.add(builder.build())
+            }
         form.notes.trim().takeIf { it.isNotBlank() }?.let { notes ->
             ops.add(
                 attach(ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI))
@@ -402,4 +424,20 @@ internal fun phoneTypeFromContactsContract(type: Int): PhoneType = when (type) {
     ContactsContract.CommonDataKinds.Phone.TYPE_MAIN -> PhoneType.MAIN
     ContactsContract.CommonDataKinds.Phone.TYPE_CUSTOM -> PhoneType.CUSTOM
     else -> PhoneType.OTHER
+}
+
+/** Map our editor-facing [EmailType] to ContactsContract's int TYPE column. */
+internal fun EmailType.toContactsContractType(): Int = when (this) {
+    EmailType.HOME -> ContactsContract.CommonDataKinds.Email.TYPE_HOME
+    EmailType.WORK -> ContactsContract.CommonDataKinds.Email.TYPE_WORK
+    EmailType.OTHER -> ContactsContract.CommonDataKinds.Email.TYPE_OTHER
+    EmailType.CUSTOM -> ContactsContract.CommonDataKinds.Email.TYPE_CUSTOM
+}
+
+/** Inverse: ContactsContract int TYPE to our enum; unknown → OTHER. */
+internal fun emailTypeFromContactsContract(type: Int): EmailType = when (type) {
+    ContactsContract.CommonDataKinds.Email.TYPE_HOME -> EmailType.HOME
+    ContactsContract.CommonDataKinds.Email.TYPE_WORK -> EmailType.WORK
+    ContactsContract.CommonDataKinds.Email.TYPE_CUSTOM -> EmailType.CUSTOM
+    else -> EmailType.OTHER
 }

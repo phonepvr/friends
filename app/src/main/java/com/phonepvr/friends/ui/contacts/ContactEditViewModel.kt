@@ -9,6 +9,8 @@ import com.phonepvr.friends.data.contacts.ContactForm
 import com.phonepvr.friends.data.contacts.ContactPhotoProcessor
 import com.phonepvr.friends.data.contacts.ContactTracker
 import com.phonepvr.friends.data.contacts.ContactWriter
+import com.phonepvr.friends.data.contacts.EmailEntry
+import com.phonepvr.friends.data.contacts.EmailType
 import com.phonepvr.friends.data.contacts.PhoneEntry
 import com.phonepvr.friends.data.contacts.PhoneType
 import com.phonepvr.friends.data.contacts.PhotoChange
@@ -177,12 +179,28 @@ class ContactEditViewModel @Inject constructor(
     }
 
     fun onEmailChange(index: Int, value: String) = _state.update { s ->
-        val updated = s.form.emails.toMutableList().apply { this[index] = value }
+        val updated = s.form.emails.toMutableList().apply {
+            this[index] = this[index].copy(address = value)
+        }
+        s.copy(form = s.form.copy(emails = updated))
+    }
+
+    fun onEmailTypeChange(index: Int, type: EmailType) = _state.update { s ->
+        val updated = s.form.emails.toMutableList().apply {
+            this[index] = this[index].copy(type = type)
+        }
+        s.copy(form = s.form.copy(emails = updated))
+    }
+
+    fun onEmailLabelChange(index: Int, label: String) = _state.update { s ->
+        val updated = s.form.emails.toMutableList().apply {
+            this[index] = this[index].copy(customLabel = label)
+        }
         s.copy(form = s.form.copy(emails = updated))
     }
 
     fun onAddEmail() = _state.update { s ->
-        s.copy(form = s.form.copy(emails = s.form.emails + ""))
+        s.copy(form = s.form.copy(emails = s.form.emails + EmailEntry(address = "")))
     }
 
     fun onRemoveEmail(index: Int) = _state.update { s ->
@@ -256,7 +274,8 @@ private fun ContactDetails.toForm(): ContactForm = ContactForm(
     phones = phoneEntries
         .map { PhoneEntry(number = it.number, type = it.type, customLabel = it.customLabel) }
         .ifEmpty { listOf(PhoneEntry(number = "")) },
-    emails = emails,
+    emails = emailEntries
+        .map { EmailEntry(address = it.address, type = it.type, customLabel = it.customLabel) },
     notes = notes.orEmpty(),
     organization = organization.orEmpty(),
 )

@@ -51,6 +51,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -59,6 +60,8 @@ import androidx.core.net.toUri
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.phonepvr.friends.data.contacts.EmailEntry
+import com.phonepvr.friends.data.contacts.EmailType
 import com.phonepvr.friends.data.contacts.PhoneEntry
 import com.phonepvr.friends.data.contacts.PhoneType
 import com.phonepvr.friends.ui.permissions.PermissionRationaleSheet
@@ -160,6 +163,8 @@ fun ContactEditScreen(
                     onAddPhone = viewModel::onAddPhone,
                     onRemovePhone = viewModel::onRemovePhone,
                     onEmailChange = viewModel::onEmailChange,
+                    onEmailTypeChange = viewModel::onEmailTypeChange,
+                    onEmailLabelChange = viewModel::onEmailLabelChange,
                     onAddEmail = viewModel::onAddEmail,
                     onRemoveEmail = viewModel::onRemoveEmail,
                     onNotesChange = viewModel::onNotesChange,
@@ -182,6 +187,8 @@ private fun EditForm(
     onAddPhone: () -> Unit,
     onRemovePhone: (Int) -> Unit,
     onEmailChange: (Int, String) -> Unit,
+    onEmailTypeChange: (Int, EmailType) -> Unit,
+    onEmailLabelChange: (Int, String) -> Unit,
     onAddEmail: () -> Unit,
     onRemoveEmail: (Int) -> Unit,
     onNotesChange: (String) -> Unit,
@@ -217,12 +224,11 @@ private fun EditForm(
             onAdd = onAddPhone,
             onRemove = onRemovePhone,
         )
-        RepeatableSection(
-            label = "Emails",
+        EmailSection(
             entries = state.form.emails,
-            keyboardType = KeyboardType.Email,
-            placeholder = "Email",
             onChange = onEmailChange,
+            onTypeChange = onEmailTypeChange,
+            onLabelChange = onEmailLabelChange,
             onAdd = onAddEmail,
             onRemove = onRemoveEmail,
         )
@@ -336,40 +342,86 @@ internal fun phoneTypeLabel(type: PhoneType): String = when (type) {
 }
 
 @Composable
-private fun RepeatableSection(
-    label: String,
-    entries: List<String>,
-    keyboardType: KeyboardType,
-    placeholder: String,
+private fun EmailSection(
+    entries: List<EmailEntry>,
     onChange: (Int, String) -> Unit,
+    onTypeChange: (Int, EmailType) -> Unit,
+    onLabelChange: (Int, String) -> Unit,
     onAdd: () -> Unit,
     onRemove: (Int) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(label, style = MaterialTheme.typography.labelLarge)
-        entries.forEachIndexed { index, value ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(
-                    value = value,
-                    onValueChange = { onChange(index, it) },
-                    placeholder = { Text(placeholder) },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f),
-                )
-                IconButton(onClick = { onRemove(index) }) {
-                    Icon(Icons.Filled.Remove, contentDescription = "Remove")
+        Text("Emails", style = MaterialTheme.typography.labelLarge)
+        entries.forEachIndexed { index, entry ->
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = entry.address,
+                        onValueChange = { onChange(index, it) },
+                        placeholder = { Text("Email") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                        modifier = Modifier.weight(1f),
+                    )
+                    IconButton(onClick = { onRemove(index) }) {
+                        Icon(Icons.Filled.Remove, contentDescription = "Remove")
+                    }
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    EmailTypePicker(
+                        selected = entry.type,
+                        onSelect = { onTypeChange(index, it) },
+                    )
+                    if (entry.type == EmailType.CUSTOM) {
+                        OutlinedTextField(
+                            value = entry.customLabel.orEmpty(),
+                            onValueChange = { onLabelChange(index, it) },
+                            placeholder = { Text("Label") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
                 }
             }
         }
-        Button(
-            onClick = onAdd,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
+        Button(onClick = onAdd, modifier = Modifier.fillMaxWidth()) {
             Icon(Icons.Filled.Add, contentDescription = null)
             Spacer(Modifier.fillMaxWidth(0.05f))
-            Text("Add ${label.lowercase().removeSuffix("s")}")
+            Text("Add email")
         }
     }
+}
+
+@Composable
+private fun EmailTypePicker(selected: EmailType, onSelect: (EmailType) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        AssistChip(
+            onClick = { open = true },
+            label = { Text(emailTypeLabel(selected)) },
+        )
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            EmailType.entries.forEach { type ->
+                DropdownMenuItem(
+                    text = { Text(emailTypeLabel(type)) },
+                    onClick = {
+                        open = false
+                        onSelect(type)
+                    },
+                )
+            }
+        }
+    }
+}
+
+internal fun emailTypeLabel(type: EmailType): String = when (type) {
+    EmailType.HOME -> "Home"
+    EmailType.WORK -> "Work"
+    EmailType.OTHER -> "Other"
+    EmailType.CUSTOM -> "Custom"
 }
 
 @Composable

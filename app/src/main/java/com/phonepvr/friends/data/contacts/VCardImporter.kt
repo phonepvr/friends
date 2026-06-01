@@ -49,7 +49,9 @@ class VCardImporter @Inject constructor(
                 // number lands as the default Mobile. The user can reassign
                 // types in the contact editor.
                 phones = card.phones.map { PhoneEntry(number = it) },
-                emails = card.emails,
+                // Same as phones: vCard import lands every address as the
+                // default Home type; the user can reassign in the editor.
+                emails = card.emails.map { EmailEntry(address = it) },
                 notes = card.notes.orEmpty(),
                 organization = card.organization.orEmpty(),
                 birthday = card.birthday,

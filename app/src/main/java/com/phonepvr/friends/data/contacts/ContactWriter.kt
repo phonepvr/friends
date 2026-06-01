@@ -2,6 +2,7 @@ package com.phonepvr.friends.data.contacts
 
 import android.content.ContentProviderOperation
 import android.content.ContentUris
+import android.content.ContentValues
 import android.content.Context
 import android.provider.ContactsContract
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -181,6 +182,33 @@ class ContactWriter @Inject constructor(
                 else -> true
             }
         }
+
+    /**
+     * Merges the given duplicate contacts into one by telling the platform's
+     * aggregator to keep their raw contacts together (AggregationExceptions,
+     * TYPE_KEEP_TOGETHER). We anchor on the first contact's raw id and join
+     * every other contact's raw id to it. Reversible later via the system
+     * contacts app's "unlink". Needs 2+ contacts that each resolve to a raw id.
+     */
+    suspend fun mergeContacts(contactIds: List<Long>): Boolean = withContext(Dispatchers.IO) {
+        val rawIds = contactIds.distinct().mapNotNull { reader.firstRawContactId(it) }
+        if (rawIds.size < 2) return@withContext false
+        val anchor = rawIds.first()
+        var allOk = true
+        for (other in rawIds.drop(1)) {
+            val values = ContentValues().apply {
+                put(ContactsContract.AggregationExceptions.TYPE,
+                    ContactsContract.AggregationExceptions.TYPE_KEEP_TOGETHER)
+                put(ContactsContract.AggregationExceptions.RAW_CONTACT_ID1, anchor)
+                put(ContactsContract.AggregationExceptions.RAW_CONTACT_ID2, other)
+            }
+            val ok = runCatching {
+                resolver.update(ContactsContract.AggregationExceptions.CONTENT_URI, values, null, null)
+            }.isSuccess
+            allOk = allOk && ok
+        }
+        allOk
+    }
 
     /**
      * Writes [bytes] as the raw contact's photo through the DisplayPhoto

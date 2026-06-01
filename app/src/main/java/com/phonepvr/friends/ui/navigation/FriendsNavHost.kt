@@ -20,6 +20,7 @@ import com.phonepvr.friends.ui.backup.BackupScreen
 import com.phonepvr.friends.ui.contacts.ContactDetailScreen
 import com.phonepvr.friends.ui.contacts.ContactEditScreen
 import com.phonepvr.friends.ui.contacts.ContactsBrowserScreen
+import com.phonepvr.friends.ui.contacts.MergeDuplicatesScreen
 import com.phonepvr.friends.ui.contacts.ImportContactsScreen
 import com.phonepvr.friends.ui.contacts.ImportVCardScreen
 import com.phonepvr.friends.ui.contacts.SaveNumberScreen
@@ -61,6 +62,7 @@ object Routes {
     const val MY_QUOTES = "quotes/my"
     const val QUICK_REPLIES = "settings/quick-replies"
     const val SPEED_DIAL = "settings/speed-dial"
+    const val MERGE_DUPLICATES = "settings/merge-duplicates"
     const val ONBOARDING = "onboarding"
     const val ABOUT = "about"
     const val PERSON_ID_ARG = "personId"
@@ -378,6 +380,7 @@ fun FriendsNavHost(
                 onOpenMyQuotes = { navController.navigate(Routes.MY_QUOTES) },
                 onOpenQuickReplies = { navController.navigate(Routes.QUICK_REPLIES) },
                 onOpenSpeedDial = { navController.navigate(Routes.SPEED_DIAL) },
+                onOpenMergeDuplicates = { navController.navigate(Routes.MERGE_DUPLICATES) },
                 onReplayOnboarding = { navController.navigate(Routes.ONBOARDING) },
                 onOpenAbout = { navController.navigate(Routes.ABOUT) },
             )
@@ -387,6 +390,9 @@ fun FriendsNavHost(
         }
         composable(Routes.SPEED_DIAL) {
             SpeedDialScreen(onBack = { navController.popBackStack() })
+        }
+        composable(Routes.MERGE_DUPLICATES) {
+            MergeDuplicatesScreen(onBack = { navController.popBackStack() })
         }
         composable(Routes.BACKUP) {
             BackupScreen(onBack = { navController.popBackStack() })

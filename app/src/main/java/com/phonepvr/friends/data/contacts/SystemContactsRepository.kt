@@ -57,6 +57,12 @@ class SystemContactsRepository @Inject constructor(
     suspend fun contactIdsInGroup(title: String): Set<Long> =
         withContext(Dispatchers.IO) { reader.contactIdsInGroup(title) }
 
+    /** Clusters of likely-duplicate contacts (same normalised name). */
+    suspend fun findDuplicateClusters(): List<DuplicateFinder.Cluster> =
+        withContext(Dispatchers.IO) {
+            DuplicateFinder.find(reader.listContacts().map { it.contactId to it.displayName })
+        }
+
     /**
      * Convenience for the bonded surfaces, which keep the contact's
      * lookupKey (stable across aggregate-id changes) rather than the

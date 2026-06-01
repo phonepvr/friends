@@ -75,6 +75,7 @@ fun SettingsScreen(
     onOpenMyQuotes: () -> Unit,
     onOpenQuickReplies: () -> Unit,
     onOpenSpeedDial: () -> Unit,
+    onOpenMergeDuplicates: () -> Unit,
     onReplayOnboarding: () -> Unit,
     onOpenAbout: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
@@ -353,6 +354,13 @@ fun SettingsScreen(
                 modifier = Modifier.clickable {
                     activeDialog = SettingsDialog.IMPORT_BACKUP_WARN
                 },
+            )
+            ListItem(
+                headlineContent = { Text("Merge duplicate contacts") },
+                supportingContent = {
+                    Text("Find contacts saved more than once and link them into one.")
+                },
+                modifier = Modifier.clickable { onOpenMergeDuplicates() },
             )
 
             HorizontalDivider()

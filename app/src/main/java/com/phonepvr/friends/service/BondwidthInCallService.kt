@@ -6,6 +6,7 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.telecom.Call
 import android.telecom.CallAudioState
+import android.telecom.DisconnectCause
 import android.telecom.InCallService
 import com.phonepvr.friends.data.incall.CallDirection
 import com.phonepvr.friends.data.incall.CallSession
@@ -45,6 +46,7 @@ class BondwidthInCallService : InCallService() {
 
     @Inject lateinit var callSession: CallSession
     @Inject lateinit var callNotifier: CallNotifier
+    @Inject lateinit var missedCallNotifier: MissedCallNotifier
     @Inject lateinit var callerIdentityResolver: CallerIdentityResolver
     @Inject lateinit var ringer: Ringer
 
@@ -107,6 +109,7 @@ class BondwidthInCallService : InCallService() {
 
     override fun onCallRemoved(call: Call) {
         super.onCallRemoved(call)
+        maybeNotifyMissedCall(call)
         call.unregisterCallback(callCallback)
         callSession.detachCall(call)
         if (!callSession.hasActiveCall()) {
@@ -195,5 +198,29 @@ class BondwidthInCallService : InCallService() {
         val intent = Intent(this, InCallActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         runCatching { startActivity(intent) }
+    }
+
+    /**
+     * Posts a missed-call notification when an incoming call rang and was
+     * never answered. DisconnectCause.MISSED is only ever set for an
+     * unanswered incoming call — never for outgoing calls or ones the user
+     * rejected (those are REJECTED / LOCAL) — so it's a sufficient signal on
+     * its own, and it sidesteps Call.Details.getCallDirection() being API 29+.
+     * Read here in onCallRemoved while the Call's details are still valid.
+     */
+    private fun maybeNotifyMissedCall(call: Call) {
+        val details = call.details ?: return
+        if (details.disconnectCause?.code != DisconnectCause.MISSED) return
+        val number = details.handle
+            ?.takeIf { it.scheme == "tel" }
+            ?.schemeSpecificPart
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+        scope.launch {
+            val name = number?.let { runCatching { callerIdentityResolver.resolve(it) } }
+                ?.getOrNull()
+                ?.displayName
+            missedCallNotifier.notifyMissedCall(number, name)
+        }
     }
 }

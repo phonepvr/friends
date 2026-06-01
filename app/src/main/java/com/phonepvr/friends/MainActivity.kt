@@ -128,6 +128,9 @@ class MainActivity : FragmentActivity() {
         if (intent.getBooleanExtra(EXTRA_OPEN_BACKUP, false)) return Routes.BACKUP
         val personId = intent.getLongExtra(EXTRA_OPEN_PERSON_ID, -1L)
         if (personId > 0L) return Routes.personDetail(personId)
+        intent.getStringExtra(EXTRA_OPEN_CALL_HISTORY)?.takeIf { it.isNotBlank() }?.let {
+            return Routes.callHistory(it)
+        }
         // ACTION_DIAL / ACTION_VIEW + tel: lands on the full-screen
         // dialpad with the number pre-filled. We push the dialpad on
         // top of whatever's already on the stack so backing out
@@ -177,6 +180,9 @@ class MainActivity : FragmentActivity() {
 
         /** Person id (Long) carried by widget-row deep links. */
         const val EXTRA_OPEN_PERSON_ID = "com.phonepvr.friends.OPEN_PERSON_ID"
+
+        /** Phone number (String) carried by a missed-call notification tap. */
+        const val EXTRA_OPEN_CALL_HISTORY = "com.phonepvr.friends.OPEN_CALL_HISTORY"
 
         /** Mime types contacts apps stamp on vCard files. */
         private val VCARD_MIME_TYPES = listOf(

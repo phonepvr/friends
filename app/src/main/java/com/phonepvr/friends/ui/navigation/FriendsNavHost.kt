@@ -30,6 +30,7 @@ import com.phonepvr.friends.ui.onboarding.OnboardingScreen
 import com.phonepvr.friends.ui.people.AddEditPersonScreen
 import com.phonepvr.friends.ui.people.PeopleListScreen
 import com.phonepvr.friends.ui.person.PersonDetailScreen
+import com.phonepvr.friends.ui.quickreplies.QuickRepliesScreen
 import com.phonepvr.friends.ui.quotes.MyQuotesScreen
 import com.phonepvr.friends.ui.review.WidthDashboardScreen
 import com.phonepvr.friends.ui.settings.SettingsScreen
@@ -57,6 +58,7 @@ object Routes {
     const val SETTINGS = "settings"
     const val YEAR_IN_REVIEW = "year-in-review"
     const val MY_QUOTES = "quotes/my"
+    const val QUICK_REPLIES = "settings/quick-replies"
     const val ONBOARDING = "onboarding"
     const val ABOUT = "about"
     const val PERSON_ID_ARG = "personId"
@@ -372,9 +374,13 @@ fun FriendsNavHost(
                 onBack = { navController.popBackStack() },
                 onOpenBackup = { navController.navigate(Routes.BACKUP) },
                 onOpenMyQuotes = { navController.navigate(Routes.MY_QUOTES) },
+                onOpenQuickReplies = { navController.navigate(Routes.QUICK_REPLIES) },
                 onReplayOnboarding = { navController.navigate(Routes.ONBOARDING) },
                 onOpenAbout = { navController.navigate(Routes.ABOUT) },
             )
+        }
+        composable(Routes.QUICK_REPLIES) {
+            QuickRepliesScreen(onBack = { navController.popBackStack() })
         }
         composable(Routes.BACKUP) {
             BackupScreen(onBack = { navController.popBackStack() })

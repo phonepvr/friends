@@ -72,6 +72,7 @@ fun SettingsScreen(
     onBack: () -> Unit,
     onOpenBackup: () -> Unit,
     onOpenMyQuotes: () -> Unit,
+    onOpenQuickReplies: () -> Unit,
     onReplayOnboarding: () -> Unit,
     onOpenAbout: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
@@ -236,6 +237,13 @@ fun SettingsScreen(
                     Text("Manage the numbers that can't reach you. Opens the system blocked-numbers list.")
                 },
                 modifier = Modifier.clickable { openBlockedNumbers(context) },
+            )
+            ListItem(
+                headlineContent = { Text("Quick replies") },
+                supportingContent = {
+                    Text("Pre-written messages for declining a call when you can't talk.")
+                },
+                modifier = Modifier.clickable { onOpenQuickReplies() },
             )
 
             HorizontalDivider()

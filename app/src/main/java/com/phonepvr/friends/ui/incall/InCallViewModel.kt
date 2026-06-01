@@ -14,6 +14,8 @@ import com.phonepvr.friends.data.incall.CallSession
 import com.phonepvr.friends.data.incall.CallSimpleState
 import com.phonepvr.friends.data.incall.CallSnapshot
 import com.phonepvr.friends.data.incall.CallerIdentityResolver
+import com.phonepvr.friends.data.settings.DEFAULT_QUICK_REPLIES
+import com.phonepvr.friends.data.settings.SettingsRepository
 import com.phonepvr.friends.domain.cadence.CadenceCalculator
 import com.phonepvr.friends.domain.cadence.CadenceStatus
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -69,6 +71,8 @@ data class InCallUiState(
      * isn't withheld. False hides the action rather than letting it fail.
      */
     val canBlockCaller: Boolean = false,
+    /** User-editable replies offered on long-press of Reject. */
+    val quickReplyMessages: List<String> = DEFAULT_QUICK_REPLIES,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -80,6 +84,7 @@ class InCallViewModel @Inject constructor(
     private val timelineDao: TimelineDao,
     private val callerIdentityResolver: CallerIdentityResolver,
     private val blockedNumberManager: BlockedNumberManager,
+    private val settingsRepository: SettingsRepository,
     @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
 
@@ -135,20 +140,24 @@ class InCallViewModel @Inject constructor(
         }
     }
 
-    // Pre-merge bonded inputs so the main combine stays at ≤5 typed args.
-    private data class BondedRaw(
+    // Pre-merge bonded inputs + persisted UI prefs so the main combine
+    // stays at ≤5 typed args.
+    private data class Aux(
         val person: com.phonepvr.friends.data.db.entity.PersonEntity?,
         val lastContactMs: Long?,
+        val quickReplies: List<String>,
     )
 
-    private val bondedRaw: Flow<BondedRaw> = combine(matchedPerson, lastContactAtMs) { p, lc ->
-        BondedRaw(p, lc)
-    }
+    private val aux: Flow<Aux> = combine(
+        matchedPerson,
+        lastContactAtMs,
+        settingsRepository.settings.map { it.quickReplyMessages },
+    ) { p, lc, q -> Aux(p, lc, q) }
 
     val state: StateFlow<InCallUiState> = combine(
         callSession.snapshot,
         callSession.audio,
-        bondedRaw,
+        aux,
         callerIdentity,
         callSession.heldSnapshot,
     ) { snapshot, audio, bonded, identity, held ->
@@ -186,6 +195,7 @@ class InCallViewModel @Inject constructor(
             callEnded = snapshot == null ||
                 snapshot.state == CallSimpleState.DISCONNECTED,
             canBlockCaller = canBlockNumbers && snapshot?.number?.isNotBlank() == true,
+            quickReplyMessages = bonded.quickReplies,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -264,10 +274,3 @@ class InCallViewModel @Inject constructor(
         callSession.stopDtmf()
     }
 }
-
-/** Pre-set "can't talk" replies offered on a long-press of Reject. */
-val QUICK_DECLINE_MESSAGES: List<String> = listOf(
-    "Can't talk right now — call you back.",
-    "On my way.",
-    "Can't talk. What's up?",
-)

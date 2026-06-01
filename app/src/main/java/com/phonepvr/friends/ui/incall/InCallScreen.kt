@@ -129,6 +129,7 @@ fun InCallScreen(
                         onAccept = onAccept,
                         onReject = onReject,
                         onRejectWith = onRejectWith,
+                        quickReplies = state.quickReplyMessages,
                         canBlock = state.canBlockCaller,
                         onBlockReject = onBlockReject,
                     )
@@ -383,6 +384,7 @@ private fun IncomingControls(
     onAccept: () -> Unit,
     onReject: () -> Unit,
     onRejectWith: (String) -> Unit,
+    quickReplies: List<String>,
     canBlock: Boolean,
     onBlockReject: () -> Unit,
 ) {
@@ -390,6 +392,7 @@ private fun IncomingControls(
 
     if (showQuickReplies) {
         QuickReplySheet(
+            messages = quickReplies,
             onPick = { msg ->
                 showQuickReplies = false
                 onRejectWith(msg)
@@ -399,12 +402,18 @@ private fun IncomingControls(
     }
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            text = "Hold Reject to reply with a message",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(bottom = 16.dp),
-        )
+        // Hint only matters when there are messages to pick; if the user
+        // cleared the list we hide the line so it isn't misleading.
+        if (quickReplies.isNotEmpty()) {
+            Text(
+                text = "Hold Reject to reply with a message",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 16.dp),
+            )
+        } else {
+            Spacer(Modifier.height(16.dp))
+        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -418,7 +427,11 @@ private fun IncomingControls(
                 containerColor = MaterialTheme.colorScheme.error,
                 contentColor = MaterialTheme.colorScheme.onError,
                 onClick = onReject,
-                onLongClick = { showQuickReplies = true },
+                onLongClick = if (quickReplies.isNotEmpty()) {
+                    { showQuickReplies = true }
+                } else {
+                    null
+                },
                 haptic = ActionHaptic.Reject,
             )
             ActionButton(
@@ -451,6 +464,7 @@ private fun IncomingControls(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun QuickReplySheet(
+    messages: List<String>,
     onPick: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -461,7 +475,7 @@ private fun QuickReplySheet(
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
             )
-            QUICK_DECLINE_MESSAGES.forEach { msg ->
+            messages.forEach { msg ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()

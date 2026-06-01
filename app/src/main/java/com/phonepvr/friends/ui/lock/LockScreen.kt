@@ -101,7 +101,7 @@ private fun promptAppLock(activity: FragmentActivity, onUnlocked: () -> Unit) {
         },
     )
     val info = BiometricPrompt.PromptInfo.Builder()
-        .setTitle("Unlock Friends")
+        .setTitle("Unlock Bondwidth")
         .setSubtitle("Confirm it's you to open the app")
         .setAllowedAuthenticators(APP_LOCK_AUTHENTICATORS)
         .build()

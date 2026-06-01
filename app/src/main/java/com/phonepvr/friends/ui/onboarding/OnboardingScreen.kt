@@ -265,7 +265,7 @@ private fun PermissionsSlide(viewModel: OnboardingViewModel) {
         )
         Spacer(Modifier.height(12.dp))
         Text(
-            text = "Friends is your phone and contacts app, so granting these " +
+            text = "Bondwidth is your phone and contacts app, so granting these " +
                 "gives you the full, smooth experience — calls, contacts and " +
                 "automatic check-ins all working from the start. Here's what, " +
                 "and why. It all stays on this device.",
@@ -287,7 +287,7 @@ private fun PermissionsSlide(viewModel: OnboardingViewModel) {
         Spacer(Modifier.height(8.dp))
         if (isDefaultDialer) {
             Text(
-                text = "Friends is your default phone app.",
+                text = "Bondwidth is your default phone app.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.primary,
                 textAlign = TextAlign.Center,
@@ -315,7 +315,7 @@ private fun PermissionsSlide(viewModel: OnboardingViewModel) {
         if (requested && !allGranted) {
             Spacer(Modifier.height(8.dp))
             Text(
-                text = "Some permissions weren't granted. Friends still works — " +
+                text = "Some permissions weren't granted. Bondwidth still works — " +
                     "you can enable them anytime.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -361,7 +361,7 @@ private fun DefaultDialerHelp(
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                text = "Being the phone app lets Friends show its in-call screen, " +
+                text = "Being the phone app lets Bondwidth show its in-call screen, " +
                     "log who called you so check-ins work, and block numbers in a " +
                     "tap. Calls still place without it — only the in-call UI falls " +
                     "back to your old dialer.",
@@ -371,9 +371,9 @@ private fun DefaultDialerHelp(
             Spacer(Modifier.height(8.dp))
             Text(
                 text = "Android 13+ may show “App was denied access to be the " +
-                    "default Phone app” the first time you try, because Friends " +
+                    "default Phone app” the first time you try, because Bondwidth " +
                     "isn't from the Play Store. One-time fix: allow restricted " +
-                    "settings, then pick Friends under Default apps.",
+                    "settings, then pick Bondwidth under Default apps.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

@@ -43,7 +43,7 @@ val permissionInfos: List<PermissionInfo> = listOf(
     PermissionInfo(
         icon = Icons.Filled.Contacts,
         title = "Contacts",
-        description = "Read and update your contacts so Friends can show names and " +
+        description = "Read and update your contacts so Bondwidth can show names and " +
             "photos and keep your circle in sync.",
     ),
     PermissionInfo(
@@ -55,7 +55,7 @@ val permissionInfos: List<PermissionInfo> = listOf(
     PermissionInfo(
         icon = Icons.Filled.Phone,
         title = "Phone",
-        description = "Place and answer calls inside Friends and show you who's " +
+        description = "Place and answer calls inside Bondwidth and show you who's " +
             "calling.",
     ),
     PermissionInfo(

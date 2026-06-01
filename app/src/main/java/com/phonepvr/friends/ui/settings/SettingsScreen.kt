@@ -163,7 +163,7 @@ fun SettingsScreen(
                             if (settings.dynamicColorEnabled) {
                                 "Using Android's wallpaper-derived palette"
                             } else {
-                                "Using Friends' warm palette"
+                                "Using Bondwidth's warm palette"
                             },
                         )
                     },
@@ -424,7 +424,7 @@ fun SettingsScreen(
             title = { Text("Back up first?") },
             text = {
                 Text(
-                    "Friends keeps everything on this device — there's no cloud " +
+                    "Bondwidth keeps everything on this device — there's no cloud " +
                         "copy. Importing can change your data, so it's safest to " +
                         "export a backup before you do.",
                 )

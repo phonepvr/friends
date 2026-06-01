@@ -31,13 +31,17 @@ object DuplicateFinder {
             .filter { it.size >= 2 }
             .map { group ->
                 Cluster(
-                    // Prefer the longest *tidied* spelling as the label (usually
-                    // the most complete: "Jon" vs "Jon Smith"). Tidying first
-                    // avoids picking a messier "JOHN  smith " over "John Smith"
-                    // just because of stray whitespace.
+                    // Pick the nicest label deterministically: longest tidied
+                    // spelling (usually the most complete — "Jon" vs "Jon
+                    // Smith"), and on a length tie prefer proper case over
+                    // ALL CAPS by favouring more lowercase letters ("John
+                    // Smith" beats "JOHN SMITH"). Tidying first ignores stray
+                    // whitespace.
                     displayName = group
                         .map { it.second.trim().replace(Regex("\\s+"), " ") }
-                        .maxByOrNull { it.length }!!,
+                        .maxWith(
+                            compareBy({ it.length }, { s -> s.count(Char::isLowerCase) }),
+                        ),
                     contactIds = group.map { it.first },
                 )
             }

@@ -1,8 +1,12 @@
 package com.phonepvr.friends.ui.incall
 
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.os.Build
 import android.os.Bundle
+import android.view.KeyEvent
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -29,6 +33,18 @@ import kotlinx.coroutines.delay
 class InCallActivity : ComponentActivity() {
 
     private val viewModel: InCallViewModel by viewModels()
+
+    // The power button doesn't deliver a key event to a foreground activity —
+    // it turns the screen off. We listen for ACTION_SCREEN_OFF instead and
+    // treat it as "user wants the ringer to stop", matching how every
+    // stock dialer behaves.
+    private val screenOffReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == Intent.ACTION_SCREEN_OFF) {
+                viewModel.silenceRinger()
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -79,6 +95,37 @@ class InCallActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        // Receiver only lives while the activity is visible — the moment the
+        // user accepts/rejects and we finish, it goes away.
+        registerReceiver(screenOffReceiver, IntentFilter(Intent.ACTION_SCREEN_OFF))
+    }
+
+    override fun onStop() {
+        runCatching { unregisterReceiver(screenOffReceiver) }
+        super.onStop()
+    }
+
+    /**
+     * Volume up / down on a ringing call silences the ringtone (matching
+     * stock-dialer behaviour) instead of changing the music stream. Every
+     * other key event passes through, including volume during an active
+     * call so the user can still adjust earpiece / speaker level.
+     */
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_VOLUME_UP ||
+            keyCode == KeyEvent.KEYCODE_VOLUME_DOWN
+        ) {
+            val snap = viewModel.state.value.snapshot
+            if (snap?.state == com.phonepvr.friends.data.incall.CallSimpleState.RINGING) {
+                viewModel.silenceRinger()
+                return true
+            }
+        }
+        return super.onKeyDown(keyCode, event)
     }
 
     /**

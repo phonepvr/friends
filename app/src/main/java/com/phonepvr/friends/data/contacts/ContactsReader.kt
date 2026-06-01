@@ -44,6 +44,10 @@ data class ContactDetails(
     val emailEntries: List<ContactEmail> = emptyList(),
     val notes: String? = null,
     val organization: String? = null,
+    /** Free-text postal address (the contact's first, if any). */
+    val postalAddress: String? = null,
+    /** Website / homepage URL (the contact's first, if any). */
+    val website: String? = null,
     val birthday: ContactDate?,
     val anniversary: ContactDate?,
     /** System contact photo content:// URI, or null when the contact has none. */
@@ -289,6 +293,16 @@ class ContactsReader @Inject constructor(
             mimeType = ContactsContract.CommonDataKinds.Organization.CONTENT_ITEM_TYPE,
             column = ContactsContract.CommonDataKinds.Organization.COMPANY,
         )
+        val postalAddress = readSingleData(
+            contactId = contactId,
+            mimeType = ContactsContract.CommonDataKinds.StructuredPostal.CONTENT_ITEM_TYPE,
+            column = ContactsContract.CommonDataKinds.StructuredPostal.FORMATTED_ADDRESS,
+        )
+        val website = readSingleData(
+            contactId = contactId,
+            mimeType = ContactsContract.CommonDataKinds.Website.CONTENT_ITEM_TYPE,
+            column = ContactsContract.CommonDataKinds.Website.URL,
+        )
 
         return ContactDetails(
             lookupKey = lookupKey,
@@ -298,6 +312,8 @@ class ContactsReader @Inject constructor(
             emails = emails,
             emailEntries = emailEntries,
             notes = notes,
+            postalAddress = postalAddress,
+            website = website,
             organization = organization,
             birthday = birthday,
             anniversary = anniversary,

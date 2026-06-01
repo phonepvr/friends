@@ -28,6 +28,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.Business
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Cake
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Call
@@ -358,6 +360,12 @@ fun ContactDetailScreen(
                                     icon = Icons.Filled.Business,
                                     text = company,
                                 )
+                            }
+                            d.postalAddress?.let { address ->
+                                IconTextRow(icon = Icons.Filled.Place, text = address)
+                            }
+                            d.website?.let { site ->
+                                IconTextRow(icon = Icons.Filled.Language, text = site)
                             }
                             d.birthday?.let {
                                 DateRow(

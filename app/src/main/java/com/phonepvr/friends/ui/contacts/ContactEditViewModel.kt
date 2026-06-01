@@ -213,6 +213,12 @@ class ContactEditViewModel @Inject constructor(
     fun onOrganizationChange(value: String) =
         _state.update { it.copy(form = it.form.copy(organization = value)) }
 
+    fun onAddressChange(value: String) =
+        _state.update { it.copy(form = it.form.copy(postalAddress = value)) }
+
+    fun onWebsiteChange(value: String) =
+        _state.update { it.copy(form = it.form.copy(website = value)) }
+
     fun save() {
         if (_state.value.saving) return
         val form = _state.value.form
@@ -278,4 +284,6 @@ private fun ContactDetails.toForm(): ContactForm = ContactForm(
         .map { EmailEntry(address = it.address, type = it.type, customLabel = it.customLabel) },
     notes = notes.orEmpty(),
     organization = organization.orEmpty(),
+    postalAddress = postalAddress.orEmpty(),
+    website = website.orEmpty(),
 )

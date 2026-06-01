@@ -23,6 +23,10 @@ data class ContactForm(
     val emails: List<EmailEntry> = emptyList(),
     val notes: String = "",
     val organization: String = "",
+    /** Free-text postal address (single). Blank means "don't write one". */
+    val postalAddress: String = "",
+    /** Website / homepage URL (single). Blank means "don't write one". */
+    val website: String = "",
     /** Birthday to write on create; ignored on update so existing dates survive. */
     val birthday: ContactDate? = null,
     /** What to do with the contact's photo on save. Defaults to "leave it". */
@@ -340,6 +344,39 @@ class ContactWriter @Inject constructor(
                     .build(),
             )
         }
+        form.postalAddress.trim().takeIf { it.isNotBlank() }?.let { address ->
+            ops.add(
+                attach(ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI))
+                    .withValue(
+                        ContactsContract.Data.MIMETYPE,
+                        ContactsContract.CommonDataKinds.StructuredPostal.CONTENT_ITEM_TYPE,
+                    )
+                    .withValue(
+                        ContactsContract.CommonDataKinds.StructuredPostal.FORMATTED_ADDRESS,
+                        address,
+                    )
+                    .withValue(
+                        ContactsContract.CommonDataKinds.StructuredPostal.TYPE,
+                        ContactsContract.CommonDataKinds.StructuredPostal.TYPE_HOME,
+                    )
+                    .build(),
+            )
+        }
+        form.website.trim().takeIf { it.isNotBlank() }?.let { url ->
+            ops.add(
+                attach(ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI))
+                    .withValue(
+                        ContactsContract.Data.MIMETYPE,
+                        ContactsContract.CommonDataKinds.Website.CONTENT_ITEM_TYPE,
+                    )
+                    .withValue(ContactsContract.CommonDataKinds.Website.URL, url)
+                    .withValue(
+                        ContactsContract.CommonDataKinds.Website.TYPE,
+                        ContactsContract.CommonDataKinds.Website.TYPE_HOMEPAGE,
+                    )
+                    .build(),
+            )
+        }
         form.birthday?.let { bday ->
             // ContactsContract stores birthdays as Event rows with
             // TYPE_BIRTHDAY. START_DATE accepts "yyyy-MM-dd" or "--MM-dd"
@@ -401,6 +438,8 @@ class ContactWriter @Inject constructor(
             ContactsContract.CommonDataKinds.Email.CONTENT_ITEM_TYPE,
             ContactsContract.CommonDataKinds.Note.CONTENT_ITEM_TYPE,
             ContactsContract.CommonDataKinds.Organization.CONTENT_ITEM_TYPE,
+            ContactsContract.CommonDataKinds.StructuredPostal.CONTENT_ITEM_TYPE,
+            ContactsContract.CommonDataKinds.Website.CONTENT_ITEM_TYPE,
         )
     }
 }

@@ -169,6 +169,8 @@ fun ContactEditScreen(
                     onRemoveEmail = viewModel::onRemoveEmail,
                     onNotesChange = viewModel::onNotesChange,
                     onOrganizationChange = viewModel::onOrganizationChange,
+                    onAddressChange = viewModel::onAddressChange,
+                    onWebsiteChange = viewModel::onWebsiteChange,
                     onPickPhoto = viewModel::onPhotoPicked,
                     onRemovePhoto = viewModel::onRemovePhoto,
                 )
@@ -193,6 +195,8 @@ private fun EditForm(
     onRemoveEmail: (Int) -> Unit,
     onNotesChange: (String) -> Unit,
     onOrganizationChange: (String) -> Unit,
+    onAddressChange: (String) -> Unit,
+    onWebsiteChange: (String) -> Unit,
     onPickPhoto: (android.net.Uri) -> Unit,
     onRemovePhoto: () -> Unit,
 ) {
@@ -237,6 +241,21 @@ private fun EditForm(
             onValueChange = onOrganizationChange,
             label = { Text("Organization") },
             singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        OutlinedTextField(
+            value = state.form.postalAddress,
+            onValueChange = onAddressChange,
+            label = { Text("Address") },
+            minLines = 2,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        OutlinedTextField(
+            value = state.form.website,
+            onValueChange = onWebsiteChange,
+            label = { Text("Website") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
             modifier = Modifier.fillMaxWidth(),
         )
         OutlinedTextField(

@@ -69,6 +69,14 @@ class SettingsViewModel @Inject constructor(
     fun makeAcquireDialerRoleIntent(): Intent? =
         dialerRoleManager.makeAcquireRoleIntent()
 
+    /** Direct link to system Settings → Apps → Default apps. */
+    fun makeDefaultAppsSettingsIntent(): Intent =
+        dialerRoleManager.makeDefaultAppsSettingsIntent()
+
+    /** Link to this app's "App info" page for the restricted-settings toggle. */
+    fun makeAppInfoIntent(): Intent =
+        dialerRoleManager.makeAppInfoIntent()
+
     fun setThemeMode(mode: ThemeMode) = runUpdate {
         settingsRepository.setThemeMode(mode)
     }

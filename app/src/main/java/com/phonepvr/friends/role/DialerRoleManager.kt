@@ -4,6 +4,7 @@ import android.app.role.RoleManager
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.provider.Settings
 import android.telecom.TelecomManager
 import androidx.core.content.getSystemService
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -50,4 +51,26 @@ class DialerRoleManager @Inject constructor(
                 context.packageName,
             )
     }
+
+    /**
+     * Direct link to the system "Default apps" Settings page (Settings →
+     * Apps → Default apps), where the user can pick Bondwidth under "Phone
+     * app". Useful as a fallback when [makeAcquireRoleIntent]'s picker
+     * dialog fails — most commonly on Android 13+ for sideloaded apps,
+     * where Android blocks the role assignment until restricted settings
+     * are explicitly allowed.
+     */
+    fun makeDefaultAppsSettingsIntent(): Intent =
+        Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+    /**
+     * Link to this app's "App info" page in system Settings. The "Allow
+     * restricted settings" toggle lives behind the overflow menu on that
+     * screen — Android exposes no deeper deep-link.
+     */
+    fun makeAppInfoIntent(): Intent =
+        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+            .setData(android.net.Uri.fromParts("package", context.packageName, null))
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 }

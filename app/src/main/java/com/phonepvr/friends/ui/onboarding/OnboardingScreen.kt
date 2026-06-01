@@ -41,6 +41,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.phonepvr.friends.domain.quotes.Quote
 import com.phonepvr.friends.ui.permissions.PermissionInfoList
+import com.phonepvr.friends.ui.permissions.RestrictedDialerSettingsDialog
 import com.phonepvr.friends.ui.permissions.onboardingRuntimePermissions
 import kotlinx.coroutines.launch
 
@@ -238,6 +239,7 @@ private fun PermissionsSlide(viewModel: OnboardingViewModel) {
 
     var requested by rememberSaveable { mutableStateOf(false) }
     var allGranted by rememberSaveable { mutableStateOf(false) }
+    var showRestrictedDialog by rememberSaveable { mutableStateOf(false) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
@@ -297,6 +299,18 @@ private fun PermissionsSlide(viewModel: OnboardingViewModel) {
             ) {
                 Text("Set as default phone app")
             }
+            // Up-front explainer: the picker above can fail on Android 13+
+            // for sideloaded installs because of "restricted settings". We
+            // surface what's coming so the user isn't stuck on the toast.
+            Spacer(Modifier.height(12.dp))
+            DefaultDialerHelp(
+                onOpenDefaultApps = {
+                    runCatching {
+                        context.startActivity(viewModel.makeDefaultAppsSettingsIntent())
+                    }
+                },
+                onLearnHow = { showRestrictedDialog = true },
+            )
         }
         if (requested && !allGranted) {
             Spacer(Modifier.height(8.dp))
@@ -307,18 +321,74 @@ private fun PermissionsSlide(viewModel: OnboardingViewModel) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
             )
-            TextButton(onClick = { openAppInfo(context) }) {
+            TextButton(onClick = { context.startActivity(viewModel.makeAppInfoIntent()) }) {
                 Text("Open app settings")
             }
         }
     }
+
+    if (showRestrictedDialog) {
+        RestrictedDialerSettingsDialog(
+            onDismiss = { showRestrictedDialog = false },
+            onOpenAppInfo = {
+                runCatching { context.startActivity(viewModel.makeAppInfoIntent()) }
+            },
+            onOpenDefaultApps = {
+                runCatching {
+                    context.startActivity(viewModel.makeDefaultAppsSettingsIntent())
+                }
+            },
+        )
+    }
 }
 
-private fun openAppInfo(context: android.content.Context) {
-    val intent = android.content.Intent(
-        android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-    )
-        .setData(android.net.Uri.fromParts("package", context.packageName, null))
-        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-    runCatching { context.startActivity(intent) }
+/**
+ * Up-front explainer card shown beneath "Set as default phone app" during
+ * onboarding. Tells the user WHY we want the role and HOW to recover if
+ * Android blocks it — the question the user usually only asks after hitting
+ * the "App was denied access" toast.
+ */
+@Composable
+private fun DefaultDialerHelp(
+    onOpenDefaultApps: () -> Unit,
+    onLearnHow: () -> Unit,
+) {
+    androidx.compose.material3.ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Text(
+                text = "Why and how",
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = "Being the phone app lets Friends show its in-call screen, " +
+                    "log who called you so check-ins work, and block numbers in a " +
+                    "tap. Calls still place without it — only the in-call UI falls " +
+                    "back to your old dialer.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "Android 13+ may show “App was denied access to be the " +
+                    "default Phone app” the first time you try, because Friends " +
+                    "isn't from the Play Store. One-time fix: allow restricted " +
+                    "settings, then pick Friends under Default apps.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                TextButton(onClick = onLearnHow) {
+                    Text("How to allow it")
+                }
+                TextButton(onClick = onOpenDefaultApps) {
+                    Text("Open default apps")
+                }
+            }
+        }
+    }
 }

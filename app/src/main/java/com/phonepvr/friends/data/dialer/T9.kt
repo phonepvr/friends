@@ -35,4 +35,64 @@ object T9 {
 
     /** Pulls just the digits out of a phone number string. */
     fun digitsOnly(text: String): String = text.filter { it.isDigit() }
+
+    /**
+     * A contact name pre-encoded for fast repeated T9 matching. Built once per
+     * contact (not per keystroke) so [rank] is a handful of String ops.
+     *
+     * For "John Smith": nameDigits = "564676484", wordStarts = [0, 4]
+     * (digit-index where each word begins), initials = "57".
+     */
+    class NameKey(
+        val nameDigits: String,
+        val wordStarts: List<Int>,
+        val initials: String,
+    )
+
+    /** Splits on any run of non-letter/non-digit so "Mary-Jane O'Neil" → words. */
+    private val wordSeparator = Regex("[^\\p{L}\\p{Nd}]+")
+
+    /** Pre-encodes [name] into a [NameKey] for [rank]. */
+    fun nameKey(name: String): NameKey {
+        val digits = StringBuilder()
+        val starts = ArrayList<Int>()
+        val initials = StringBuilder()
+        for (word in name.split(wordSeparator)) {
+            val wordDigits = toDigits(word)
+            if (wordDigits.isEmpty()) continue
+            starts.add(digits.length)
+            digits.append(wordDigits)
+            initials.append(wordDigits.first())
+        }
+        return NameKey(digits.toString(), starts, initials.toString())
+    }
+
+    /** Match-quality buckets for [rank]; lower is a stronger match. */
+    const val RANK_NAME_PREFIX = 0
+    const val RANK_WORD_PREFIX = 1
+    const val RANK_INITIALS = 2
+    const val RANK_SUBSTRING = 3
+
+    /**
+     * How well [query] (T9 digits) matches the name behind [key], or null for
+     * no match. Mirrors how "smart dial" feels:
+     *   0 the whole name starts with the query ("5646" → "John …")
+     *   1 a later word starts with it ("76484" → "… Smith")
+     *   2 the word initials contain it ("57" → "John Smith")
+     *   3 the query appears somewhere in the encoded name (loose fallback)
+     */
+    fun rank(key: NameKey, query: String): Int? {
+        if (query.isEmpty()) return null
+        var wordPrefix = false
+        for (start in key.wordStarts) {
+            if (key.nameDigits.startsWith(query, start)) {
+                if (start == 0) return RANK_NAME_PREFIX
+                wordPrefix = true
+            }
+        }
+        if (wordPrefix) return RANK_WORD_PREFIX
+        if (key.initials.contains(query)) return RANK_INITIALS
+        if (key.nameDigits.contains(query)) return RANK_SUBSTRING
+        return null
+    }
 }

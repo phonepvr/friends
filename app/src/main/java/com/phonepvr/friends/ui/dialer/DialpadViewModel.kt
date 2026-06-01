@@ -43,7 +43,7 @@ data class DialpadUiState(
 
 private data class IndexedContact(
     val contact: DeviceContact,
-    val nameDigits: String,
+    val nameKey: T9.NameKey,
     val phoneDigits: List<String>,
 )
 
@@ -73,7 +73,7 @@ class DialpadViewModel @Inject constructor(
         contacts.map { c ->
             IndexedContact(
                 contact = c,
-                nameDigits = T9.toDigits(c.displayName),
+                nameKey = T9.nameKey(c.displayName),
                 phoneDigits = c.phoneNumbers.map { T9.digitsOnly(it) },
             )
         }
@@ -153,33 +153,53 @@ class DialpadViewModel @Inject constructor(
         if (input.length < 2) return emptyList()
         val q = T9.digitsOnly(input)
         if (q.length < 2) return emptyList()
-        val results = ArrayList<DialpadMatch>()
+        val scored = ArrayList<ScoredMatch>()
         for (e in entries) {
-            val nameHit = e.nameDigits.contains(q)
+            val nameRank = T9.rank(e.nameKey, q)
             val phoneIndex = e.phoneDigits.indexOfFirst { it.contains(q) }
-            if (!nameHit && phoneIndex < 0) continue
+            // Best (lowest) rank across name and phone; a phone-only hit sits
+            // below every name match so "call by name" stays on top.
+            val rank = when {
+                nameRank != null -> nameRank
+                phoneIndex >= 0 -> RANK_PHONE
+                else -> continue
+            }
             val person = trackedByKey[e.contact.lookupKey]
-            results.add(
-                DialpadMatch(
-                    contactId = e.contact.contactId,
-                    lookupKey = e.contact.lookupKey,
-                    displayName = e.contact.displayName,
-                    matchedNumber = if (phoneIndex >= 0) {
-                        e.contact.phoneNumbers[phoneIndex]
-                    } else {
-                        e.contact.phoneNumbers.firstOrNull().orEmpty()
-                    },
-                    isTracked = person != null,
-                    photoRelativePath = person?.photoRelativePath,
-                    photoUri = e.contact.photoUri,
+            scored.add(
+                ScoredMatch(
+                    rank = rank,
+                    match = DialpadMatch(
+                        contactId = e.contact.contactId,
+                        lookupKey = e.contact.lookupKey,
+                        displayName = e.contact.displayName,
+                        matchedNumber = if (phoneIndex >= 0) {
+                            e.contact.phoneNumbers[phoneIndex]
+                        } else {
+                            e.contact.phoneNumbers.firstOrNull().orEmpty()
+                        },
+                        isTracked = person != null,
+                        photoRelativePath = person?.photoRelativePath,
+                        photoUri = e.contact.photoUri,
+                    ),
                 ),
             )
-            if (results.size >= MAX_MATCHES) break
         }
-        return results
+        // Strongest matches first, then alphabetical so ties are stable.
+        return scored
+            .sortedWith(
+                compareBy({ it.rank }, { it.match.displayName.lowercase() }),
+            )
+            .take(MAX_MATCHES)
+            .map { it.match }
     }
+
+    private data class ScoredMatch(val rank: Int, val match: DialpadMatch)
 
     companion object {
         private const val MAX_MATCHES = 30
+
+        // One step below T9's name buckets (0–3): a number-only hit ranks
+        // beneath every name match.
+        private const val RANK_PHONE = 4
     }
 }

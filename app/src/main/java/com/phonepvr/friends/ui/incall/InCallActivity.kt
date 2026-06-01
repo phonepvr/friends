@@ -66,6 +66,7 @@ class InCallActivity : ComponentActivity() {
                         onAccept = viewModel::accept,
                         onReject = viewModel::reject,
                         onRejectWith = viewModel::rejectWith,
+                        onBlockReject = viewModel::blockAndReject,
                         onEnd = viewModel::end,
                         onToggleMute = viewModel::toggleMute,
                         onSetAudioRoute = viewModel::setAudioRoute,

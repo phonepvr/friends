@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Message
 import androidx.compose.material.icons.filled.AddIcCall
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CallEnd
@@ -85,6 +86,7 @@ fun InCallScreen(
     onAccept: () -> Unit,
     onReject: () -> Unit,
     onRejectWith: (String) -> Unit,
+    onBlockReject: () -> Unit,
     onEnd: () -> Unit,
     onToggleMute: () -> Unit,
     onSetAudioRoute: (CallAudioRoute) -> Unit,
@@ -123,7 +125,13 @@ fun InCallScreen(
                 snapshot == null -> { /* waiting for first snapshot */ }
                 snapshot.state == CallSimpleState.RINGING &&
                     snapshot.direction == CallDirection.INCOMING ->
-                    IncomingControls(onAccept = onAccept, onReject = onReject, onRejectWith = onRejectWith)
+                    IncomingControls(
+                        onAccept = onAccept,
+                        onReject = onReject,
+                        onRejectWith = onRejectWith,
+                        canBlock = state.canBlockCaller,
+                        onBlockReject = onBlockReject,
+                    )
                 showKeypad -> InCallDialpad(
                     onDigit = { c ->
                         dtmfDigits += c
@@ -375,6 +383,8 @@ private fun IncomingControls(
     onAccept: () -> Unit,
     onReject: () -> Unit,
     onRejectWith: (String) -> Unit,
+    canBlock: Boolean,
+    onBlockReject: () -> Unit,
 ) {
     var showQuickReplies by remember { mutableStateOf(false) }
 
@@ -419,6 +429,21 @@ private fun IncomingControls(
                 onClick = onAccept,
                 haptic = ActionHaptic.Confirm,
             )
+        }
+        // Tertiary action for nuisance callers: block the number and decline
+        // in one tap. Hidden when we can't block (not default dialer, tablet,
+        // or withheld number) so it never dead-ends.
+        if (canBlock) {
+            Spacer(Modifier.height(16.dp))
+            TextButton(onClick = onBlockReject) {
+                Icon(
+                    imageVector = Icons.Filled.Block,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text("Block & reject")
+            }
         }
     }
 }

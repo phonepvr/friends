@@ -2,6 +2,7 @@ package com.phonepvr.friends.ui.incall
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.phonepvr.friends.data.blocking.BlockedNumberManager
 import com.phonepvr.friends.data.db.dao.PersonDao
 import com.phonepvr.friends.data.db.dao.PhoneNumberDao
 import com.phonepvr.friends.data.db.dao.TimelineDao
@@ -28,6 +29,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
@@ -58,6 +60,12 @@ data class InCallUiState(
     /** Best-effort display name for the held call. */
     val heldName: String? = null,
     val callEnded: Boolean = false,
+    /**
+     * Whether to offer "Block & reject" on the incoming screen: we can block
+     * numbers (default dialer, phone form factor) AND the caller's number
+     * isn't withheld. False hides the action rather than letting it fail.
+     */
+    val canBlockCaller: Boolean = false,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -68,7 +76,15 @@ class InCallViewModel @Inject constructor(
     private val personDao: PersonDao,
     private val timelineDao: TimelineDao,
     private val callerIdentityResolver: CallerIdentityResolver,
+    private val blockedNumberManager: BlockedNumberManager,
 ) : ViewModel() {
+
+    // Default-dialer role + device capability can't change mid-call, so
+    // resolve the "can we block at all?" question once instead of on every
+    // snapshot/audio emission through the combine below.
+    private val canBlockNumbers: Boolean by lazy(LazyThreadSafetyMode.NONE) {
+        blockedNumberManager.canBlock()
+    }
 
     // Address-book identity (name + photo) for the caller, resolved off the
     // main thread whenever the number changes. Covers any saved contact, so
@@ -165,6 +181,7 @@ class InCallViewModel @Inject constructor(
             heldName = held?.callerDisplayName ?: held?.number?.takeIf { it.isNotBlank() },
             callEnded = snapshot == null ||
                 snapshot.state == CallSimpleState.DISCONNECTED,
+            canBlockCaller = canBlockNumbers && snapshot?.number?.isNotBlank() == true,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -176,6 +193,24 @@ class InCallViewModel @Inject constructor(
     fun reject() = callSession.reject()
     fun rejectWith(message: String) = callSession.rejectWithMessage(message)
     fun end() = callSession.end()
+
+    /**
+     * Block the caller's number, then reject the call. Block first so the
+     * insert is guaranteed to land before the call disconnects and tears the
+     * activity (and this scope) down; the extra few ms of ringing is
+     * imperceptible. Falls back to a plain reject when the number is withheld.
+     */
+    fun blockAndReject() {
+        val number = state.value.snapshot?.number?.takeIf { it.isNotBlank() }
+        if (number == null) {
+            callSession.reject()
+            return
+        }
+        viewModelScope.launch {
+            blockedNumberManager.block(number)
+            callSession.reject()
+        }
+    }
 
     fun toggleMute() {
         callSession.setMuted(!state.value.audio.isMuted)

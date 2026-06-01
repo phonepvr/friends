@@ -12,7 +12,9 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -39,6 +41,17 @@ data class ContactsBrowserUiState(
     val bondedCount: Int = 0,
     val query: String = "",
     val filterMode: ContactsFilterMode = ContactsFilterMode.ALL,
+    /** Group titles available to filter by; empty hides the group selector. */
+    val availableGroups: List<String> = emptyList(),
+    /** Selected group title, or null for "all groups". */
+    val selectedGroup: String? = null,
+)
+
+/** The non-contact filter inputs, pre-merged to keep the main combine ≤5 args. */
+private data class BrowseControls(
+    val query: String,
+    val mode: ContactsFilterMode,
+    val selectedGroup: String?,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -51,16 +64,34 @@ class ContactsBrowserViewModel @Inject constructor(
 
     private val query = MutableStateFlow("")
     private val filterMode = MutableStateFlow(ContactsFilterMode.ALL)
+    private val selectedGroup = MutableStateFlow<String?>(null)
     private val permissionGranted = MutableStateFlow(false)
+
+    /** Group titles to offer; loaded once per permission grant. */
+    private val availableGroups: kotlinx.coroutines.flow.Flow<List<String>> =
+        permissionGranted.flatMapLatest { granted ->
+            if (granted) flow { emit(systemContactsRepository.listGroupTitles()) } else flowOf(emptyList())
+        }
+
+    /** Contact ids in the selected group, or null when no group is selected. */
+    private val groupMemberIds: kotlinx.coroutines.flow.Flow<Set<Long>?> =
+        selectedGroup.flatMapLatest { title ->
+            if (title == null) flowOf(null) else flow { emit(systemContactsRepository.contactIdsInGroup(title)) }
+        }
+
+    private val controls = combine(query, filterMode, selectedGroup) { q, mode, group ->
+        BrowseControls(q, mode, group)
+    }
 
     val state: StateFlow<ContactsBrowserUiState> = combine(
         permissionGranted.flatMapLatest { granted ->
             if (granted) systemContactsRepository.observeAll() else flowOf(emptyList())
         },
         personDao.observeActive(),
-        query,
-        filterMode,
-    ) { contacts, tracked, q, mode ->
+        controls,
+        groupMemberIds,
+        availableGroups,
+    ) { contacts, tracked, ctrl, memberIds, groups ->
         val trackedByKey = tracked
             .mapNotNull { p -> p.contactLookupKey?.takeIf { it.isNotBlank() }?.let { it to p } }
             .toMap()
@@ -77,14 +108,18 @@ class ContactsBrowserViewModel @Inject constructor(
                 photoUri = dc.photoUri,
             )
         }
+        // A stale group selection (group deleted, or its membership empty) just
+        // shows nothing for that filter rather than erroring.
         ContactsBrowserUiState(
             loading = false,
             contacts = annotated,
-            filtered = filter(annotated, q, mode),
+            filtered = filter(annotated, ctrl, memberIds),
             totalCount = annotated.size,
             bondedCount = annotated.count { it.isTracked },
-            query = q,
-            filterMode = mode,
+            query = ctrl.query,
+            filterMode = ctrl.mode,
+            availableGroups = groups,
+            selectedGroup = ctrl.selectedGroup,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -104,6 +139,10 @@ class ContactsBrowserViewModel @Inject constructor(
         filterMode.value = mode
     }
 
+    fun onGroupSelected(title: String?) {
+        selectedGroup.value = title
+    }
+
     fun toggleTracked(contact: BrowseContact) {
         viewModelScope.launch {
             if (contact.isTracked) {
@@ -116,14 +155,18 @@ class ContactsBrowserViewModel @Inject constructor(
 
     private fun filter(
         contacts: List<BrowseContact>,
-        query: String,
-        mode: ContactsFilterMode,
+        controls: BrowseControls,
+        groupMemberIds: Set<Long>?,
     ): List<BrowseContact> {
-        val scoped = when (mode) {
+        var scoped = when (controls.mode) {
             ContactsFilterMode.ALL -> contacts
             ContactsFilterMode.TRACKED -> contacts.filter { it.isTracked }
         }
-        val trimmed = query.trim()
+        // Group filter intersects by contact id when a group is selected.
+        if (groupMemberIds != null) {
+            scoped = scoped.filter { it.contactId in groupMemberIds }
+        }
+        val trimmed = controls.query.trim()
         if (trimmed.isEmpty()) return scoped
         val lowerName = trimmed.lowercase()
         val digits = trimmed.filter { it.isDigit() }

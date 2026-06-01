@@ -82,6 +82,77 @@ class ContactsReader @Inject constructor(
 ) {
     private val resolver: ContentResolver get() = context.contentResolver
 
+    /**
+     * Distinct, user-visible contact-group titles (Family, Work, …). We
+     * deliberately exclude the system/auto groups that would otherwise clutter
+     * a group filter: hidden groups (GROUP_VISIBLE=0), deleted ones, the
+     * auto-add "My Contacts" group, and the favourites/"Starred" group. The
+     * exact set of groups varies by account and OEM, so this stays
+     * conservative — only clearly user-facing, titled groups.
+     */
+    fun listGroupTitles(): List<String> {
+        val titles = sortedSetOf<String>(String.CASE_INSENSITIVE_ORDER)
+        runCatching {
+            resolver.query(
+                ContactsContract.Groups.CONTENT_URI,
+                arrayOf(ContactsContract.Groups.TITLE),
+                "${ContactsContract.Groups.DELETED} = 0 AND " +
+                    "${ContactsContract.Groups.GROUP_VISIBLE} = 1 AND " +
+                    "${ContactsContract.Groups.AUTO_ADD} = 0 AND " +
+                    "${ContactsContract.Groups.FAVORITES} = 0",
+                null,
+                null,
+            )?.use { cursor ->
+                val titleCol = cursor.getColumnIndexOrThrow(ContactsContract.Groups.TITLE)
+                while (cursor.moveToNext()) {
+                    cursor.getString(titleCol)?.trim()?.takeIf { it.isNotBlank() }?.let(titles::add)
+                }
+            }
+        }
+        return titles.toList()
+    }
+
+    /**
+     * Contact ids belonging to any group titled [title]. Unions across
+     * accounts, since the same group name can exist once per account.
+     */
+    fun contactIdsInGroup(title: String): Set<Long> {
+        val groupIds = mutableListOf<Long>()
+        runCatching {
+            resolver.query(
+                ContactsContract.Groups.CONTENT_URI,
+                arrayOf(ContactsContract.Groups._ID),
+                "${ContactsContract.Groups.TITLE} = ? AND " +
+                    "${ContactsContract.Groups.DELETED} = 0",
+                arrayOf(title),
+                null,
+            )?.use { cursor ->
+                while (cursor.moveToNext()) groupIds.add(cursor.getLong(0))
+            }
+        }
+        if (groupIds.isEmpty()) return emptySet()
+
+        val contactIds = mutableSetOf<Long>()
+        val placeholders = groupIds.joinToString(",") { "?" }
+        runCatching {
+            resolver.query(
+                ContactsContract.Data.CONTENT_URI,
+                arrayOf(ContactsContract.Data.CONTACT_ID),
+                "${ContactsContract.Data.MIMETYPE} = ? AND " +
+                    "${ContactsContract.CommonDataKinds.GroupMembership.GROUP_ROW_ID} " +
+                    "IN ($placeholders)",
+                arrayOf(
+                    ContactsContract.CommonDataKinds.GroupMembership.CONTENT_ITEM_TYPE,
+                    *groupIds.map { it.toString() }.toTypedArray(),
+                ),
+                null,
+            )?.use { cursor ->
+                while (cursor.moveToNext()) contactIds.add(cursor.getLong(0))
+            }
+        }
+        return contactIds
+    }
+
     fun listContacts(): List<DeviceContact> {
         // One sweep over Phone.CONTENT_URI is cheaper than N+1 per-contact
         // queries when the import screen first loads. We then merge by id.

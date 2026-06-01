@@ -49,6 +49,14 @@ class SystemContactsRepository @Inject constructor(
     suspend fun details(contactId: Long): ContactDetails? =
         withContext(Dispatchers.IO) { reader.readDetails(contactId) }
 
+    /** User-visible contact-group titles for the browser's group filter. */
+    suspend fun listGroupTitles(): List<String> =
+        withContext(Dispatchers.IO) { reader.listGroupTitles() }
+
+    /** Contact ids that belong to the group titled [title]. */
+    suspend fun contactIdsInGroup(title: String): Set<Long> =
+        withContext(Dispatchers.IO) { reader.contactIdsInGroup(title) }
+
     /**
      * Convenience for the bonded surfaces, which keep the contact's
      * lookupKey (stable across aggregate-id changes) rather than the

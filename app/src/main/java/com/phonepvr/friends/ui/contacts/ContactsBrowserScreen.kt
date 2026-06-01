@@ -22,9 +22,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
@@ -134,6 +138,7 @@ fun ContactsBrowserScreen(
                     state = state,
                     onQueryChange = viewModel::onQueryChange,
                     onFilterChange = viewModel::onFilterChange,
+                    onGroupSelected = viewModel::onGroupSelected,
                     onOpenContact = onOpenContact,
                 )
             }
@@ -147,6 +152,7 @@ private fun ContactList(
     state: ContactsBrowserUiState,
     onQueryChange: (String) -> Unit,
     onFilterChange: (ContactsFilterMode) -> Unit,
+    onGroupSelected: (String?) -> Unit,
     onOpenContact: (Long, String) -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
@@ -184,6 +190,15 @@ private fun ContactList(
                 selected = state.filterMode == ContactsFilterMode.TRACKED,
                 onClick = { onFilterChange(ContactsFilterMode.TRACKED) },
                 label = { Text("Bonded (${state.bondedCount})") },
+            )
+        }
+        if (state.availableGroups.isNotEmpty()) {
+            Spacer(Modifier.height(8.dp))
+            GroupFilterChip(
+                groups = state.availableGroups,
+                selected = state.selectedGroup,
+                onSelect = onGroupSelected,
+                modifier = Modifier.padding(horizontal = 16.dp),
             )
         }
         Spacer(Modifier.height(8.dp))
@@ -280,6 +295,43 @@ private fun ContactRow(contact: BrowseContact, onClick: () -> Unit) {
             }
         }
         if (contact.isTracked) BondedChip()
+    }
+}
+
+@Composable
+private fun GroupFilterChip(
+    groups: List<String>,
+    selected: String?,
+    onSelect: (String?) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var open by remember { mutableStateOf(false) }
+    Box(modifier = modifier) {
+        AssistChip(
+            onClick = { open = true },
+            label = { Text(selected ?: "All groups") },
+            leadingIcon = {
+                Icon(Icons.Filled.Group, contentDescription = null)
+            },
+        )
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(
+                text = { Text("All groups") },
+                onClick = {
+                    open = false
+                    onSelect(null)
+                },
+            )
+            groups.forEach { title ->
+                DropdownMenuItem(
+                    text = { Text(title) },
+                    onClick = {
+                        open = false
+                        onSelect(title)
+                    },
+                )
+            }
+        }
     }
 }
 

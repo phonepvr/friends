@@ -12,20 +12,29 @@ package com.phonepvr.friends.data.contacts
  */
 object DuplicateFinder {
 
+    /** One contact in a duplicate cluster, with the detail the user needs to
+     *  decide whether to merge: its stored name and its phone numbers. */
+    data class Member(
+        val contactId: Long,
+        val displayName: String,
+        val numbers: List<String> = emptyList(),
+    )
+
     data class Cluster(
         /** A representative display name for the cluster. */
         val displayName: String,
-        /** Contact ids that share the normalised name (size >= 2). */
-        val contactIds: List<Long>,
-    )
+        /** The contacts that share the normalised name (size >= 2). */
+        val members: List<Member>,
+    ) {
+        val contactIds: List<Long> get() = members.map { it.contactId }
+    }
 
-    /** [contacts] is (contactId, displayName). */
-    fun find(contacts: List<Pair<Long, String>>): List<Cluster> {
-        val byKey = LinkedHashMap<String, MutableList<Pair<Long, String>>>()
-        for ((id, name) in contacts) {
-            val key = normalize(name)
+    fun find(contacts: List<Member>): List<Cluster> {
+        val byKey = LinkedHashMap<String, MutableList<Member>>()
+        for (member in contacts) {
+            val key = normalize(member.displayName)
             if (key.isEmpty()) continue
-            byKey.getOrPut(key) { mutableListOf() }.add(id to name)
+            byKey.getOrPut(key) { mutableListOf() }.add(member)
         }
         return byKey.values
             .filter { it.size >= 2 }
@@ -38,11 +47,11 @@ object DuplicateFinder {
                     // Smith" beats "JOHN SMITH"). Tidying first ignores stray
                     // whitespace.
                     displayName = group
-                        .map { it.second.trim().replace(Regex("\\s+"), " ") }
+                        .map { it.displayName.trim().replace(Regex("\\s+"), " ") }
                         .maxWith(
                             compareBy({ it.length }, { s -> s.count(Char::isLowerCase) }),
                         ),
-                    contactIds = group.map { it.first },
+                    members = group,
                 )
             }
             .sortedBy { it.displayName.lowercase() }

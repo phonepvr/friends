@@ -6,40 +6,55 @@ import org.junit.Test
 
 class DuplicateFinderTest {
 
+    private fun m(id: Long, name: String, vararg numbers: String) =
+        DuplicateFinder.Member(id, name, numbers.toList())
+
     @Test
     fun clustersByNormalizedName_ignoringCaseWhitespaceAndBlanks() {
         val clusters = DuplicateFinder.find(
             listOf(
-                1L to "John Smith",
-                2L to "JOHN  smith ",
-                3L to "Alice",
-                4L to "Bob Jones",
-                5L to "bob jones",
-                6L to "",
-                7L to "   ",
+                m(1L, "John Smith"),
+                m(2L, "JOHN  smith "),
+                m(3L, "Alice"),
+                m(4L, "Bob Jones"),
+                m(5L, "bob jones"),
+                m(6L, ""),
+                m(7L, "   "),
             ),
         )
         assertEquals(2, clusters.size)
         val byKey = clusters.associateBy { DuplicateFinder.normalize(it.displayName) }
         assertEquals(setOf(1L, 2L), byKey["john smith"]?.contactIds?.toSet())
         assertEquals(setOf(4L, 5L), byKey["bob jones"]?.contactIds?.toSet())
-        // No cluster contains the unique contact.
         assertNull(clusters.find { 3L in it.contactIds })
     }
 
     @Test
     fun labelPrefersTidiestLongestSpelling() {
         val clusters = DuplicateFinder.find(
-            listOf(1L to "JOHN  smith ", 2L to "John Smith"),
+            listOf(m(1L, "JOHN  smith "), m(2L, "John Smith")),
         )
         assertEquals(1, clusters.size)
         assertEquals("John Smith", clusters.single().displayName)
     }
 
     @Test
+    fun clusterCarriesMembersWithNumbers() {
+        val clusters = DuplicateFinder.find(
+            listOf(
+                m(1L, "John Smith", "+1 555 0001"),
+                m(2L, "John Smith", "+1 555 0002"),
+            ),
+        )
+        val members = clusters.single().members
+        assertEquals(2, members.size)
+        assertEquals(listOf("+1 555 0001"), members.first { it.contactId == 1L }.numbers)
+        assertEquals(listOf("+1 555 0002"), members.first { it.contactId == 2L }.numbers)
+    }
+
+    @Test
     fun singletonsAreNotDuplicates() {
-        val clusters = DuplicateFinder.find(listOf(1L to "Solo Person"))
-        assertEquals(0, clusters.size)
+        assertEquals(0, DuplicateFinder.find(listOf(m(1L, "Solo Person"))).size)
     }
 
     @Test

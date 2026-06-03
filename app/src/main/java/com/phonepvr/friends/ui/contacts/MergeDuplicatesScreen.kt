@@ -4,8 +4,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -102,16 +104,29 @@ fun MergeDuplicatesScreen(
                                     style = MaterialTheme.typography.titleMedium,
                                 )
                                 Text(
-                                    text = "${cluster.contactIds.size} copies",
+                                    text = "${cluster.members.size} copies to merge",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
+                                // Show each copy with its number(s) so the user
+                                // can confirm these really are the same person.
+                                cluster.members.forEach { member ->
+                                    val numbers = member.numbers
+                                        .takeIf { it.isNotEmpty() }
+                                        ?.joinToString(", ")
+                                        ?: "no number"
+                                    Text(
+                                        text = "• ${member.displayName} — $numbers",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        modifier = Modifier.padding(top = 4.dp),
+                                    )
+                                }
                                 Button(
                                     onClick = { pendingMerge = cluster },
                                     enabled = !state.merging,
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(top = 8.dp),
+                                        .padding(top = 12.dp),
                                 ) { Text("Merge") }
                             }
                         }
@@ -124,13 +139,25 @@ fun MergeDuplicatesScreen(
     pendingMerge?.let { cluster ->
         AlertDialog(
             onDismissRequest = { pendingMerge = null },
-            title = { Text("Merge ${cluster.contactIds.size} contacts?") },
+            title = { Text("Merge ${cluster.members.size} contacts?") },
             text = {
-                Text(
-                    "\"${cluster.displayName}\" appears ${cluster.contactIds.size} times. " +
-                        "Merging links them into a single contact. You can separate them " +
-                        "again later from your contacts app.",
-                )
+                Column {
+                    Text(
+                        "These will be linked into one contact (separable later " +
+                            "from your contacts app):",
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    cluster.members.forEach { member ->
+                        val numbers = member.numbers
+                            .takeIf { it.isNotEmpty() }
+                            ?.joinToString(", ")
+                            ?: "no number"
+                        Text(
+                            "• ${member.displayName} — $numbers",
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                }
             },
             confirmButton = {
                 TextButton(

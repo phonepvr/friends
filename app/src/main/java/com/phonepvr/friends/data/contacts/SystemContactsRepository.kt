@@ -60,7 +60,11 @@ class SystemContactsRepository @Inject constructor(
     /** Clusters of likely-duplicate contacts (same normalised name). */
     suspend fun findDuplicateClusters(): List<DuplicateFinder.Cluster> =
         withContext(Dispatchers.IO) {
-            DuplicateFinder.find(reader.listContacts().map { it.contactId to it.displayName })
+            DuplicateFinder.find(
+                reader.listContacts().map {
+                    DuplicateFinder.Member(it.contactId, it.displayName, it.phoneNumbers)
+                },
+            )
         }
 
     /**

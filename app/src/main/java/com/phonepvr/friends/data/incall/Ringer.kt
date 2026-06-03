@@ -11,6 +11,7 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.provider.ContactsContract
+import android.telecom.TelecomManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -76,6 +77,15 @@ class Ringer @Inject constructor(
     fun silence() {
         stopInternal()
         silenced = true
+        // Belt-and-suspenders: even with IN_CALL_SERVICE_RINGING set, some
+        // devices/OEMs still drive the ringtone through the platform ringer.
+        // Stopping only our own MediaPlayer (above) left those phones ringing,
+        // so also tell Telecom to silence its ringer. We hold ROLE_DIALER, so
+        // this is permitted; wrapped in runCatching for safety.
+        runCatching {
+            (context.getSystemService(Context.TELECOM_SERVICE) as? TelecomManager)
+                ?.silenceRinger()
+        }
     }
 
     @Synchronized

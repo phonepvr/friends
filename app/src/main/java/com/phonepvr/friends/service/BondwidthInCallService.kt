@@ -136,6 +136,19 @@ class BondwidthInCallService : InCallService() {
         if (callSession.hasActiveCall()) launchInCallUi()
     }
 
+    /**
+     * The platform's hook for "the user wants the ringer silenced". Because we
+     * declare IN_CALL_SERVICE_RINGING (we own ringtone playback), the system
+     * handles the volume- and power-button presses during a ringing call
+     * itself and routes them here instead of to our Activity — so THIS, not
+     * Activity.onKeyDown, is what actually has to stop our ringtone. Covers
+     * both buttons (and "silence from another device") in one place.
+     */
+    override fun onSilenceRinger() {
+        super.onSilenceRinger()
+        ringer.silence()
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         ringer.stop()

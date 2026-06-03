@@ -11,7 +11,6 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.provider.ContactsContract
-import android.telecom.TelecomManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -73,19 +72,20 @@ class Ringer @Inject constructor(
      * restart it. The call itself keeps ringing for the network until the
      * user accepts / rejects / it times out.
      */
+    /**
+     * Stops our ringtone + vibration and latches [silenced] so a snapshot
+     * republish can't restart it. Driven by InCallService.onSilenceRinger()
+     * (the platform's volume/power-button hook) and, as a fallback, the
+     * in-call Activity's key handling.
+     *
+     * Deliberately does NOT call TelecomManager.silenceRinger(): with
+     * IN_CALL_SERVICE_RINGING the framework routes that straight back into
+     * onSilenceRinger(), which calls us — so doing it here would recurse.
+     */
     @Synchronized
     fun silence() {
         stopInternal()
         silenced = true
-        // Belt-and-suspenders: even with IN_CALL_SERVICE_RINGING set, some
-        // devices/OEMs still drive the ringtone through the platform ringer.
-        // Stopping only our own MediaPlayer (above) left those phones ringing,
-        // so also tell Telecom to silence its ringer. We hold ROLE_DIALER, so
-        // this is permitted; wrapped in runCatching for safety.
-        runCatching {
-            (context.getSystemService(Context.TELECOM_SERVICE) as? TelecomManager)
-                ?.silenceRinger()
-        }
     }
 
     @Synchronized

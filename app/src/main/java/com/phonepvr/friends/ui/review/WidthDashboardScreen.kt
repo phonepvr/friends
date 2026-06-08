@@ -174,11 +174,69 @@ private fun HealthTab(
                 HealthHeroCard(health = health)
             }
         }
+        health?.now?.let { snapshot ->
+            if (snapshot.trackedCount > 0) {
+                item {
+                    Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        HealthBreakdownCard(snapshot = snapshot)
+                    }
+                }
+            }
+        }
         if (needsYou.isNotEmpty()) {
             item {
                 NeedsYouCarousel(bonds = needsYou, onOpenPerson = onOpenPerson)
             }
         }
+    }
+}
+
+@Composable
+private fun HealthBreakdownCard(snapshot: HealthSnapshot) {
+    // Just renders counts already in HealthSnapshot — no new computation.
+    // Colour-codes the four states so a glance tells the story.
+    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("Cadence breakdown", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = "Where each of your ${snapshot.trackedCount} bonds stands today.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(12.dp))
+            BreakdownStat("On track", snapshot.onTrackCount, MaterialTheme.colorScheme.primary)
+            BreakdownStat("Due soon", snapshot.dueSoonCount, MaterialTheme.colorScheme.tertiary)
+            BreakdownStat("Overdue", snapshot.overdueCount, MaterialTheme.colorScheme.error)
+            BreakdownStat(
+                "Never contacted",
+                snapshot.neverContactedCount,
+                MaterialTheme.colorScheme.outline,
+            )
+        }
+    }
+}
+
+@Composable
+private fun BreakdownStat(label: String, count: Int, color: Color) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(10.dp)
+                .background(color, shape = CircleShape),
+        )
+        Spacer(Modifier.width(12.dp))
+        Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+        Text(
+            text = count.toString(),
+            style = MaterialTheme.typography.titleMedium,
+            color = if (count == 0) MaterialTheme.colorScheme.onSurfaceVariant else color,
+        )
     }
 }
 

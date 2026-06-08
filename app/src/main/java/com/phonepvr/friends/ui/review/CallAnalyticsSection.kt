@@ -129,11 +129,64 @@ private fun Cards(result: CallAnalyticsResult, onOpenPerson: (Long) -> Unit) {
             .padding(horizontal = 16.dp, vertical = 4.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        TalkTimeCard(result)
         BondsVsOthersCard(result)
         BondedReachCard(result)
         if (result.topParties.isNotEmpty()) TopCallersCard(result.topParties, onOpenPerson)
         DirectionAndMissedCard(result, onOpenPerson)
         OthersBreakdownCard(result)
+    }
+}
+
+@Composable
+private fun TalkTimeCard(result: CallAnalyticsResult) {
+    // Total seconds across the analytics window, split bond vs other so the
+    // user can see where the minutes actually went. All from existing fields
+    // on CallAnalyticsResult — no new computation.
+    val others = combine(result.contact, result.unknown)
+    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            CardLabel("Talk time")
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = formatTalkTime(result.totalDurationSec),
+                style = MaterialTheme.typography.headlineSmall,
+            )
+            Text(
+                text = "across ${result.totalCalls} calls",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                MiniStat(
+                    label = "Bonded",
+                    value = formatTalkTime(result.bond.totalDurationSec),
+                    modifier = Modifier.weight(1f),
+                )
+                MiniStat(
+                    label = "Other",
+                    value = formatTalkTime(others.totalDurationSec),
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+    }
+}
+
+/** "4h 23m", "12m", "44s" — friendly, no padding zeroes. */
+private fun formatTalkTime(seconds: Long): String {
+    if (seconds <= 0) return "0s"
+    val hours = seconds / 3600
+    val minutes = (seconds % 3600) / 60
+    val secs = seconds % 60
+    return when {
+        hours > 0 -> if (minutes == 0L) "${hours}h" else "${hours}h ${minutes}m"
+        minutes > 0 -> "${minutes}m"
+        else -> "${secs}s"
     }
 }
 

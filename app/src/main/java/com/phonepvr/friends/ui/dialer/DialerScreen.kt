@@ -350,34 +350,25 @@ fun DialerScreen(
                     ContactSearchResults(
                         results = state.contactResults,
                         onCallResult = { result ->
-                            val number = result.primaryNumber
-                            if (result.allNumbers.size > 1 || number == null) {
-                                // Multi-number contact → reuse the existing
-                                // picker sheet so the user chooses.
-                                numberPicker = CallTarget.Pick(
-                                    displayName = result.displayName,
-                                    numbers = result.allNumbers,
+                            // Route through the same resolver recents use: it
+                            // loads the contact's real numbers by id and either
+                            // dials directly or surfaces the picker. Reuses the
+                            // synthesized RecentEntry so there's one code path.
+                            scope.launch {
+                                val target = viewModel.resolveCallTarget(
+                                    result.toRecentEntry(),
                                 )
-                            } else {
-                                placeCall(number)
+                                when (target) {
+                                    is CallTarget.Direct -> placeCall(target.number)
+                                    is CallTarget.Pick -> numberPicker = target
+                                }
                             }
                         },
                         onOpenContact = onOpenContact,
                         onLongPress = { result ->
-                            // Synthesise a RecentEntry so the existing sheet
-                            // (Call / Message / WhatsApp / Signal / Copy /
-                            // View / Block) works without duplication.
-                            sheetEntry = RecentEntry(
-                                number = result.primaryNumber.orEmpty(),
-                                displayName = result.displayName,
-                                contactId = result.contactId,
-                                isTracked = result.isTracked,
-                                photoRelativePath = result.photoRelativePath,
-                                photoUri = result.photoUri,
-                                type = CallType.OUTGOING,
-                                timestampMillis = 0L,
-                                durationSeconds = 0L,
-                            )
+                            // The existing sheet (Call / Message / WhatsApp /
+                            // Signal / Copy / View / Block) works as-is.
+                            sheetEntry = result.toRecentEntry()
                         },
                     )
                 } else {
@@ -406,6 +397,24 @@ fun DialerScreen(
         }
     }
 }
+
+/**
+ * A search result reuses the recents row's machinery (long-press sheet +
+ * call resolver) by presenting itself as a synthetic RecentEntry. Only the
+ * identity fields matter here; the call-type/timestamp/duration are unused
+ * for these paths.
+ */
+private fun ContactSearchResult.toRecentEntry(): RecentEntry = RecentEntry(
+    number = primaryNumber.orEmpty(),
+    displayName = displayName,
+    contactId = contactId,
+    isTracked = isTracked,
+    photoRelativePath = photoRelativePath,
+    photoUri = photoUri,
+    type = CallType.OUTGOING,
+    timestampMillis = 0L,
+    durationSeconds = 0L,
+)
 
 private fun openSms(context: Context, number: String) {
     val intent = Intent(Intent.ACTION_SENDTO, "smsto:$number".toUri())

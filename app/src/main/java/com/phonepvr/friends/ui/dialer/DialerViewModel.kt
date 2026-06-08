@@ -40,6 +40,22 @@ data class RecentEntry(
     val durationSeconds: Long,
 )
 
+/**
+ * A contact surfaced by the in-tab search. Carries enough to call directly
+ * (primary or all numbers) and to reuse the existing long-press sheet via a
+ * synthetic RecentEntry.
+ */
+data class ContactSearchResult(
+    val contactId: Long,
+    val lookupKey: String,
+    val displayName: String,
+    val primaryNumber: String?,
+    val allNumbers: List<String>,
+    val isTracked: Boolean,
+    val photoRelativePath: String?,
+    val photoUri: String?,
+)
+
 data class DialerUiState(
     val recents: List<RecentEntry> = emptyList(),
     val recentsLoaded: Boolean = false,
@@ -47,6 +63,10 @@ data class DialerUiState(
     /** Live system photo URI per favourite lookupKey, for the strip avatars. */
     val favouritePhotoByLookupKey: Map<String, String> = emptyMap(),
     val placeError: String? = null,
+    /** Current contact-search query (empty = no search). */
+    val query: String = "",
+    /** Contact-search results, populated whenever [query] is non-empty. */
+    val contactResults: List<ContactSearchResult> = emptyList(),
 )
 
 /**
@@ -90,6 +110,7 @@ class DialerViewModel @Inject constructor(
     private val callLogGranted = MutableStateFlow(false)
     private val contactsGranted = MutableStateFlow(false)
     private val placeError = MutableStateFlow<String?>(null)
+    private val query = MutableStateFlow("")
 
     private val recentsSince = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(30)
 
@@ -125,7 +146,7 @@ class DialerViewModel @Inject constructor(
             .toMap()
     }
 
-    val state: StateFlow<DialerUiState> = combine(
+    private val baseState: Flow<DialerUiState> = combine(
         recentsFlow,
         contactsIndex,
         trackedByKeyFlow,
@@ -154,11 +175,60 @@ class DialerViewModel @Inject constructor(
             favouritePhotoByLookupKey = index.photoByLookupKey,
             placeError = err,
         )
+    }
+
+    /**
+     * Substring contact search driven by [query]. Hits when the trimmed query
+     * is at least 2 chars; matches against name (case-insensitive) and the
+     * digits of any phone number. Capped at 50 results so a typo doesn't list
+     * the whole address book.
+     */
+    private val searchResults: Flow<List<ContactSearchResult>> =
+        combine(query, contactsFlow, trackedByKeyFlow) { q, contacts, trackedByKey ->
+            val trimmed = q.trim()
+            if (trimmed.length < 2) return@combine emptyList()
+            val lowerName = trimmed.lowercase()
+            val digits = trimmed.filter(Char::isDigit)
+            contacts.asSequence()
+                .filter { c ->
+                    c.displayName.lowercase().contains(lowerName) ||
+                        (
+                            digits.isNotEmpty() &&
+                                c.phoneNumbers.any { it.filter(Char::isDigit).contains(digits) }
+                            )
+                }
+                .take(SEARCH_RESULT_LIMIT)
+                .map { c ->
+                    val person = trackedByKey[c.lookupKey]
+                    ContactSearchResult(
+                        contactId = c.contactId,
+                        lookupKey = c.lookupKey,
+                        displayName = c.displayName,
+                        primaryNumber = c.phoneNumbers.firstOrNull(),
+                        allNumbers = c.phoneNumbers,
+                        isTracked = person != null,
+                        photoRelativePath = person?.photoRelativePath,
+                        photoUri = c.photoUri,
+                    )
+                }
+                .toList()
+        }
+
+    val state: StateFlow<DialerUiState> = combine(
+        baseState,
+        query,
+        searchResults,
+    ) { base, q, results ->
+        base.copy(query = q, contactResults = results)
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
         initialValue = DialerUiState(),
     )
+
+    fun onQueryChange(value: String) {
+        query.value = value
+    }
 
     fun onPermissionState(callLog: Boolean, contacts: Boolean) {
         callLogGranted.value = callLog
@@ -227,5 +297,6 @@ class DialerViewModel @Inject constructor(
         /** Compare phone numbers on their last N digits so different country
          *  code prefixes still match (e.g. +44 7xxx vs 07xxx in the UK). */
         private const val SUFFIX_DIGITS = 9
+        private const val SEARCH_RESULT_LIMIT = 50
     }
 }

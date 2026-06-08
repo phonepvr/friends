@@ -47,6 +47,7 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Dialpad
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -56,6 +57,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
@@ -322,6 +324,15 @@ fun DialerScreen(
                     onDismiss = { viewModel.dismissPlaceError() },
                 )
             }
+            // In-tab contact search: visible whenever contacts are readable,
+            // so users can call by name without opening the dialpad. While the
+            // query is non-empty, search results replace the recents list.
+            if (hasContacts) {
+                DialerSearchBar(
+                    query = state.query,
+                    onQueryChange = viewModel::onQueryChange,
+                )
+            }
             Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
             // Crossfade between the permission gate and the recents list —
             // smoother than a hard swap after the user grants access.
@@ -334,6 +345,40 @@ fun DialerScreen(
                         message = "Bondwidth needs the call-log permission to show your recents.",
                         actionLabel = "Grant access",
                         onAction = { showRationale = true },
+                    )
+                } else if (state.query.isNotBlank()) {
+                    ContactSearchResults(
+                        results = state.contactResults,
+                        onCallResult = { result ->
+                            val number = result.primaryNumber
+                            if (result.allNumbers.size > 1 || number == null) {
+                                // Multi-number contact → reuse the existing
+                                // picker sheet so the user chooses.
+                                numberPicker = CallTarget.Pick(
+                                    displayName = result.displayName,
+                                    numbers = result.allNumbers,
+                                )
+                            } else {
+                                placeCall(number)
+                            }
+                        },
+                        onOpenContact = onOpenContact,
+                        onLongPress = { result ->
+                            // Synthesise a RecentEntry so the existing sheet
+                            // (Call / Message / WhatsApp / Signal / Copy /
+                            // View / Block) works without duplication.
+                            sheetEntry = RecentEntry(
+                                number = result.primaryNumber.orEmpty(),
+                                displayName = result.displayName,
+                                contactId = result.contactId,
+                                isTracked = result.isTracked,
+                                photoRelativePath = result.photoRelativePath,
+                                photoUri = result.photoUri,
+                                type = CallType.OUTGOING,
+                                timestampMillis = 0L,
+                                durationSeconds = 0L,
+                            )
+                        },
                     )
                 } else {
                     RecentsContent(
@@ -443,6 +488,77 @@ private fun RecentsContent(
                 onAddToContacts = { onAddToContacts(entry.number) },
                 onLongPress = { onLongPress(entry) },
             )
+        }
+    }
+}
+
+@Composable
+private fun DialerSearchBar(query: String, onQueryChange: (String) -> Unit) {
+    OutlinedTextField(
+        value = query,
+        onValueChange = onQueryChange,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        placeholder = { Text("Search contacts by name or number") },
+        singleLine = true,
+        leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+        trailingIcon = if (query.isNotEmpty()) {
+            {
+                IconButton(onClick = { onQueryChange("") }) {
+                    Icon(Icons.Filled.Close, contentDescription = "Clear search")
+                }
+            }
+        } else {
+            null
+        },
+    )
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ContactSearchResults(
+    results: List<ContactSearchResult>,
+    onCallResult: (ContactSearchResult) -> Unit,
+    onOpenContact: (Long) -> Unit,
+    onLongPress: (ContactSearchResult) -> Unit,
+) {
+    if (results.isEmpty()) {
+        EmptyArea(message = "No matching contacts.")
+        return
+    }
+    LazyColumn(modifier = Modifier.fillMaxSize()) {
+        items(items = results, key = { it.contactId }, contentType = { "search" }) { r ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .combinedClickable(
+                        onClick = { onOpenContact(r.contactId) },
+                        onLongClick = { onLongPress(r) },
+                    )
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                PersonAvatar(
+                    photoRelativePath = r.photoRelativePath,
+                    displayName = r.displayName,
+                    photoUri = r.photoUri,
+                )
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(text = r.displayName, style = MaterialTheme.typography.bodyLarge)
+                    r.primaryNumber?.takeIf { it.isNotBlank() }?.let { number ->
+                        Text(
+                            text = number,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                IconButton(onClick = { onCallResult(r) }) {
+                    Icon(Icons.Filled.Call, contentDescription = "Call ${r.displayName}")
+                }
+            }
         }
     }
 }

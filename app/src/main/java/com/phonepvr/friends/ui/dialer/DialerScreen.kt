@@ -76,7 +76,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.annotation.DrawableRes
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -85,6 +87,7 @@ import androidx.core.net.toUri
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.text.style.TextOverflow
+import com.phonepvr.friends.R
 import com.phonepvr.friends.data.db.entity.FavouriteContactEntity
 import com.phonepvr.friends.data.dialer.CallPlacer
 import com.phonepvr.friends.domain.model.CallType
@@ -229,9 +232,17 @@ fun DialerScreen(
                 null
             }
         }
+        // App-install checks are cheap PackageManager lookups; memoize per
+        // sheet open so we don't re-query on every recomposition. The
+        // <queries> block in AndroidManifest declares both packages so
+        // these resolve correctly on Android 11+.
+        val hasWhatsApp = remember(context) { isAppInstalled(context, PKG_WHATSAPP) }
+        val hasSignal = remember(context) { isAppInstalled(context, PKG_SIGNAL) }
         RecentActionsSheet(
             entry = entry,
             blockedStatus = blockedStatus,
+            hasWhatsApp = hasWhatsApp,
+            hasSignal = hasSignal,
             onDismiss = { sheetEntry = null },
             onCall = {
                 sheetEntry = null
@@ -240,6 +251,14 @@ fun DialerScreen(
             onMessage = {
                 sheetEntry = null
                 openSms(context, entry.number)
+            },
+            onWhatsApp = {
+                sheetEntry = null
+                openWhatsApp(context, entry.number)
+            },
+            onSignal = {
+                sheetEntry = null
+                openSignal(context, entry.number)
             },
             onCopy = {
                 sheetEntry = null
@@ -345,6 +364,33 @@ fun DialerScreen(
 
 private fun openSms(context: Context, number: String) {
     val intent = Intent(Intent.ACTION_SENDTO, "smsto:$number".toUri())
+    runCatching { context.startActivity(intent) }
+}
+
+private const val PKG_WHATSAPP = "com.whatsapp"
+private const val PKG_SIGNAL = "org.thoughtcrime.securesms"
+
+private fun isAppInstalled(context: Context, pkg: String): Boolean = runCatching {
+    context.packageManager.getPackageInfo(pkg, 0)
+    true
+}.getOrDefault(false)
+
+private fun openWhatsApp(context: Context, number: String) {
+    // wa.me wants digits only with no leading + (per WhatsApp's docs); we
+    // pin setPackage so it goes to WhatsApp directly instead of the chooser.
+    val digits = number.filter(Char::isDigit)
+    val intent = Intent(Intent.ACTION_VIEW, "https://wa.me/$digits".toUri())
+        .setPackage(PKG_WHATSAPP)
+    runCatching { context.startActivity(intent) }
+}
+
+private fun openSignal(context: Context, number: String) {
+    // Signal expects E.164 (leading + and digits). Preserve a leading + if
+    // typed; otherwise prepend it so signal.me routes correctly.
+    val digits = number.filter(Char::isDigit)
+    val e164 = if (digits.isEmpty()) return else "+$digits"
+    val intent = Intent(Intent.ACTION_VIEW, "https://signal.me/#p/$e164".toUri())
+        .setPackage(PKG_SIGNAL)
     runCatching { context.startActivity(intent) }
 }
 
@@ -596,9 +642,13 @@ private fun NumberPickerSheet(
 private fun RecentActionsSheet(
     entry: RecentEntry,
     blockedStatus: Boolean?,
+    hasWhatsApp: Boolean,
+    hasSignal: Boolean,
     onDismiss: () -> Unit,
     onCall: () -> Unit,
     onMessage: () -> Unit,
+    onWhatsApp: () -> Unit,
+    onSignal: () -> Unit,
     onCopy: () -> Unit,
     onOpenContact: (() -> Unit)?,
     onAddContact: (() -> Unit)?,
@@ -635,6 +685,14 @@ private fun RecentActionsSheet(
             HorizontalDivider()
             SheetAction(Icons.Filled.Call, "Call", onCall)
             SheetAction(Icons.AutoMirrored.Filled.Message, "Message", onMessage)
+            // WhatsApp / Signal only show when the package is actually
+            // installed — tapping otherwise would just snackbar a failure.
+            if (hasWhatsApp) {
+                SheetActionPainter(R.drawable.ic_brand_whatsapp, "WhatsApp", onWhatsApp)
+            }
+            if (hasSignal) {
+                SheetActionPainter(R.drawable.ic_brand_signal, "Signal", onSignal)
+            }
             SheetAction(Icons.Filled.ContentCopy, "Copy number", onCopy)
             onOpenContact?.let { SheetAction(Icons.Filled.Person, "View contact", it) }
             onAddContact?.let { SheetAction(Icons.Filled.PersonAdd, "Add to contacts", it) }
@@ -661,6 +719,22 @@ private fun SheetAction(icon: ImageVector, label: String, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(icon, contentDescription = null)
+        Spacer(Modifier.width(20.dp))
+        Text(label, style = MaterialTheme.typography.bodyLarge)
+    }
+}
+
+/** Same as [SheetAction] but for vector drawables (brand icons). */
+@Composable
+private fun SheetActionPainter(@DrawableRes iconRes: Int, label: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 24.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(painter = painterResource(iconRes), contentDescription = null)
         Spacer(Modifier.width(20.dp))
         Text(label, style = MaterialTheme.typography.bodyLarge)
     }

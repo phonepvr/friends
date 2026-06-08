@@ -31,6 +31,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.runningReduce
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
@@ -195,6 +196,22 @@ class InCallViewModel @Inject constructor(
             canBlockCaller = canBlockNumbers && snapshot?.number?.isNotBlank() == true,
             quickReplyMessages = bonded.quickReplies,
         )
+    }.runningReduce { previous, current ->
+        // Once the call ends, the call.snapshot goes null → both the
+        // identity flow and the matched-person lookup emit nulls →
+        // callerName / bondedPerson become null and the Header flashes
+        // "Unknown" for the 800 ms before the activity finishes. Hold
+        // the last known caller info through the ended state so that
+        // transition stays cosmetic.
+        if (current.callEnded) {
+            current.copy(
+                callerName = current.callerName ?: previous.callerName,
+                callerPhotoUri = current.callerPhotoUri ?: previous.callerPhotoUri,
+                bondedPerson = current.bondedPerson ?: previous.bondedPerson,
+            )
+        } else {
+            current
+        }
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),

@@ -35,6 +35,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.phonepvr.friends.ui.components.Haptic
+import com.phonepvr.friends.ui.components.rememberHaptics
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -45,6 +47,7 @@ fun SpeedDialScreen(
 ) {
     val context = LocalContext.current
     val assignments by viewModel.assignments.collectAsStateWithLifecycle()
+    val haptics = rememberHaptics()
     val snackbarState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
@@ -58,6 +61,7 @@ fun SpeedDialScreen(
         if (result.resultCode == Activity.RESULT_OK && key != null && uri != null) {
             val number = readPickedNumber(context, uri)
             if (number != null) {
+                haptics.perform(Haptic.Confirm)
                 viewModel.assign(key, number)
             } else {
                 scope.launch { snackbarState.showSnackbar("Couldn't read that number") }
@@ -103,7 +107,10 @@ fun SpeedDialScreen(
                     supportingContent = { Text(number ?: "Not set") },
                     trailingContent = if (number != null) {
                         {
-                            IconButton(onClick = { viewModel.clear(key) }) {
+                            IconButton(onClick = {
+                                haptics.perform(Haptic.Tick)
+                                viewModel.clear(key)
+                            }) {
                                 Icon(Icons.Filled.Clear, contentDescription = "Clear")
                             }
                         }

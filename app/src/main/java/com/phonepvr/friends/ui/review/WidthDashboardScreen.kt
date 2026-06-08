@@ -68,7 +68,9 @@ import com.phonepvr.friends.domain.review.HealthSnapshot
 import com.phonepvr.friends.domain.review.HealthWithTrend
 import com.phonepvr.friends.domain.review.ReviewYear
 import com.phonepvr.friends.ui.common.formatDate
+import com.phonepvr.friends.ui.components.Haptic
 import com.phonepvr.friends.ui.components.PersonAvatar
+import com.phonepvr.friends.ui.components.rememberHaptics
 
 /** The Width tab's three sub-views, replacing the old single long scroll. */
 private enum class WidthTab(val label: String) {
@@ -95,6 +97,7 @@ fun WidthDashboardScreen(
     val reviewState by reviewViewModel.uiState.collectAsStateWithLifecycle()
 
     var selectedTab by rememberSaveable { mutableStateOf(WidthTab.HEALTH) }
+    val haptics = rememberHaptics()
 
     Scaffold(
         topBar = {
@@ -123,7 +126,10 @@ fun WidthDashboardScreen(
                 WidthTab.entries.forEach { tab ->
                     Tab(
                         selected = tab == selectedTab,
-                        onClick = { selectedTab = tab },
+                        onClick = {
+                            if (tab != selectedTab) haptics.perform(Haptic.Tick)
+                            selectedTab = tab
+                        },
                         text = { Text(tab.label) },
                     )
                 }

@@ -93,7 +93,9 @@ import com.phonepvr.friends.R
 import com.phonepvr.friends.data.db.entity.FavouriteContactEntity
 import com.phonepvr.friends.data.dialer.CallPlacer
 import com.phonepvr.friends.domain.model.CallType
+import com.phonepvr.friends.ui.components.Haptic
 import com.phonepvr.friends.ui.components.PersonAvatar
+import com.phonepvr.friends.ui.components.rememberHaptics
 import com.phonepvr.friends.ui.permissions.PermissionRationaleSheet
 import kotlinx.coroutines.launch
 import java.text.DateFormat
@@ -113,6 +115,7 @@ fun DialerScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbarState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val haptics = rememberHaptics()
 
     var hasCallLog by remember {
         mutableStateOf(
@@ -278,6 +281,7 @@ fun DialerScreen(
             onToggleBlock = {
                 val number = entry.number
                 val nextBlocked = !(blockedStatus ?: false)
+                if (nextBlocked) haptics.perform(Haptic.Reject)
                 sheetEntry = null
                 scope.launch {
                     val ok = viewModel.setBlocked(number, nextBlocked)
@@ -368,6 +372,7 @@ fun DialerScreen(
                         onLongPress = { result ->
                             // The existing sheet (Call / Message / WhatsApp /
                             // Signal / Copy / View / Block) works as-is.
+                            haptics.perform(Haptic.LongPress)
                             sheetEntry = result.toRecentEntry()
                         },
                     )
@@ -389,7 +394,10 @@ fun DialerScreen(
                         onOpenContact = onOpenContact,
                         onAddToContacts = onSaveNumber,
                         onCallFavourite = { fav -> placeCall(fav.primaryNumber) },
-                        onLongPress = { entry -> sheetEntry = entry },
+                        onLongPress = { entry ->
+                            haptics.perform(Haptic.LongPress)
+                            sheetEntry = entry
+                        },
                     )
                 }
             }

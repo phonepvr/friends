@@ -39,6 +39,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.phonepvr.friends.data.contacts.DuplicateFinder
+import com.phonepvr.friends.ui.components.Haptic
+import com.phonepvr.friends.ui.components.rememberHaptics
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -48,6 +50,7 @@ fun MergeDuplicatesScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbarState = remember { SnackbarHostState() }
+    val haptics = rememberHaptics()
     var pendingMerge by remember { mutableStateOf<DuplicateFinder.Cluster?>(null) }
 
     LaunchedEffect(state.message) {
@@ -162,6 +165,7 @@ fun MergeDuplicatesScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
+                        haptics.perform(Haptic.Confirm)
                         viewModel.merge(cluster)
                         pendingMerge = null
                     },

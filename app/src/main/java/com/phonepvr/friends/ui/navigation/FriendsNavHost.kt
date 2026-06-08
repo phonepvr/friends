@@ -348,6 +348,9 @@ fun FriendsNavHost(
                 onOpenContact = { contactId ->
                     navController.navigate(Routes.contactDetail(contactId))
                 },
+                onSaveNumber = { number ->
+                    navController.navigate(Routes.saveNumber(number))
+                },
             )
         }
         composable(

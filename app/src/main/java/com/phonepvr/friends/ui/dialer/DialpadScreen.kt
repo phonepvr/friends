@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -27,12 +28,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Backspace
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
@@ -68,6 +71,7 @@ import kotlinx.coroutines.launch
 fun DialpadScreen(
     onClose: () -> Unit,
     onOpenContact: (Long) -> Unit,
+    onSaveNumber: (String) -> Unit,
     viewModel: DialpadViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
@@ -241,16 +245,35 @@ fun DialpadScreen(
                         }
                     }
                 } else if (state.input.isNotEmpty()) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center,
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 32.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
                     ) {
                         Text(
                             text = "No matching contacts. Hit Call to dial directly.",
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(horizontal = 32.dp),
                         )
+                        // Only worth offering "Save as new contact" when the
+                        // typed number is plausibly real (at least 3 digits)
+                        // — same threshold the matcher uses to avoid noise.
+                        if (state.input.count(Char::isDigit) >= 3) {
+                            Spacer(Modifier.height(16.dp))
+                            OutlinedButton(
+                                onClick = { onSaveNumber(state.input) },
+                            ) {
+                                Icon(
+                                    Icons.Filled.PersonAdd,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text("Save '${state.input}' as new contact")
+                            }
+                        }
                     }
                 }
             }

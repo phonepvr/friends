@@ -6,10 +6,12 @@ import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.phonepvr.friends.data.db.dao.EventDao
+import com.phonepvr.friends.data.db.dao.FavouriteContactDao
 import com.phonepvr.friends.data.db.dao.PersonDao
 import com.phonepvr.friends.data.db.dao.PhoneNumberDao
 import com.phonepvr.friends.data.db.dao.TimelineDao
 import com.phonepvr.friends.data.db.entity.EventEntity
+import com.phonepvr.friends.data.db.entity.FavouriteContactEntity
 import com.phonepvr.friends.data.db.entity.PersonEntity
 import com.phonepvr.friends.data.db.entity.PhoneNumberEntity
 import com.phonepvr.friends.data.db.entity.TimelineEntryEntity
@@ -20,8 +22,9 @@ import com.phonepvr.friends.data.db.entity.TimelineEntryEntity
         PhoneNumberEntity::class,
         EventEntity::class,
         TimelineEntryEntity::class,
+        FavouriteContactEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)
@@ -30,6 +33,7 @@ abstract class FriendsDatabase : RoomDatabase() {
     abstract fun phoneNumberDao(): PhoneNumberDao
     abstract fun eventDao(): EventDao
     abstract fun timelineDao(): TimelineDao
+    abstract fun favouriteContactDao(): FavouriteContactDao
 }
 
 /**
@@ -55,5 +59,26 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
 val MIGRATION_2_3 = object : Migration(2, 3) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL("DROP TABLE IF EXISTS pending_confirmations")
+    }
+}
+
+/**
+ * Adds the favourite_contacts table that backs the Favourites strip on
+ * the Calls tab. Pure additive — no existing rows touched.
+ */
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS favourite_contacts (
+                lookupKey TEXT NOT NULL PRIMARY KEY,
+                displayName TEXT NOT NULL,
+                primaryNumber TEXT NOT NULL,
+                photoRelativePath TEXT,
+                position INTEGER NOT NULL DEFAULT 0,
+                addedAt INTEGER NOT NULL
+            )
+            """.trimIndent(),
+        )
     }
 }

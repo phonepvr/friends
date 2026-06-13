@@ -8,6 +8,7 @@ import com.phonepvr.friends.data.repository.PeopleRepository
 import com.phonepvr.friends.data.repository.TimelineRepository
 import com.phonepvr.friends.data.settings.SettingsRepository
 import com.phonepvr.friends.domain.cadence.CadenceCalculator
+import com.phonepvr.friends.domain.cadence.CadenceState
 import com.phonepvr.friends.domain.cadence.CadenceStatus
 import com.phonepvr.friends.domain.quotes.Quote
 import com.phonepvr.friends.domain.quotes.QuoteRepository
@@ -34,6 +35,29 @@ data class PersonListItem(
 )
 
 private const val DAY_MILLIS = 24L * 60L * 60L * 1000L
+
+/**
+ * Orders the Bonds grid by who needs attention soonest: overdue at the top
+ * (most-overdue first), then due-soon (soonest first), then on-track (closest
+ * to due first), then never-contacted, then untracked. Alphabetical within
+ * each bucket so neighbours stay stable as days roll over.
+ */
+private val BondsSortComparator: Comparator<PersonListItem> = compareBy(
+    { it.cadence.state.bondsBucket() },
+    // For all three timing buckets, ascending daysUntilDue gives the right
+    // order: most-negative (very overdue) → 0 (due today) → small positive
+    // (due soon) → large positive (on track but far off).
+    { it.cadence.daysUntilDue ?: Long.MAX_VALUE },
+    { it.person.person.displayName.lowercase() },
+)
+
+private fun CadenceState.bondsBucket(): Int = when (this) {
+    CadenceState.OVERDUE -> 0
+    CadenceState.DUE_SOON -> 1
+    CadenceState.ON_TRACK -> 2
+    CadenceState.NEVER_CONTACTED -> 3
+    CadenceState.NOT_TRACKED -> 4
+}
 
 @HiltViewModel
 class PeopleListViewModel @Inject constructor(
@@ -105,7 +129,7 @@ class PeopleListViewModel @Inject constructor(
                     today = today,
                 )
                 PersonListItem(detail, cadence)
-            }
+            }.sortedWith(BondsSortComparator)
         }.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),

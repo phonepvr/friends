@@ -35,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -50,7 +51,6 @@ import com.phonepvr.friends.ui.tooltips.Tooltips
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PeopleListScreen(
-    onAddPerson: () -> Unit,
     onOpenPerson: (Long) -> Unit,
     onImportContacts: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -69,7 +69,6 @@ fun PeopleListScreen(
             TopAppBar(
                 title = { Text("Bondwidth") },
                 actions = {
-                    TextButton(onClick = onImportContacts) { Text("Import") }
                     IconButton(onClick = onOpenSettings) {
                         Icon(Icons.Filled.Settings, contentDescription = "Settings")
                     }
@@ -78,8 +77,11 @@ fun PeopleListScreen(
         },
         bottomBar = bottomBar,
         floatingActionButton = {
-            FloatingActionButton(onClick = onAddPerson) {
-                Icon(Icons.Filled.Add, contentDescription = "Add person")
+            // The single way to add a bond is to pick from your contacts —
+            // there's no free-form manual entry, so the bond always maps to a
+            // real contact (smoother, and keeps names/photos in sync).
+            FloatingActionButton(onClick = onImportContacts) {
+                Icon(Icons.Filled.Add, contentDescription = "Add a bond from contacts")
             }
         },
     ) { padding ->
@@ -104,8 +106,13 @@ fun PeopleListScreen(
                 leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
                 singleLine = true,
             )
+            // Adaptive column count: 2 on phones, more on wider tablets /
+            // foldables / landscape, derived from the current window width.
+            // Re-flows on rotation via LocalConfiguration. Never below 2 so
+            // small screens are unchanged.
+            val gridColumns = maxOf(2, LocalConfiguration.current.screenWidthDp / 180)
             LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
+                columns = GridCells.Fixed(gridColumns),
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -271,8 +278,8 @@ private fun EmptyState() {
     ) {
         Text("Your circle is empty.", style = MaterialTheme.typography.titleMedium)
         Text(
-            text = "Tap + to add the first friend you'd like to stay in touch with — " +
-                "or pull them in from contacts via the Import button up top.",
+            text = "Tap + to pick the people from your contacts you'd like to " +
+                "stay in touch with.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,

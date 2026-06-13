@@ -1,0 +1,218 @@
+package com.phonepvr.friends.ui.dialer
+
+import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.phonepvr.friends.data.contacts.DeviceContact
+import com.phonepvr.friends.data.contacts.SystemContactsRepository
+import com.phonepvr.friends.data.db.dao.PersonDao
+import com.phonepvr.friends.data.db.entity.PersonEntity
+import com.phonepvr.friends.data.dialer.CallPlacer
+import com.phonepvr.friends.data.dialer.T9
+import com.phonepvr.friends.data.settings.SettingsRepository
+import com.phonepvr.friends.ui.navigation.Routes
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import javax.inject.Inject
+
+data class DialpadMatch(
+    val contactId: Long,
+    val lookupKey: String,
+    val displayName: String,
+    val matchedNumber: String,
+    val isTracked: Boolean,
+    val photoRelativePath: String?,
+    /** System contact photo URI, shown when there's no local bonded copy. */
+    val photoUri: String?,
+)
+
+data class DialpadUiState(
+    val input: String = "",
+    val matches: List<DialpadMatch> = emptyList(),
+    val placeError: String? = null,
+)
+
+private data class IndexedContact(
+    val contact: DeviceContact,
+    val nameKey: T9.NameKey,
+    val phoneDigits: List<String>,
+)
+
+@OptIn(ExperimentalCoroutinesApi::class)
+@HiltViewModel
+class DialpadViewModel @Inject constructor(
+    savedStateHandle: SavedStateHandle,
+    systemContactsRepository: SystemContactsRepository,
+    personDao: PersonDao,
+    private val callPlacer: CallPlacer,
+    private val settingsRepository: SettingsRepository,
+) : ViewModel() {
+
+    /** Speed-dial assignments (digit 1–9 → number) for dialpad long-press. */
+    val speedDial: StateFlow<Map<Int, String>> = settingsRepository.settings
+        .map { it.speedDial }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+
+    /** Assign (or clear, when [number] is null/blank) a speed-dial key. */
+    fun setSpeedDial(key: Int, number: String?) {
+        viewModelScope.launch { settingsRepository.setSpeedDial(key, number) }
+    }
+
+    private val contactsGranted = MutableStateFlow(false)
+    private val placeError = MutableStateFlow<String?>(null)
+    private val input = MutableStateFlow(
+        savedStateHandle.get<String>(Routes.DIALPAD_PREFILL_ARG)?.takeIf { it.isNotBlank() }
+            ?: "",
+    )
+
+    private val contactsFlow = contactsGranted.flatMapLatest { granted ->
+        if (granted) systemContactsRepository.observeAll() else flowOf(emptyList())
+    }
+
+    // T9-encode contact names once per contacts emission so each
+    // keystroke just does an in-memory String.contains scan.
+    private val indexedContacts: Flow<List<IndexedContact>> = contactsFlow.map { contacts ->
+        contacts.map { c ->
+            IndexedContact(
+                contact = c,
+                nameKey = T9.nameKey(c.displayName),
+                phoneDigits = c.phoneNumbers.map { T9.digitsOnly(it) },
+            )
+        }
+    }
+
+    private val trackedByKeyFlow: Flow<Map<String, PersonEntity>> =
+        personDao.observeActive().map { tracked ->
+            tracked.asSequence()
+                .mapNotNull { p ->
+                    p.contactLookupKey?.takeIf { it.isNotBlank() }?.let { it to p }
+                }
+                .toMap()
+        }
+
+    val state: StateFlow<DialpadUiState> = combine(
+        input,
+        indexedContacts,
+        trackedByKeyFlow,
+        placeError,
+    ) { value, entries, trackedByKey, err ->
+        DialpadUiState(
+            input = value,
+            matches = buildMatches(value, entries, trackedByKey),
+            placeError = err,
+        )
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = DialpadUiState(input = input.value),
+    )
+
+    fun onContactsPermissionState(granted: Boolean) {
+        contactsGranted.value = granted
+    }
+
+    fun onDigit(c: Char) {
+        input.update { it + c }
+    }
+
+    fun onBackspace() {
+        input.update { it.dropLast(1) }
+    }
+
+    fun onClearInput() {
+        input.value = ""
+    }
+
+    /** SIMs that can place calls, for the multi-SIM chooser. */
+    fun callCapableAccounts(): List<CallPlacer.SimAccount> = callPlacer.callCapableAccounts()
+
+    /** True when the user should be asked which SIM to call from. */
+    fun needsSimChoice(): Boolean = callPlacer.needsSimChoice()
+
+    fun place(
+        number: String,
+        account: android.telecom.PhoneAccountHandle? = null,
+    ): CallPlacer.PlaceResult {
+        val result = callPlacer.place(number, account)
+        placeError.value = when (result) {
+            CallPlacer.PlaceResult.OK,
+            CallPlacer.PlaceResult.NO_PERMISSION -> null
+            CallPlacer.PlaceResult.INVALID_NUMBER -> "Enter a number to call."
+            CallPlacer.PlaceResult.ERROR -> "Couldn't place the call. Try again."
+        }
+        return result
+    }
+
+    fun dismissPlaceError() {
+        placeError.value = null
+    }
+
+    private fun buildMatches(
+        input: String,
+        entries: List<IndexedContact>,
+        trackedByKey: Map<String, PersonEntity>,
+    ): List<DialpadMatch> {
+        if (input.length < 2) return emptyList()
+        val q = T9.digitsOnly(input)
+        if (q.length < 2) return emptyList()
+        val scored = ArrayList<ScoredMatch>()
+        for (e in entries) {
+            val nameRank = T9.rank(e.nameKey, q)
+            val phoneIndex = e.phoneDigits.indexOfFirst { it.contains(q) }
+            // Best (lowest) rank across name and phone; a phone-only hit sits
+            // below every name match so "call by name" stays on top.
+            val rank = when {
+                nameRank != null -> nameRank
+                phoneIndex >= 0 -> RANK_PHONE
+                else -> continue
+            }
+            val person = trackedByKey[e.contact.lookupKey]
+            scored.add(
+                ScoredMatch(
+                    rank = rank,
+                    match = DialpadMatch(
+                        contactId = e.contact.contactId,
+                        lookupKey = e.contact.lookupKey,
+                        displayName = e.contact.displayName,
+                        matchedNumber = if (phoneIndex >= 0) {
+                            e.contact.phoneNumbers[phoneIndex]
+                        } else {
+                            e.contact.phoneNumbers.firstOrNull().orEmpty()
+                        },
+                        isTracked = person != null,
+                        photoRelativePath = person?.photoRelativePath,
+                        photoUri = e.contact.photoUri,
+                    ),
+                ),
+            )
+        }
+        // Strongest matches first, then alphabetical so ties are stable.
+        return scored
+            .sortedWith(
+                compareBy({ it.rank }, { it.match.displayName.lowercase() }),
+            )
+            .take(MAX_MATCHES)
+            .map { it.match }
+    }
+
+    private data class ScoredMatch(val rank: Int, val match: DialpadMatch)
+
+    companion object {
+        private const val MAX_MATCHES = 30
+
+        // One step below T9's name buckets (0–3): a number-only hit ranks
+        // beneath every name match.
+        private const val RANK_PHONE = 4
+    }
+}

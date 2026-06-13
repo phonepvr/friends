@@ -27,12 +27,31 @@ import com.phonepvr.friends.ui.navigation.FriendsNavHost
 import com.phonepvr.friends.ui.navigation.Routes
 import com.phonepvr.friends.ui.onboarding.OnboardingScreen
 import com.phonepvr.friends.ui.theme.FriendsTheme
+import com.phonepvr.friends.data.incall.CallSession
+import com.phonepvr.friends.ui.incall.InCallActivity
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : FragmentActivity() {
 
     private val viewModel: MainViewModel by viewModels()
+
+    @Inject lateinit var callSession: CallSession
+
+    override fun onResume() {
+        super.onResume()
+        // If a call is live and the user lands back on the app (e.g. tapping
+        // the launcher icon during a call), bounce them to the in-call screen
+        // — that's what every phone app does. When the call ends, the in-call
+        // Activity finishes and the app returns here normally.
+        if (callSession.hasActiveCall()) {
+            startActivity(
+                Intent(this, InCallActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -109,7 +128,50 @@ class MainActivity : FragmentActivity() {
         if (intent.getBooleanExtra(EXTRA_OPEN_BACKUP, false)) return Routes.BACKUP
         val personId = intent.getLongExtra(EXTRA_OPEN_PERSON_ID, -1L)
         if (personId > 0L) return Routes.personDetail(personId)
+        intent.getStringExtra(EXTRA_OPEN_CALL_HISTORY)?.takeIf { it.isNotBlank() }?.let {
+            return Routes.callHistory(it)
+        }
+        // ACTION_DIAL / ACTION_VIEW + tel: lands on the full-screen
+        // dialpad with the number pre-filled. We push the dialpad on
+        // top of whatever's already on the stack so backing out
+        // returns the user to where they were.
+        val isDialerIntent = intent.action == Intent.ACTION_DIAL ||
+            (intent.action == Intent.ACTION_VIEW && intent.data?.scheme == "tel")
+        if (isDialerIntent) {
+            val number = intent.data
+                ?.takeIf { it.scheme == "tel" }
+                ?.schemeSpecificPart
+                ?.trim()
+            return Routes.dialpad(number)
+        }
+        // Opening a .vcf attachment: VIEW on a content/file URI whose type or
+        // extension is a vCard. Route to the import-preview screen with the
+        // URI carried as an arg. The read grant rides on this Activity for
+        // its lifetime (singleTop keeps the instance alive), and the import
+        // ViewModel reads the file a moment later while it's still valid —
+        // no persistable grant needed, which matters because attachment
+        // intents rarely offer one.
+        if (intent.action == Intent.ACTION_VIEW) {
+            val data = intent.data
+            if (data != null && isVCardIntent(intent)) {
+                return Routes.importVcard(data.toString())
+            }
+        }
         return null
+    }
+
+    /**
+     * True when [intent] looks like a vCard open: a recognised vCard mime
+     * type, or a .vcf path when the sender didn't set a useful type (common
+     * for file managers, which often send application/octet-stream).
+     */
+    private fun isVCardIntent(intent: Intent): Boolean {
+        val type = intent.type ?: contentResolver.getType(intent.data ?: return false)
+        if (type != null && VCARD_MIME_TYPES.any { type.equals(it, ignoreCase = true) }) {
+            return true
+        }
+        val path = intent.data?.toString()?.lowercase().orEmpty()
+        return path.endsWith(".vcf")
     }
 
     companion object {
@@ -118,6 +180,16 @@ class MainActivity : FragmentActivity() {
 
         /** Person id (Long) carried by widget-row deep links. */
         const val EXTRA_OPEN_PERSON_ID = "com.phonepvr.friends.OPEN_PERSON_ID"
+
+        /** Phone number (String) carried by a missed-call notification tap. */
+        const val EXTRA_OPEN_CALL_HISTORY = "com.phonepvr.friends.OPEN_CALL_HISTORY"
+
+        /** Mime types contacts apps stamp on vCard files. */
+        private val VCARD_MIME_TYPES = listOf(
+            "text/x-vcard",
+            "text/vcard",
+            "text/directory",
+        )
     }
 }
 

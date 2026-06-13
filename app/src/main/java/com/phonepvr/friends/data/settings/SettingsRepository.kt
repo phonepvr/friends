@@ -29,10 +29,11 @@ data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     /**
      * When true on Android 12+, the OS wallpaper-derived palette wins over the
-     * app's hand-tuned warm palette. Default is false — the bundled palette is
-     * the intended look.
+     * app's hand-tuned warm palette. Default is true — Material You by default;
+     * the Settings → Appearance toggle switches back to the bundled palette.
+     * (No effect below Android 12, which always uses the bundled palette.)
      */
-    val dynamicColorEnabled: Boolean = false,
+    val dynamicColorEnabled: Boolean = true,
     val defaultCadenceDays: Int = 30,
     /** Epoch millis of the most recent successful export, null if there isn't one yet. */
     val lastSuccessfulBackupAt: Long? = null,
@@ -71,6 +72,25 @@ data class AppSettings(
      * card preview, or casts. Off by default so first-run UX isn't affected.
      */
     val hideFromScreenshots: Boolean = false,
+    /**
+     * Pre-written replies offered on long-press of Reject on the incoming
+     * call screen. Order is preserved (top of the list = first chip). On
+     * first launch this is the bundled default; once the user edits it the
+     * stored list wins, even if they empty it (= hide the long-press hint).
+     */
+    val quickReplyMessages: List<String> = DEFAULT_QUICK_REPLIES,
+    /**
+     * Speed-dial assignments: dialpad digit (1–9) → phone number. Long-press
+     * the key on the dialpad to call it. Empty by default.
+     */
+    val speedDial: Map<Int, String> = emptyMap(),
+)
+
+/** First-launch defaults for [AppSettings.quickReplyMessages]. */
+val DEFAULT_QUICK_REPLIES: List<String> = listOf(
+    "Can't talk right now — call you back.",
+    "On my way.",
+    "Can't talk. What's up?",
 )
 
 private val Context.settingsDataStore: DataStore<Preferences> by preferencesDataStore(
@@ -112,6 +132,13 @@ class SettingsRepository @Inject constructor(
                 cadenceBackfilled = prefs[Keys.CADENCE_BACKFILLED] ?: false,
                 dismissedTooltipIds = prefs[Keys.DISMISSED_TOOLTIPS].orEmpty(),
                 hideFromScreenshots = prefs[Keys.HIDE_FROM_SCREENSHOTS] ?: false,
+                // Stored as newline-joined to keep ordering. Absent → defaults;
+                // explicit empty stored value → empty (user cleared the list,
+                // intentionally hiding the long-press chip).
+                quickReplyMessages = prefs[Keys.QUICK_REPLIES]
+                    ?.let { decodeQuickReplies(it) }
+                    ?: DEFAULT_QUICK_REPLIES,
+                speedDial = prefs[Keys.SPEED_DIAL]?.let { decodeSpeedDial(it) } ?: emptyMap(),
             )
         }
 
@@ -199,6 +226,23 @@ class SettingsRepository @Inject constructor(
         dataStore.edit { it[Keys.HIDE_FROM_SCREENSHOTS] = enabled }
     }
 
+    /** Replaces the stored quick-reply messages. Trims and drops blanks. */
+    suspend fun setQuickReplyMessages(messages: List<String>) {
+        val cleaned = messages.map { it.trim() }.filter { it.isNotEmpty() }
+        dataStore.edit { it[Keys.QUICK_REPLIES] = encodeQuickReplies(cleaned) }
+    }
+
+    /** Assigns [number] to speed-dial [key] (1–9), or clears it when blank. */
+    suspend fun setSpeedDial(key: Int, number: String?) {
+        dataStore.edit { prefs ->
+            val current = prefs[Keys.SPEED_DIAL]?.let { decodeSpeedDial(it) }.orEmpty()
+            val updated = current.toMutableMap()
+            val cleaned = number?.trim().orEmpty()
+            if (cleaned.isEmpty()) updated.remove(key) else updated[key] = cleaned
+            prefs[Keys.SPEED_DIAL] = encodeSpeedDial(updated)
+        }
+    }
+
     /**
      * Serialisable snapshot of all user-configurable settings, used by the
      * backup JSON to round-trip across devices. The transient nudge-dismissed
@@ -222,6 +266,13 @@ class SettingsRepository @Inject constructor(
                 // Newline-joined; restored quotes are split back on import.
                 put(Snapshot.USER_QUOTES, current.userQuotes.joinToString("\n"))
             }
+            // Round-trip the user's quick replies. We always include the key,
+            // even when empty, so "user cleared the list" survives a restore
+            // rather than silently falling back to defaults.
+            put(
+                Snapshot.QUICK_REPLIES,
+                current.quickReplyMessages.joinToString(QUICK_REPLY_SEP),
+            )
         }
     }
 
@@ -244,6 +295,9 @@ class SettingsRepository @Inject constructor(
             snapshot[Snapshot.USER_QUOTES]?.let { joined ->
                 val parsed = joined.split("\n").map { it.trim() }.filter { it.isNotEmpty() }
                 if (parsed.isNotEmpty()) prefs[Keys.USER_QUOTES] = parsed.toSet()
+            }
+            snapshot[Snapshot.QUICK_REPLIES]?.let { stored ->
+                prefs[Keys.QUICK_REPLIES] = stored
             }
         }
     }
@@ -270,6 +324,8 @@ class SettingsRepository @Inject constructor(
         val CADENCE_BACKFILLED = booleanPreferencesKey("cadence_backfilled")
         val DISMISSED_TOOLTIPS = stringSetPreferencesKey("dismissed_tooltips")
         val HIDE_FROM_SCREENSHOTS = booleanPreferencesKey("hide_from_screenshots")
+        val QUICK_REPLIES = stringPreferencesKey("quick_reply_messages")
+        val SPEED_DIAL = stringPreferencesKey("speed_dial_map")
     }
 
     private object Snapshot {
@@ -282,9 +338,37 @@ class SettingsRepository @Inject constructor(
         const val LAST_BACKUP = "last_successful_backup_at"
         const val NUDGE_INTERVAL = "backup_nudge_interval_days"
         const val USER_QUOTES = "user_quotes"
+        const val QUICK_REPLIES = "quick_reply_messages"
     }
 
     private companion object {
         val DEFAULTS = AppSettings()
+
+        // Use a separator that won't appear in user text. Newlines are valid
+        // inside a quick-reply (multi-line message), so use  (Record
+        // Separator) — the ASCII control char nobody types accidentally.
+        private const val QUICK_REPLY_SEP = ""
+
+        fun encodeQuickReplies(list: List<String>): String =
+            list.joinToString(QUICK_REPLY_SEP)
+
+        fun decodeQuickReplies(stored: String): List<String> =
+            if (stored.isEmpty()) emptyList() else stored.split(QUICK_REPLY_SEP)
+
+        // Speed dial map encoded as "key=number" entries joined by RS. Numbers
+        // never contain '=' or RS, so this round-trips cleanly.
+        fun encodeSpeedDial(map: Map<Int, String>): String =
+            map.entries.joinToString(QUICK_REPLY_SEP) { "${it.key}=${it.value}" }
+
+        fun decodeSpeedDial(stored: String): Map<Int, String> {
+            if (stored.isEmpty()) return emptyMap()
+            return stored.split(QUICK_REPLY_SEP).mapNotNull { entry ->
+                val eq = entry.indexOf('=')
+                if (eq <= 0) return@mapNotNull null
+                val key = entry.substring(0, eq).toIntOrNull() ?: return@mapNotNull null
+                val number = entry.substring(eq + 1)
+                if (number.isBlank()) null else key to number
+            }.toMap()
+        }
     }
 }

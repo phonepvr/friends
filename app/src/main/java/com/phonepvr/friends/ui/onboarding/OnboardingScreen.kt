@@ -1,6 +1,11 @@
 package com.phonepvr.friends.ui.onboarding
 
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,24 +21,37 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.phonepvr.friends.domain.quotes.Quote
+import com.phonepvr.friends.ui.permissions.PermissionInfoList
+import com.phonepvr.friends.ui.permissions.RestrictedDialerSettingsDialog
+import com.phonepvr.friends.ui.permissions.onboardingRuntimePermissions
 import kotlinx.coroutines.launch
 
-private const val SLIDE_COUNT = 6
+// Welcome, cadence, events, privacy+permissions intro, then the permissions
+// action page. Kept tight so users reach the app fast.
+private const val SLIDE_COUNT = 5
+
+/** The last slide gathers permissions + the default-phone-app role. */
+private const val PERMISSIONS_PAGE = SLIDE_COUNT - 1
 
 @Composable
 fun OnboardingScreen(
@@ -65,7 +83,11 @@ fun OnboardingScreen(
                     .weight(1f)
                     .fillMaxWidth(),
             ) { page ->
-                OnboardingSlide(page = page, quote = quote)
+                if (page == PERMISSIONS_PAGE) {
+                    PermissionsSlide(viewModel = viewModel)
+                } else {
+                    OnboardingSlide(page = page, quote = quote)
+                }
             }
             Row(
                 modifier = Modifier
@@ -140,23 +162,12 @@ private fun OnboardingSlide(page: Int, quote: Quote?) {
                     "for the day itself.",
             )
             3 -> TitleBodySlide(
-                title = "Your timeline. Just yours.",
-                body = "Every call, message and meet-up gets logged on this device. " +
-                    "No accounts, no analytics, no servers. Friends doesn't even ask " +
-                    "for an internet permission — we couldn't phone home if we wanted to.",
-            )
-            4 -> TitleBodySlide(
-                title = "Two doors you can leave shut.",
-                body = "Bondwidth can ask for contacts (to import the people you already " +
-                    "know) and the call log (to count calls automatically). Both are " +
-                    "optional. Say no and the app still works — add anyone by hand, " +
-                    "log every conversation yourself.",
-            )
-            5 -> TitleBodySlide(
-                title = "There's a widget, too.",
-                body = "Long-press your home screen and drop a Bondwidth widget there. " +
-                    "Upcoming birthdays, anniversaries, who's overdue for a check-in " +
-                    "— at a glance.",
+                title = "Private by design — and better with a couple of permissions.",
+                body = "Everything stays on this device: no accounts, no servers, not " +
+                    "even an internet permission. As your phone and contacts app, " +
+                    "Bondwidth reads your contacts (to add people you know) and your " +
+                    "call log (so check-ins count automatically). Granting these on the " +
+                    "next screen gives you the smoothest experience.",
             )
         }
     }
@@ -214,4 +225,180 @@ private fun TitleBodySlide(title: String, body: String) {
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         textAlign = TextAlign.Center,
     )
+}
+
+/**
+ * Final onboarding slide: explains every permission group up front and
+ * requests them together, plus offers the default-phone-app role. Nothing
+ * here blocks finishing — the bottom "Get started" button always works, and
+ * anything declined falls back to the in-context prompts elsewhere.
+ */
+@Composable
+private fun PermissionsSlide(viewModel: OnboardingViewModel) {
+    val context = LocalContext.current
+    val isDefaultDialer by viewModel.isDefaultDialer.collectAsStateWithLifecycle()
+
+    var requested by rememberSaveable { mutableStateOf(false) }
+    var allGranted by rememberSaveable { mutableStateOf(false) }
+    var showRestrictedDialog by rememberSaveable { mutableStateOf(false) }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { result ->
+        requested = true
+        allGranted = result.values.all { it }
+    }
+    val roleLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) {
+        val granted = viewModel.refreshDefaultDialer()
+        // On Android 13+, a sideloaded app's role request is silently blocked
+        // by "restricted settings": the picker returns without granting and
+        // with no error, so the user is left thinking it worked. Detect that
+        // and take them straight to the guided fix instead of a dead end.
+        if (!granted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            showRestrictedDialog = true
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 32.dp, vertical = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            text = "Let's get you set up",
+            style = MaterialTheme.typography.headlineSmall,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(12.dp))
+        Text(
+            text = "Bondwidth is your phone and contacts app, so granting these " +
+                "gives you the full, smooth experience — calls, contacts and " +
+                "automatic check-ins all working from the start. Here's what, " +
+                "and why. It all stays on this device.",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(24.dp))
+        PermissionInfoList()
+        Spacer(Modifier.height(24.dp))
+        Button(
+            onClick = {
+                permissionLauncher.launch(onboardingRuntimePermissions().toTypedArray())
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(if (allGranted) "Permissions granted" else "Grant permissions")
+        }
+        Spacer(Modifier.height(8.dp))
+        if (isDefaultDialer) {
+            Text(
+                text = "Bondwidth is your default phone app.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
+                textAlign = TextAlign.Center,
+            )
+        } else {
+            OutlinedButton(
+                onClick = { viewModel.makeDialerRoleIntent()?.let(roleLauncher::launch) },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Set as default phone app")
+            }
+            // Up-front explainer: the picker above can fail on Android 13+
+            // for sideloaded installs because of "restricted settings". We
+            // surface what's coming so the user isn't stuck on the toast.
+            Spacer(Modifier.height(12.dp))
+            DefaultDialerHelp(
+                onOpenDefaultApps = {
+                    runCatching {
+                        context.startActivity(viewModel.makeDefaultAppsSettingsIntent())
+                    }
+                },
+                onLearnHow = { showRestrictedDialog = true },
+            )
+        }
+        if (requested && !allGranted) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "Some permissions weren't granted. Bondwidth still works — " +
+                    "you can enable them anytime.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+            TextButton(onClick = { context.startActivity(viewModel.makeAppInfoIntent()) }) {
+                Text("Open app settings")
+            }
+        }
+    }
+
+    if (showRestrictedDialog) {
+        RestrictedDialerSettingsDialog(
+            onDismiss = { showRestrictedDialog = false },
+            onOpenAppInfo = {
+                runCatching { context.startActivity(viewModel.makeAppInfoIntent()) }
+            },
+            onOpenDefaultApps = {
+                runCatching {
+                    context.startActivity(viewModel.makeDefaultAppsSettingsIntent())
+                }
+            },
+        )
+    }
+}
+
+/**
+ * Up-front explainer card shown beneath "Set as default phone app" during
+ * onboarding. Tells the user WHY we want the role and HOW to recover if
+ * Android blocks it — the question the user usually only asks after hitting
+ * the "App was denied access" toast.
+ */
+@Composable
+private fun DefaultDialerHelp(
+    onOpenDefaultApps: () -> Unit,
+    onLearnHow: () -> Unit,
+) {
+    androidx.compose.material3.ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Text(
+                text = "Why and how",
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = "Being the phone app lets Bondwidth show its in-call screen, " +
+                    "log who called you so check-ins work, and block numbers in a " +
+                    "tap. Calls still place without it — only the in-call UI falls " +
+                    "back to your old dialer.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "Android 13+ may show “App was denied access to be the " +
+                    "default Phone app” the first time you try, because Bondwidth " +
+                    "isn't from the Play Store. One-time fix: allow restricted " +
+                    "settings, then pick Bondwidth under Default apps.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                TextButton(onClick = onLearnHow) {
+                    Text("How to allow it")
+                }
+                TextButton(onClick = onOpenDefaultApps) {
+                    Text("Open default apps")
+                }
+            }
+        }
+    }
 }

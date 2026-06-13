@@ -43,6 +43,14 @@ jobs:
         with:
           languages: ${{ matrix.language }}
 
+      # Caches the Gradle distribution + dependencies and is resilient to the
+      # flaky gradle-distributions CDN. Without it the wrapper re-downloaded
+      # Gradle every run and intermittently failed on a 504, which surfaced as
+      # a CodeQL "configuration error" rather than a real analysis result.
+      # Mirrors the main build workflow (build.yml).
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
       - name: Build with Gradle
         run: |
           set -euo pipefail

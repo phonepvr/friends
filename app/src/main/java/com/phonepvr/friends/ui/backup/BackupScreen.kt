@@ -102,7 +102,7 @@ fun BackupScreen(
             )
             ActionCard(
                 title = "Restore from a backup",
-                body = "Replaces everything in Friends with the contents of a " +
+                body = "Replaces everything in Bondwidth with the contents of a " +
                     "backup file. Use this when moving to a new phone.",
                 buttonText = "Import backup",
                 enabled = !state.busy,
@@ -194,7 +194,7 @@ private fun ResultCard(result: BackupResult, onDismiss: () -> Unit) {
                 is BackupResult.Restored -> {
                     Text("Restore complete", style = MaterialTheme.typography.titleMedium)
                     Text(
-                        text = "Everything from the backup is now in Friends.",
+                        text = "Everything from the backup is now in Bondwidth.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

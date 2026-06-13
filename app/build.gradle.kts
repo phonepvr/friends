@@ -56,6 +56,9 @@ android {
 
     buildFeatures {
         compose = true
+        // VERSION_NAME is surfaced in Settings so the user can see which
+        // build they're on and tap straight to the releases page.
+        buildConfig = true
     }
 
     testOptions {
@@ -76,6 +79,10 @@ dependencies {
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
     implementation(libs.androidx.material.icons.core)
+    // Many of the icons referenced from contact / dialer / in-call screens
+    // (PersonAdd, Contacts, Cake, CalendarMonth, Business, Notes, etc.) live
+    // outside the curated -core set, so the extended catalogue is pulled in.
+    implementation(libs.androidx.material.icons.extended)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.hilt.navigation.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
@@ -98,6 +105,11 @@ dependencies {
     implementation(libs.androidx.biometric)
     implementation(libs.androidx.fragment)
     implementation(libs.coil.compose)
+    // Installs the bundled baseline profile on first run and lets the Play
+    // Store apply cloud profiles, improving cold-start / first-frame jank.
+    // The profile itself is generated separately on a device/emulator via
+    // ./gradlew :app:generateBaselineProfile.
+    implementation(libs.androidx.profileinstaller)
 
     testImplementation(libs.junit)
 }

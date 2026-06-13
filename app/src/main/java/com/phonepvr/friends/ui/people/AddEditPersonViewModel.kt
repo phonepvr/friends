@@ -18,7 +18,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import java.util.UUID
 import javax.inject.Inject
 
 /**
@@ -29,8 +28,8 @@ import javax.inject.Inject
 data class DateFields(val digits: String = "")
 
 data class PersonFormState(
+    /** Read-only here — a bond's name comes from its linked contact. */
     val displayName: String = "",
-    val phoneNumbers: List<String> = listOf(""),
     val relationshipTag: String = "",
     val cadenceTargetDays: String = "",
     val notes: String = "",
@@ -54,6 +53,10 @@ class AddEditPersonViewModel @Inject constructor(
 
     private var loadedPerson: PersonEntity? = null
 
+    // Phones are owned by the linked contact, not edited here; keep them as
+    // loaded so save() preserves them (they back call-matching).
+    private var loadedPhones: List<PhoneNumberEntity> = emptyList()
+
     init {
         if (personId != null) {
             _form.value = _form.value.copy(loading = true)
@@ -61,11 +64,9 @@ class AddEditPersonViewModel @Inject constructor(
                 val details = repository.observePersonWithDetails(personId).first()
                 if (details != null) {
                     loadedPerson = details.person
+                    loadedPhones = details.phoneNumbers
                     _form.value = PersonFormState(
                         displayName = details.person.displayName,
-                        phoneNumbers = details.phoneNumbers
-                            .map { it.rawNumber }
-                            .ifEmpty { listOf("") },
                         relationshipTag = details.person.relationshipTag.orEmpty(),
                         cadenceTargetDays = details.person.cadenceTargetDays?.toString().orEmpty(),
                         notes = details.person.notes.orEmpty(),
@@ -94,10 +95,6 @@ class AddEditPersonViewModel @Inject constructor(
         }
     }
 
-    fun onNameChange(value: String) {
-        _form.value = _form.value.copy(displayName = value)
-    }
-
     fun onTagChange(value: String) {
         _form.value = _form.value.copy(relationshipTag = value)
     }
@@ -112,26 +109,6 @@ class AddEditPersonViewModel @Inject constructor(
         _form.value = _form.value.copy(notes = value)
     }
 
-    fun onPhoneChange(index: Int, value: String) {
-        val updated = _form.value.phoneNumbers.toMutableList()
-        if (index in updated.indices) {
-            updated[index] = value
-            _form.value = _form.value.copy(phoneNumbers = updated)
-        }
-    }
-
-    fun onAddPhone() {
-        _form.value = _form.value.copy(phoneNumbers = _form.value.phoneNumbers + "")
-    }
-
-    fun onRemovePhone(index: Int) {
-        val updated = _form.value.phoneNumbers.toMutableList()
-        if (index in updated.indices) {
-            updated.removeAt(index)
-            _form.value = _form.value.copy(phoneNumbers = updated.ifEmpty { listOf("") })
-        }
-    }
-
     fun updateBirthday(transform: (DateFields) -> DateFields) {
         _form.value = _form.value.copy(birthday = transform(_form.value.birthday))
     }
@@ -141,53 +118,28 @@ class AddEditPersonViewModel @Inject constructor(
     }
 
     fun save(onSaved: () -> Unit) {
+        // Edit-only: a bond always already exists (created via contact import).
+        val existing = loadedPerson ?: run { onSaved(); return }
         val state = _form.value
-        if (state.displayName.isBlank()) return
         viewModelScope.launch {
             val now = System.currentTimeMillis()
-            val phones = state.phoneNumbers
-                .map { it.trim() }
-                .filter { it.isNotBlank() }
-                .map { raw ->
-                    PhoneNumberEntity(
-                        personId = 0,
-                        rawNumber = raw,
-                        normalizedNumber = raw.filter { ch -> ch.isDigit() },
-                    )
-                }
             val events = listOfNotNull(
                 state.birthday.toEvent(EventType.BIRTHDAY),
                 state.anniversary.toEvent(EventType.WEDDING_ANNIVERSARY),
             )
             val cadence = state.cadenceTargetDays.toIntOrNull()?.takeIf { it > 0 }
-            val existing = loadedPerson
-            if (existing == null) {
-                repository.createPerson(
-                    person = PersonEntity(
-                        uuid = UUID.randomUUID().toString(),
-                        displayName = state.displayName.trim(),
-                        relationshipTag = state.relationshipTag.trim().ifBlank { null },
-                        cadenceTargetDays = cadence,
-                        notes = state.notes.trim().ifBlank { null },
-                        createdAt = now,
-                        updatedAt = now,
-                    ),
-                    phoneNumbers = phones,
-                    events = events,
-                )
-            } else {
-                repository.updatePerson(
-                    person = existing.copy(
-                        displayName = state.displayName.trim(),
-                        relationshipTag = state.relationshipTag.trim().ifBlank { null },
-                        cadenceTargetDays = cadence,
-                        notes = state.notes.trim().ifBlank { null },
-                        updatedAt = now,
-                    ),
-                    phoneNumbers = phones,
-                    events = events,
-                )
-            }
+            repository.updatePerson(
+                person = existing.copy(
+                    relationshipTag = state.relationshipTag.trim().ifBlank { null },
+                    cadenceTargetDays = cadence,
+                    notes = state.notes.trim().ifBlank { null },
+                    updatedAt = now,
+                ),
+                // Phones are owned by the contact — pass the loaded set back
+                // unchanged so updatePerson's replace doesn't wipe them.
+                phoneNumbers = loadedPhones,
+                events = events,
+            )
             onSaved()
         }
     }

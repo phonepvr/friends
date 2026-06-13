@@ -162,7 +162,7 @@ class BackupManager @Inject constructor(
         }
         if (backup.schemaVersion > BACKUP_SCHEMA_VERSION) {
             throw InvalidBackupException(
-                "This backup was created by a newer version of Friends.",
+                "This backup was created by a newer version of Bondwidth.",
             )
         }
         return backup

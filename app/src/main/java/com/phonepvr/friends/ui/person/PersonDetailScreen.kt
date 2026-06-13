@@ -17,9 +17,33 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.automirrored.filled.Send
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.media.RingtoneManager
+import android.os.Build
+import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.Contacts
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material3.HorizontalDivider
+import androidx.core.content.FileProvider
+import androidx.core.net.toUri
+import com.phonepvr.friends.data.contacts.ContactDetails
+import com.phonepvr.friends.data.contacts.VCardBuilder
+import java.io.File
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -42,8 +66,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -73,6 +100,7 @@ import com.phonepvr.friends.ui.common.packDateDigits
 import com.phonepvr.friends.ui.common.parseDateDigits
 import com.phonepvr.friends.ui.tooltips.CoachMarkBanner
 import com.phonepvr.friends.ui.tooltips.Tooltips
+import com.phonepvr.friends.ui.theme.callColor
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -92,6 +120,7 @@ fun PersonDetailScreen(
     onEdit: (Long) -> Unit,
     onLogInteraction: (Long) -> Unit,
     onEditInteraction: (Long) -> Unit,
+    onEditContact: (Long) -> Unit,
     viewModel: PersonDetailViewModel = hiltViewModel(),
 ) {
     val person by viewModel.person.collectAsStateWithLifecycle()
@@ -107,8 +136,24 @@ fun PersonDetailScreen(
     val selectedTimelineIds by viewModel.selectedTimelineIds.collectAsStateWithLifecycle()
     val addEventSheet by viewModel.addEventSheet.collectAsStateWithLifecycle()
     val editEventTarget by viewModel.editEventTarget.collectAsStateWithLifecycle()
+    val contactDetails by viewModel.contactDetails.collectAsStateWithLifecycle()
+    val contactId by viewModel.contactId.collectAsStateWithLifecycle()
+    val isFavourite by viewModel.isFavourite.collectAsStateWithLifecycle()
+    var showDeleteContactDialog by remember { mutableStateOf(false) }
+    // Block state for the overflow menu's label. Re-queried whenever the
+    // linked contact changes; the menu item flips it optimistically on tap.
+    var isPrimaryBlocked by remember(contactDetails?.lookupKey) { mutableStateOf(false) }
+    LaunchedEffect(contactDetails?.lookupKey) {
+        isPrimaryBlocked = if (contactDetails?.phoneNumbers?.isNotEmpty() == true && viewModel.canBlock()) {
+            viewModel.isPrimaryBlocked()
+        } else {
+            false
+        }
+    }
     val today = remember { LocalDate.now() }
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val isSelectionMode = selectedTimelineIds.isNotEmpty()
     BackHandler(enabled = isSelectionMode) { viewModel.clearTimelineSelection() }
 
@@ -151,7 +196,121 @@ fun PersonDetailScreen(
                         }
                     },
                     actions = {
-                        TextButton(onClick = { onEdit(viewModel.personId) }) { Text("Edit") }
+                        // Pin to favourites — only when the person is linked to
+                        // a system contact (needs a lookupKey + number).
+                        if (contactDetails?.phoneNumbers?.isNotEmpty() == true) {
+                            IconButton(onClick = viewModel::toggleFavourite) {
+                                Icon(
+                                    imageVector = if (isFavourite) {
+                                        Icons.Filled.Star
+                                    } else {
+                                        Icons.Filled.StarBorder
+                                    },
+                                    contentDescription = if (isFavourite) {
+                                        "Unpin from favourites"
+                                    } else {
+                                        "Pin to favourites"
+                                    },
+                                    tint = if (isFavourite) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        Color.Unspecified
+                                    },
+                                )
+                            }
+                        }
+                        // One overflow menu gathers every verb — the screen
+                        // body stays data, the actions live here, matching how
+                        // a stock contacts app reads.
+                        var menuOpen by remember { mutableStateOf(false) }
+                        IconButton(onClick = { menuOpen = true }) {
+                            Icon(Icons.Filled.MoreVert, contentDescription = "More")
+                        }
+                        DropdownMenu(
+                            expanded = menuOpen,
+                            onDismissRequest = { menuOpen = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Edit bond") },
+                                leadingIcon = {
+                                    Icon(Icons.Filled.Edit, contentDescription = null)
+                                },
+                                onClick = {
+                                    menuOpen = false
+                                    onEdit(viewModel.personId)
+                                },
+                            )
+                            val cid = contactId
+                            if (cid != null) {
+                                DropdownMenuItem(
+                                    text = { Text("Edit contact") },
+                                    leadingIcon = {
+                                        Icon(Icons.Filled.Contacts, contentDescription = null)
+                                    },
+                                    onClick = {
+                                        menuOpen = false
+                                        onEditContact(cid)
+                                    },
+                                )
+                            }
+                            contactDetails?.let { d ->
+                                DropdownMenuItem(
+                                    text = { Text("Share contact") },
+                                    leadingIcon = {
+                                        Icon(Icons.Filled.Share, contentDescription = null)
+                                    },
+                                    onClick = {
+                                        menuOpen = false
+                                        shareBondedContact(context, d)
+                                    },
+                                )
+                                if (viewModel.canBlock() && d.phoneNumbers.isNotEmpty()) {
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(if (isPrimaryBlocked) "Unblock number" else "Block number")
+                                        },
+                                        leadingIcon = {
+                                            Icon(Icons.Filled.Block, contentDescription = null)
+                                        },
+                                        onClick = {
+                                            menuOpen = false
+                                            val next = !isPrimaryBlocked
+                                            isPrimaryBlocked = next
+                                            scope.launch {
+                                                val ok = viewModel.setPrimaryBlocked(next)
+                                                if (!ok) isPrimaryBlocked = !next
+                                                snackbarHostState.showSnackbar(
+                                                    when {
+                                                        !ok -> "Couldn't update the block list"
+                                                        next -> "Number blocked"
+                                                        else -> "Number unblocked"
+                                                    },
+                                                )
+                                            }
+                                        },
+                                    )
+                                }
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            "Delete contact",
+                                            color = MaterialTheme.colorScheme.error,
+                                        )
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Filled.Delete,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.error,
+                                        )
+                                    },
+                                    onClick = {
+                                        menuOpen = false
+                                        showDeleteContactDialog = true
+                                    },
+                                )
+                            }
+                        }
                     },
                 )
             }
@@ -268,6 +427,21 @@ fun PersonDetailScreen(
                         onEditEvent = viewModel::openEditEventSheet,
                     )
                 }
+                // System-contact merge: phones (with set-primary), emails,
+                // organization, contact-level notes, and the per-contact
+                // ringtone all live on the bonded profile now so the user
+                // doesn't have to bounce to the Contacts tab to see or
+                // change them.
+                contactDetails?.let { details ->
+                    item {
+                        ContactInfoSection(
+                            details = details,
+                            onCallNumber = viewModel::callNumber,
+                            onSetPrimary = viewModel::setPrimaryContactNumber,
+                            onSetRingtone = viewModel::setCustomRingtone,
+                        )
+                    }
+                }
                 item { Text("History", style = MaterialTheme.typography.titleMedium) }
                 if (timeline.isEmpty()) {
                     if (Tooltips.TIMELINE_LOG !in dismissedTooltips) {
@@ -329,6 +503,36 @@ fun PersonDetailScreen(
             onSave = { day, month, year -> viewModel.saveEvent(type, day, month, year) },
             onDismiss = viewModel::dismissAddEventSheet,
         )
+    }
+
+    if (showDeleteContactDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteContactDialog = false },
+            title = { Text("Delete contact?") },
+            text = {
+                Text(
+                    "This removes the contact from your phone's address book. " +
+                        "Their bond, cadence and timeline in Bondwidth stay — only " +
+                        "the contact-card details (numbers, email, etc.) go.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteContactDialog = false
+                        viewModel.deleteContact()
+                    },
+                ) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteContactDialog = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    val deleted by viewModel.contactDeleted.collectAsStateWithLifecycle()
+    LaunchedEffect(deleted) {
+        if (deleted) snackbarHostState.showSnackbar("Contact deleted")
     }
 }
 
@@ -893,13 +1097,10 @@ private fun TimelineRow(
 
 @Composable
 private fun entryAccentColor(entry: TimelineEntryEntity): Color = when (entry.type) {
-    InteractionType.CALL -> when (entry.callDirection) {
-        CallType.INCOMING -> MaterialTheme.colorScheme.primary
-        CallType.OUTGOING -> MaterialTheme.colorScheme.tertiary
-        CallType.MISSED -> MaterialTheme.colorScheme.error
-        CallType.REJECTED -> MaterialTheme.colorScheme.outline
-        null -> MaterialTheme.colorScheme.primary
-    }
+    // Calls use the shared call-log palette (blue outgoing, green incoming,
+    // red missed/rejected); a direction-less call falls back to primary.
+    InteractionType.CALL -> entry.callDirection?.let { callColor(it) }
+        ?: MaterialTheme.colorScheme.primary
     InteractionType.MEET -> MaterialTheme.colorScheme.secondary
     InteractionType.MESSAGE -> MaterialTheme.colorScheme.tertiary
     InteractionType.OTHER -> MaterialTheme.colorScheme.outlineVariant
@@ -933,3 +1134,225 @@ private fun eventLabel(type: EventType): String = when (type) {
 
 private fun formatEventDate(event: EventEntity): String =
     formatEventDay(day = event.day, month = event.month, year = event.year)
+
+/**
+ * Renders the system-contact-side data for a bonded person: phone numbers
+ * with set-primary, emails, organization, address-book notes, and the
+ * per-contact ringtone — plus Edit-contact and Share-as-vCard actions.
+ *
+ * Hidden when the bonded person isn't linked to a system contact (rare —
+ * most bonded people come through the import or save-number flow which
+ * always carries a lookupKey).
+ */
+@Composable
+private fun ContactInfoSection(
+    details: ContactDetails,
+    onCallNumber: (String) -> Unit,
+    onSetPrimary: (Long) -> Unit,
+    onSetRingtone: (android.net.Uri?) -> Unit,
+) {
+    // Card to match the cadence / summary / event surfaces above; the screen
+    // reads as a stack of cards rather than a wall of bare rows. Actions
+    // (edit / share / block / delete) live in the top-bar overflow menu.
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Contact info", style = MaterialTheme.typography.titleMedium)
+        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                if (details.phoneEntries.isNotEmpty()) {
+                    val multiple = details.phoneEntries.size > 1
+                    details.phoneEntries.forEach { phone ->
+                        ContactPhoneRow(
+                            number = phone.number,
+                            isPrimary = phone.isPrimary,
+                            canSetPrimary = multiple && !phone.isPrimary,
+                            onCall = { onCallNumber(phone.number) },
+                            onSetPrimary = { onSetPrimary(phone.dataId) },
+                        )
+                    }
+                }
+                details.emails.forEach { address ->
+                    IconValueRow(icon = Icons.Filled.Email, value = address)
+                }
+                details.organization?.let { company ->
+                    IconValueRow(icon = Icons.Filled.Business, value = company)
+                }
+                details.notes?.let { notes ->
+                    Row(verticalAlignment = Alignment.Top) {
+                        Icon(Icons.AutoMirrored.Filled.Notes, contentDescription = null)
+                        Spacer(Modifier.width(16.dp))
+                        Text(notes, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+                ContactRingtoneRow(
+                    displayName = details.displayName,
+                    customRingtone = details.customRingtone,
+                    onPicked = onSetRingtone,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ContactPhoneRow(
+    number: String,
+    isPrimary: Boolean,
+    canSetPrimary: Boolean,
+    onCall: () -> Unit,
+    onSetPrimary: () -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(number, style = MaterialTheme.typography.bodyLarge)
+            if (isPrimary) {
+                Text(
+                    text = "Default number",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        if (canSetPrimary) {
+            IconButton(onClick = onSetPrimary) {
+                Icon(
+                    imageVector = Icons.Filled.StarBorder,
+                    contentDescription = "Set as default",
+                )
+            }
+        } else if (isPrimary) {
+            Icon(
+                imageVector = Icons.Filled.Star,
+                contentDescription = "Default number",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+        IconButton(onClick = onCall) {
+            Icon(
+                imageVector = Icons.Filled.Call,
+                contentDescription = "Call $number",
+                tint = MaterialTheme.colorScheme.primary,
+            )
+        }
+    }
+}
+
+@Composable
+private fun IconValueRow(icon: androidx.compose.ui.graphics.vector.ImageVector, value: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, contentDescription = null)
+        Spacer(Modifier.width(16.dp))
+        Text(value, style = MaterialTheme.typography.bodyLarge)
+    }
+}
+
+@Composable
+private fun ContactRingtoneRow(
+    displayName: String,
+    customRingtone: String?,
+    onPicked: (android.net.Uri?) -> Unit,
+) {
+    val context = LocalContext.current
+    val title = remember(customRingtone) {
+        if (customRingtone == null) {
+            "Default ringtone"
+        } else {
+            runCatching {
+                RingtoneManager.getRingtone(context, customRingtone.toUri())
+                    ?.getTitle(context)
+            }.getOrNull() ?: "Custom ringtone"
+        }
+    }
+    val launcher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val picked: android.net.Uri? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                result.data?.getParcelableExtra(
+                    RingtoneManager.EXTRA_RINGTONE_PICKED_URI,
+                    android.net.Uri::class.java,
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                result.data?.getParcelableExtra<android.net.Uri>(
+                    RingtoneManager.EXTRA_RINGTONE_PICKED_URI,
+                )
+            }
+            // Default → null in our DB so a system-default change rolls
+            // through; otherwise pin the picked URI.
+            val systemDefault = RingtoneManager.getActualDefaultRingtoneUri(
+                context,
+                RingtoneManager.TYPE_RINGTONE,
+            ) ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+            onPicked(if (picked == systemDefault) null else picked)
+        }
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable {
+                val intent = Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
+                    putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_RINGTONE)
+                    putExtra(
+                        RingtoneManager.EXTRA_RINGTONE_TITLE,
+                        "Ringtone for $displayName",
+                    )
+                    putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
+                    putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false)
+                    customRingtone?.let {
+                        putExtra(
+                            RingtoneManager.EXTRA_RINGTONE_EXISTING_URI,
+                            it.toUri(),
+                        )
+                    }
+                }
+                runCatching { launcher.launch(intent) }
+            }
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Filled.Notifications, contentDescription = null)
+        Spacer(Modifier.width(16.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                text = "Tap to choose ringtone",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (customRingtone != null) {
+            TextButton(onClick = { onPicked(null) }) { Text("Reset") }
+        }
+    }
+}
+
+/**
+ * Writes a vCard 3.0 file under cacheDir/shared_contacts and hands it to
+ * whatever app the user picks via ACTION_SEND. The receiving app does the
+ * delivery — Bondwidth never touches the network itself.
+ */
+private fun shareBondedContact(context: android.content.Context, details: ContactDetails) {
+    runCatching {
+        val dir = File(context.cacheDir, "shared_contacts").apply { mkdirs() }
+        val file = File(dir, VCardBuilder.fileName(details.displayName))
+        file.writeText(VCardBuilder.build(details))
+        val uri = FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            file,
+        )
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/x-vcard"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(
+            Intent.createChooser(intent, "Share ${details.displayName}")
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+    }
+}

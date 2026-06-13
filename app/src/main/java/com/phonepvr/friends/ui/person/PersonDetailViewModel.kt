@@ -1,9 +1,15 @@
 package com.phonepvr.friends.ui.person
 
 import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.phonepvr.friends.data.blocking.BlockedNumberManager
+import com.phonepvr.friends.data.contacts.ContactDetails
+import com.phonepvr.friends.data.contacts.ContactWriter
+import com.phonepvr.friends.data.contacts.SystemContactsRepository
+import com.phonepvr.friends.data.repository.FavouritesRepository
 import com.phonepvr.friends.data.db.entity.EventEntity
 import com.phonepvr.friends.data.db.entity.TimelineEntryEntity
 import com.phonepvr.friends.data.db.relation.PersonWithDetails
@@ -21,11 +27,14 @@ import com.phonepvr.friends.domain.model.InteractionType
 import com.phonepvr.friends.ui.navigation.Routes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -44,11 +53,16 @@ private const val SUMMARY_WINDOW_DAYS = 365L
 private const val SUMMARY_WINDOW_MILLIS = SUMMARY_WINDOW_DAYS * 24L * 60L * 60L * 1000L
 
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class PersonDetailViewModel @Inject constructor(
     private val peopleRepository: PeopleRepository,
     private val timelineRepository: TimelineRepository,
     private val settingsRepository: SettingsRepository,
+    private val systemContactsRepository: SystemContactsRepository,
+    private val contactWriter: ContactWriter,
+    private val favouritesRepository: FavouritesRepository,
+    private val blockedNumberManager: BlockedNumberManager,
     @ApplicationContext private val appContext: Context,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
@@ -58,6 +72,135 @@ class PersonDetailViewModel @Inject constructor(
     val person: StateFlow<PersonWithDetails?> =
         peopleRepository.observePersonWithDetails(personId)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /**
+     * The bonded person's system contact resolved by lookupKey, paired with
+     * its current numeric id (the id can change as the platform merges /
+     * splits aggregates). Null until loaded, or when the person isn't linked
+     * to a system contact (rare — most bonded people come through the
+     * import / save-number flows that always carry a lookupKey).
+     */
+    private val _contactSnapshot = MutableStateFlow<Pair<Long, ContactDetails>?>(null)
+    val contactDetails: StateFlow<ContactDetails?> = _contactSnapshot
+        .map { it?.second }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** The contact id that backs [contactDetails], for navigating to its editor. */
+    val contactId: StateFlow<Long?> = _contactSnapshot
+        .map { it?.first }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    init {
+        viewModelScope.launch {
+            // Re-load whenever the lookupKey changes — covers the
+            // rename-on-bond flow where the key fills in after the person
+            // is first inserted.
+            person
+                .map { it?.person?.contactLookupKey?.takeIf { k -> k.isNotBlank() } }
+                .collect { key ->
+                    _contactSnapshot.value =
+                        if (key == null) null else systemContactsRepository.detailsByLookupKey(key)
+                }
+        }
+    }
+
+    /** Re-reads the contact after a write so the UI picks up the change. */
+    private fun refreshContact() {
+        viewModelScope.launch {
+            val key = person.value?.person?.contactLookupKey?.takeIf { it.isNotBlank() }
+                ?: return@launch
+            _contactSnapshot.value = systemContactsRepository.detailsByLookupKey(key)
+        }
+    }
+
+    /** Marks [dataId] as the contact's default number and reloads details. */
+    fun setPrimaryContactNumber(dataId: Long) {
+        viewModelScope.launch {
+            contactWriter.setPrimaryNumber(dataId)
+            refreshContact()
+        }
+    }
+
+    /** Per-contact ringtone — null reverts to system default. */
+    fun setCustomRingtone(uri: Uri?) {
+        viewModelScope.launch {
+            val id = _contactSnapshot.value?.first ?: return@launch
+            contactWriter.setCustomRingtone(id, uri)
+            refreshContact()
+        }
+    }
+
+    // --- Favourite (pin to the Calls-tab strip) ---
+
+    val isFavourite: StateFlow<Boolean> = person
+        .flatMapLatest { p ->
+            val key = p?.person?.contactLookupKey?.takeIf { it.isNotBlank() }
+            if (key == null) flowOf(false) else favouritesRepository.observeIsFavourite(key)
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    /** Pin / unpin to favourites. Needs a lookupKey + a primary number. */
+    fun toggleFavourite() {
+        val p = person.value?.person ?: return
+        val key = p.contactLookupKey?.takeIf { it.isNotBlank() } ?: return
+        val primaryNumber = _contactSnapshot.value?.second?.phoneNumbers?.firstOrNull()
+            ?: person.value?.phoneNumbers?.firstOrNull()?.rawNumber
+            ?: return
+        viewModelScope.launch {
+            favouritesRepository.toggle(
+                lookupKey = key,
+                displayName = p.displayName,
+                primaryNumber = primaryNumber,
+                photoRelativePath = p.photoRelativePath,
+            )
+        }
+    }
+
+    // --- Block / unblock the primary number ---
+
+    fun canBlock(): Boolean = blockedNumberManager.canBlock()
+
+    suspend fun isPrimaryBlocked(): Boolean {
+        val number = primaryNumber() ?: return false
+        return blockedNumberManager.isBlocked(number)
+    }
+
+    suspend fun setPrimaryBlocked(blocked: Boolean): Boolean {
+        val number = primaryNumber() ?: return false
+        return if (blocked) blockedNumberManager.block(number) else blockedNumberManager.unblock(number)
+    }
+
+    private fun primaryNumber(): String? =
+        _contactSnapshot.value?.second?.phoneNumbers?.firstOrNull()
+            ?: person.value?.phoneNumbers?.firstOrNull()?.rawNumber
+
+    // --- Call a specific number (reuses the reach-out + log-prompt flow) ---
+
+    fun callNumber(rawNumber: String) = launchReachOut(ReachOutMethod.CALL, rawNumber)
+
+    // --- Delete the system contact ---
+
+    private val _contactDeleted = MutableStateFlow(false)
+    /** Flips true once the underlying system contact has been deleted. */
+    val contactDeleted: StateFlow<Boolean> = _contactDeleted.asStateFlow()
+
+    /**
+     * Deletes the linked system contact (the person row / bond / timeline
+     * stay — matching the Contacts-tab delete, which only removes the
+     * address-book entry). The ContactInfoSection disappears afterwards
+     * because detailsByLookupKey then resolves to null.
+     */
+    fun deleteContact() {
+        val snapshot = _contactSnapshot.value ?: return
+        val key = person.value?.person?.contactLookupKey.orEmpty()
+        viewModelScope.launch {
+            val ok = contactWriter.delete(snapshot.first, key)
+            if (ok) {
+                _contactSnapshot.value = null
+                _contactDeleted.value = true
+            }
+        }
+    }
 
     val timeline: StateFlow<List<TimelineEntryEntity>> =
         timelineRepository.observeForPerson(personId)

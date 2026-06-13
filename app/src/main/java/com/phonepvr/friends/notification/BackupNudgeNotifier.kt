@@ -39,7 +39,7 @@ object BackupNudgeNotifier {
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("Time to back up Friends")
+            .setContentTitle("Time to back up Bondwidth")
             .setContentText("It's been a while since your last backup. Tap to export now.")
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)

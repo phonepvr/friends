@@ -3,7 +3,7 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <!--
-      Friends is offline by design and must never access the network.
+      Bondwidth is offline by design and must never access the network.
       These lines force-remove network permissions even if a merged
       library manifest tries to add them. The CI build fails if the
       final APK declares either permission.
@@ -13,11 +13,58 @@
         android:name="android.permission.ACCESS_NETWORK_STATE"
         tools:node="remove" />
 
-    <!-- Read-only access to contacts, used to import people. -->
+    <!-- Read-only access to contacts, used to import people and to power
+         the all-in-one Contacts browser. -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
+
+    <!-- Write contacts (all-in-one Contacts manager: edit / create /
+         delete entries in the system Contacts provider). Requested at
+         runtime the first time the user edits or creates a contact. -->
+    <uses-permission android:name="android.permission.WRITE_CONTACTS" />
 
     <!-- Read-only access to the call log, used to detect recent calls. -->
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
+
+    <!-- Place phone calls from the in-app dialer (all-in-one). Runtime. -->
+    <uses-permission android:name="android.permission.CALL_PHONE" />
+
+    <!-- Read phone state and SIM info, used to: route outgoing calls
+         through the right SIM, surface call state to the in-call UI,
+         and qualify as a default-dialer app. Runtime. -->
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.READ_PHONE_NUMBERS" />
+
+    <!-- Default-dialer privileged permissions. Auto-granted when
+         Bondwidth holds ROLE_DIALER; declared so the compile-time
+         checks for the InCallService and call-answering flows can
+         compile against them. -->
+    <uses-permission android:name="android.permission.MANAGE_OWN_CALLS" />
+    <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
+
+    <!-- Required for hosting the InCallService while a call is active. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+
+    <!--
+      Android 14+ requires a typed foreground-service permission for each
+      service type. The InCallService runs while a call is present and uses
+      FOREGROUND_SERVICE_TYPE_PHONE_CALL; without this permission the
+      startForeground call would throw SecurityException on API 34+ and the
+      call notification would be silently dropped on aggressive OEMs.
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
+
+    <!-- Keep the device awake during a call (the in-call activity already
+         uses FLAG_KEEP_SCREEN_ON, but the service can run when the screen
+         is off if the user dismisses the call UI). -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- Route call audio through speaker / bluetooth / earpiece. -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+
+    <!-- Required on Android 14+ for the in-call Activity to be launched
+         from a full-screen intent (incoming call ringer). Auto-granted
+         for apps that hold ROLE_DIALER. -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 
     <!-- Post reminder notifications (runtime permission on Android 13+). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -48,6 +95,7 @@
     <application
         android:name=".FriendsApplication"
         android:allowBackup="false"
+        android:enableOnBackInvokedCallback="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
@@ -67,7 +115,54 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!--
+              ROLE_DIALER qualifier requires Activities (not activity-aliases)
+              that handle ACTION_DIAL with and without tel: data. MainActivity
+              picks up these filters; deepLinkFor() routes them to the Calls
+              tab / full-screen Dialpad with the number pre-filled.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.DIAL" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.DIAL" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="tel" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="tel" />
+            </intent-filter>
+            <!--
+              Opening a .vcf attachment (email, file manager, Bluetooth
+              transfer) routes here. deepLinkFor() detects the vCard mime /
+              extension and sends the user to the import-preview screen. Both
+              content:// and file:// are covered; the three mime types are
+              the ones contacts apps stamp on vCards in the wild.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="text/x-vcard" />
+                <data android:mimeType="text/vcard" />
+                <data android:mimeType="text/directory" />
+            </intent-filter>
         </activity>
+
+        <!--
+          activity-alias removed — ROLE_DIALER qualification requires
+          intent filters on a real <activity>, and the MainActivity
+          declaration above carries them. Aliases were tolerated by the
+          PackageManager.queryIntentActivities() check but rejected by
+          the role qualifier on at least some OEMs ("App was denied
+          access to be the default Phone app").
+        -->
 
         <receiver
             android:name=".widget.UpcomingWidgetReceiver"
@@ -83,5 +178,66 @@
         <receiver
             android:name=".notification.MarkAsWishedReceiver"
             android:exported="false" />
+
+        <!-- Answer / Decline / Hang up actions from the call notification. -->
+        <receiver
+            android:name=".service.CallActionReceiver"
+            android:exported="false" />
+
+        <!--
+          InCallService — bound by the platform's Telecom framework when
+          Bondwidth holds ROLE_DIALER and a call is present. IN_CALL_SERVICE_UI
+          + IN_CALL_SERVICE_RINGING tell the OS that we render BOTH the
+          incoming-ringing UI and the ongoing-call UI. The
+          BondwidthInCallService stub funnels the Call lifecycle into
+          CallSession; the InCallActivity reads it and draws the screen.
+        -->
+        <service
+            android:name=".service.BondwidthInCallService"
+            android:enabled="true"
+            android:exported="true"
+            android:foregroundServiceType="phoneCall"
+            android:permission="android.permission.BIND_INCALL_SERVICE">
+            <meta-data
+                android:name="android.telecom.IN_CALL_SERVICE_UI"
+                android:value="true" />
+            <meta-data
+                android:name="android.telecom.IN_CALL_SERVICE_RINGING"
+                android:value="true" />
+            <intent-filter>
+                <action android:name="android.telecom.InCallService" />
+            </intent-filter>
+        </service>
+
+        <!--
+          InCallActivity — separate from MainActivity so it can be launched
+          over the lock screen during an incoming call without colliding
+          with the normal app stack. setShowWhenLocked + setTurnScreenOn
+          are called in onCreate so the screen wakes for ringers.
+        -->
+        <activity
+            android:name=".ui.incall.InCallActivity"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:excludeFromRecents="true"
+            android:supportsPictureInPicture="true"
+            android:resizeableActivity="true"
+            android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|keyboardHidden"
+            android:theme="@style/Theme.Friends" />
+
+        <!--
+          FileProvider exposes only the cacheDir/shared_contacts staging
+          folder, used to share a contact as a .vcf to another app the user
+          picks. No network involved — the receiving app handles delivery.
+        -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 </manifest>

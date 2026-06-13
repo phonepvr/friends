@@ -1,0 +1,49 @@
+# Draft F-Droid build recipe for Bondwidth.
+#
+# This file is NOT used by this app's build. It lives here only so the recipe
+# is version-controlled next to the app. To publish on F-Droid, copy it to the
+# official data repo at:
+#
+#     fdroiddata/metadata/com.phonepvr.friends.yml
+#
+# then open a merge request against https://gitlab.com/fdroid/fdroiddata
+# (fork -> add the file -> validate -> MR). See RELEASING.md for the full flow.
+#
+# F-Droid builds the tagged source itself and signs the APK with F-Droid's own
+# key (NOT our release key), so F-Droid installs are separate from the APKs we
+# publish on GitHub.
+#
+# NOTE: confirm the License value. We use GPL-3.0-only conservatively; change
+# to GPL-3.0-or-later if that matches the project's intent (and the upstream
+# Fossify projects' "or later" choice).
+
+Categories:
+  - Phone & SMS
+  - Connectivity
+License: GPL-3.0-only
+AuthorName: phonepvr
+WebSite: https://github.com/phonepvr/friends
+SourceCode: https://github.com/phonepvr/friends
+IssueTracker: https://github.com/phonepvr/friends/issues
+Changelog: https://github.com/phonepvr/friends/releases
+
+RepoType: git
+Repo: https://github.com/phonepvr/friends.git
+
+Builds:
+  - versionName: 1.0.0
+    versionCode: 1
+    commit: v1.0.0
+    subdir: app
+    gradle:
+      - yes
+
+# Auto-create a build entry for each new vX.Y.Z tag, reading the versionName
+# and versionCode committed in app/build.gradle.kts at that tag.
+AutoUpdateMode: Version v%v
+# Only consider clean release tags (v1.0.0, v1.2.3 ...). The experimental CI
+# tags (v1.0.0-build.<N>.<attempt>) deliberately do NOT match this pattern,
+# so they never reach F-Droid.
+UpdateCheckMode: Tags ^v[0-9.]+$
+CurrentVersion: 1.0.0
+CurrentVersionCode: 1

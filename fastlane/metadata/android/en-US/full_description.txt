@@ -1,0 +1,33 @@
+Bondwidth is an all-in-one phone, contacts, and relationship app that works entirely on your device. No accounts, no servers, no tracking — and it quietly helps you stay close to the people who matter.
+
+Friendship is small attentions, often. Set a check-in cadence for each person and Bondwidth gently flags who's getting too quiet, so you can reach out before silence becomes a habit. Birthdays and anniversaries are remembered for you, and the calls you make are counted automatically.
+
+Private by design
+
+* No internet permission at all — the app cannot reach the network, and its build pipeline fails if that ever changes.
+* No accounts, no servers, no cloud. Everything stays in the app's private storage on your device.
+* No analytics, no ads, no third-party trackers.
+* Optional encrypted backups (AES-256-GCM) that only you can open.
+* Optional biometric app lock and a "hide from screenshots" mode.
+
+Phone
+
+* Default dialer with its own in-call screen, Picture-in-Picture, and per-contact ringtones.
+* T9 smart dial, speed dial, and dual-SIM call routing.
+* Block numbers, missed-call notifications, call history and search.
+* Colour-coded call directions, with optional WhatsApp / Signal shortcuts.
+
+Contacts
+
+* Browse, create, edit and delete contacts, with group filtering.
+* Typed phone numbers, emails, postal address, website, organisation, notes and birthday.
+* Find and merge duplicates; import and export vCard files.
+
+Bonds
+
+* Per-person check-in cadence with gentle overdue nudges.
+* Birthday and anniversary reminders, with a "Mark as wished" action.
+* An interaction timeline and an at-a-glance relationship dashboard.
+* A home-screen widget for upcoming occasions and who you haven't spoken to lately.
+
+Bondwidth is free software (GPL-3.0). Its phone and contacts features are derived from the Fossify Phone and Fossify Contacts projects.

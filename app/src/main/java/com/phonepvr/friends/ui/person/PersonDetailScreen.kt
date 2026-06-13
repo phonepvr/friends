@@ -100,6 +100,7 @@ import com.phonepvr.friends.ui.common.packDateDigits
 import com.phonepvr.friends.ui.common.parseDateDigits
 import com.phonepvr.friends.ui.tooltips.CoachMarkBanner
 import com.phonepvr.friends.ui.tooltips.Tooltips
+import com.phonepvr.friends.ui.theme.callColor
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -1096,13 +1097,10 @@ private fun TimelineRow(
 
 @Composable
 private fun entryAccentColor(entry: TimelineEntryEntity): Color = when (entry.type) {
-    InteractionType.CALL -> when (entry.callDirection) {
-        CallType.INCOMING -> MaterialTheme.colorScheme.primary
-        CallType.OUTGOING -> MaterialTheme.colorScheme.tertiary
-        CallType.MISSED -> MaterialTheme.colorScheme.error
-        CallType.REJECTED -> MaterialTheme.colorScheme.outline
-        null -> MaterialTheme.colorScheme.primary
-    }
+    // Calls use the shared call-log palette (blue outgoing, green incoming,
+    // red missed/rejected); a direction-less call falls back to primary.
+    InteractionType.CALL -> entry.callDirection?.let { callColor(it) }
+        ?: MaterialTheme.colorScheme.primary
     InteractionType.MEET -> MaterialTheme.colorScheme.secondary
     InteractionType.MESSAGE -> MaterialTheme.colorScheme.tertiary
     InteractionType.OTHER -> MaterialTheme.colorScheme.outlineVariant

@@ -218,6 +218,19 @@ class InCallViewModel @Inject constructor(
         initialValue = InCallUiState(),
     )
 
+    /**
+     * Mirrors the user's "hide from screenshots" preference so [InCallActivity]
+     * can apply WindowManager FLAG_SECURE to the in-call window in lockstep
+     * with the rest of the app. The in-call screen is a separate Activity /
+     * window from MainActivity, so it has to honour the setting itself —
+     * otherwise the one screen that names who you're talking to would stay
+     * screenshot- / recording- / cast-able even when the user asked to hide
+     * the app.
+     */
+    val hideFromScreenshots: StateFlow<Boolean> = settingsRepository.settings
+        .map { it.hideFromScreenshots }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
     fun accept() = callSession.accept()
     fun reject() = callSession.reject()
     fun rejectWith(message: String) = callSession.rejectWithMessage(message)

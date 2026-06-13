@@ -76,6 +76,22 @@ class InCallActivity : ComponentActivity() {
 
         setContent {
             val state by viewModel.state.collectAsStateWithLifecycle()
+            val hideFromScreenshots by viewModel.hideFromScreenshots
+                .collectAsStateWithLifecycle()
+
+            // Match MainActivity: toggle FLAG_SECURE in lockstep with the
+            // user's setting so the in-call screen (caller name / number /
+            // photo) stays out of screenshots, screen recordings, the recents
+            // preview and casts whenever the user has chosen to hide the app.
+            // This is a separate window from MainActivity's, so it has to set
+            // the flag itself.
+            LaunchedEffect(hideFromScreenshots) {
+                if (hideFromScreenshots) {
+                    window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                } else {
+                    window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                }
+            }
 
             // After the call ends, hold the "Call ended" screen for a beat
             // so the user sees what happened, then finish so the activity

@@ -17,16 +17,29 @@ The build is also wired so that `versionCode` auto-increments from
 
 ## A) Generate the keystore on GitHub Actions
 
-1. Go to **Actions → "Generate signing keystore" → Run workflow → Run**.
-2. After the run completes, open the run page and:
-   - Download the keystore artifact **`signing-keystore`** (a zip containing
-     `signing-keystore.b64` and `credentials.txt`).
-   - Open `signing-keystore.b64`: it contains exactly one line of base64 —
-     that is the value for `SIGNING_KEYSTORE_BASE64`.
-   - Open `credentials.txt`: it lists the values for `SIGNING_STORE_PASSWORD`,
-     `SIGNING_KEY_PASSWORD`, and `SIGNING_KEY_ALIAS`.
-   - The job summary on the workflow run page also prints these values for
-     convenience.
+This is a **public** repository, and Actions artifacts on a public repo can be
+downloaded by third parties. So the workflow never uploads the raw key: it
+encrypts the whole bundle with a passphrase only you hold and uploads just the
+ciphertext.
+
+1. Pick a strong, random passphrase (e.g. 30+ characters from a password
+   manager) and save it — you need it to decrypt the bundle.
+2. Add it as a repository secret named **`KEYSTORE_EXPORT_PASSPHRASE`** under
+   **Settings → Secrets and variables → Actions**.
+3. Go to **Actions → "Generate signing keystore" → Run workflow → Run**. The
+   run fails fast if that secret is not set.
+4. When it finishes, download the artifact **`signing-keystore-encrypted`**
+   (it contains one file, `keystore-bundle.enc`).
+5. Decrypt it locally — the exact command is also printed in the run's job
+   summary:
+   ```sh
+   read -rs EXPORT_PASSPHRASE && export EXPORT_PASSPHRASE   # type your passphrase
+   openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 \
+     -in keystore-bundle.enc -out bundle.tar -pass env:EXPORT_PASSPHRASE
+   tar xf bundle.tar
+   ```
+   This yields `signing-keystore.b64` (the value for `SIGNING_KEYSTORE_BASE64`)
+   and `credentials.txt` (the store/key passwords and the alias).
 
 ## B) Store four repository secrets
 
@@ -40,8 +53,9 @@ repository secrets. Names must match exactly:
   store password, by convention).
 - `SIGNING_KEY_ALIAS` — paste from `credentials.txt` (`bondwidth`).
 
-The artifact auto-deletes after 7 days. Once the secrets are saved, you can
-also re-run the workflow at any time to download the credentials again.
+The encrypted artifact auto-deletes after 7 days and is harmless even before
+then. Once the secrets are saved you can re-run the workflow at any time to
+produce a fresh encrypted bundle.
 
 ## C) Back up the keystore — CRITICAL
 
@@ -73,9 +87,24 @@ loss.
 - To resume updates: re-run step **A** to generate a fresh keystore, replace
   the four secrets, and repeat step **D** once.
 
+## F) Rotating the key (after a suspected exposure)
+
+If the signing key may have leaked, rotate it:
+
+1. Regenerate by repeating steps **A**–**B**: a fresh keystore and new secrets,
+   which means a new signing certificate.
+2. Do the one-time on-device migration in step **D** once (export a backup,
+   uninstall, install the next signed build, import the backup). Android treats
+   the new certificate as a different signer, so an in-place update across the
+   rotation is not possible — this is expected.
+
+Older releases signed with the previous key keep working until uninstalled;
+they just can't be updated by builds signed with the new key.
+
 ## Local development
 
 Local Gradle builds do **not** require the signing secrets. The
-`signingConfigs.debug` block in `app/build.gradle.kts` only enforces the
-keystore when `GITHUB_ACTIONS=true`. Locally it falls back to AGP's
-auto-generated debug key.
+`signingConfigs.debug` block in `app/build.gradle.kts` uses the keystore only
+when all four `SIGNING_*` environment variables are set and the keystore file
+exists (as they are in CI). Locally it falls back to AGP's auto-generated debug
+key.

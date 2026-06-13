@@ -13,6 +13,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import com.phonepvr.friends.domain.model.CallType
 import com.phonepvr.friends.domain.model.ThemeMode
 
 /**
@@ -24,12 +25,44 @@ import com.phonepvr.friends.domain.model.ThemeMode
 data class CallColors(
     val accept: Color,
     val onAccept: Color,
+    /** Call-log direction accents: blue outgoing, green incoming, red missed. */
+    val incoming: Color,
+    val outgoing: Color,
+    val missed: Color,
 )
 
-private val LightCallColors = CallColors(accept = LightCallAccept, onAccept = LightOnCallAccept)
-private val DarkCallColors = CallColors(accept = DarkCallAccept, onAccept = DarkOnCallAccept)
+private val LightCallColors = CallColors(
+    accept = LightCallAccept,
+    onAccept = LightOnCallAccept,
+    incoming = LightCallIncoming,
+    outgoing = LightCallOutgoing,
+    missed = LightCallMissed,
+)
+private val DarkCallColors = CallColors(
+    accept = DarkCallAccept,
+    onAccept = DarkOnCallAccept,
+    incoming = DarkCallIncoming,
+    outgoing = DarkCallOutgoing,
+    missed = DarkCallMissed,
+)
 
 val LocalCallColors = staticCompositionLocalOf { LightCallColors }
+
+/**
+ * The fixed accent for a call [type]: blue outgoing, green incoming, red for
+ * both missed and rejected. Reads [LocalCallColors], so it tracks light/dark
+ * and stays stable under Material You. Single source of truth for the call-log
+ * colour coding across the dialer, call history and person timeline.
+ */
+@Composable
+fun callColor(type: CallType): Color {
+    val colors = LocalCallColors.current
+    return when (type) {
+        CallType.INCOMING -> colors.incoming
+        CallType.OUTGOING -> colors.outgoing
+        CallType.MISSED, CallType.REJECTED -> colors.missed
+    }
+}
 
 private val LightColors = lightColorScheme(
     primary = LightPrimary,

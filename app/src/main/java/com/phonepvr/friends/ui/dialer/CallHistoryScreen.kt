@@ -28,9 +28,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Message
 import androidx.compose.material.icons.filled.Call
-import androidx.compose.material.icons.filled.CallMade
-import androidx.compose.material.icons.filled.CallMissed
-import androidx.compose.material.icons.filled.CallReceived
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Person
@@ -58,7 +55,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -72,7 +68,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.phonepvr.friends.data.calllog.DeviceCall
 import com.phonepvr.friends.data.dialer.CallPlacer
 import com.phonepvr.friends.domain.model.CallType
+import com.phonepvr.friends.ui.components.CallTypeBadge
 import com.phonepvr.friends.ui.components.PersonAvatar
+import com.phonepvr.friends.ui.theme.callColor
 import com.phonepvr.friends.ui.permissions.PermissionRationaleSheet
 import kotlinx.coroutines.launch
 import java.text.DateFormat
@@ -371,18 +369,14 @@ private fun CallRow(call: DeviceCall) {
             .padding(horizontal = 24.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(
-            imageVector = call.type.icon(),
-            contentDescription = null,
-            modifier = Modifier.size(20.dp),
-            tint = call.type.tint(),
-        )
+        CallTypeBadge(type = call.type, size = 36.dp, contentDescription = null)
         Spacer(Modifier.width(16.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = call.type.label() +
                     if (call.durationSeconds > 0) " · ${formatDuration(call.durationSeconds)}" else "",
                 style = MaterialTheme.typography.bodyLarge,
+                color = callColor(call.type),
             )
             Text(
                 text = historyTimestampFormat.format(Date(call.timestampMillis)),
@@ -391,19 +385,6 @@ private fun CallRow(call: DeviceCall) {
             )
         }
     }
-}
-
-private fun CallType.icon(): ImageVector = when (this) {
-    CallType.INCOMING -> Icons.Filled.CallReceived
-    CallType.OUTGOING -> Icons.Filled.CallMade
-    CallType.MISSED, CallType.REJECTED -> Icons.Filled.CallMissed
-}
-
-@Composable
-private fun CallType.tint(): Color = when (this) {
-    CallType.INCOMING -> MaterialTheme.colorScheme.tertiary
-    CallType.OUTGOING -> MaterialTheme.colorScheme.primary
-    CallType.MISSED, CallType.REJECTED -> MaterialTheme.colorScheme.error
 }
 
 private fun CallType.label(): String = when (this) {

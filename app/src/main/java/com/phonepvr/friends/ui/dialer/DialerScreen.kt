@@ -39,9 +39,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Message
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Call
-import androidx.compose.material.icons.filled.CallMade
-import androidx.compose.material.icons.filled.CallMissed
-import androidx.compose.material.icons.filled.CallReceived
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Dialpad
@@ -76,7 +73,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.annotation.DrawableRes
 import androidx.compose.ui.platform.LocalContext
@@ -93,6 +89,7 @@ import com.phonepvr.friends.R
 import com.phonepvr.friends.data.db.entity.FavouriteContactEntity
 import com.phonepvr.friends.data.dialer.CallPlacer
 import com.phonepvr.friends.domain.model.CallType
+import com.phonepvr.friends.ui.components.CallTypeBadge
 import com.phonepvr.friends.ui.components.Haptic
 import com.phonepvr.friends.ui.components.PersonAvatar
 import com.phonepvr.friends.ui.components.rememberHaptics
@@ -683,13 +680,8 @@ private fun RecentRow(
                 .padding(vertical = 4.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = entry.type.icon(),
-                    contentDescription = null,
-                    modifier = Modifier.size(14.dp),
-                    tint = entry.type.tint(),
-                )
-                Spacer(Modifier.width(6.dp))
+                CallTypeBadge(type = entry.type, size = 22.dp)
+                Spacer(Modifier.width(8.dp))
                 Text(
                     text = entry.displayName ?: entry.number,
                     style = MaterialTheme.typography.bodyLarge,
@@ -871,20 +863,6 @@ private fun SheetActionPainter(@DrawableRes iconRes: Int, label: String, onClick
         Spacer(Modifier.width(20.dp))
         Text(label, style = MaterialTheme.typography.bodyLarge)
     }
-}
-
-private fun CallType.icon(): ImageVector = when (this) {
-    CallType.INCOMING -> Icons.Filled.CallReceived
-    CallType.OUTGOING -> Icons.Filled.CallMade
-    CallType.MISSED, CallType.REJECTED -> Icons.Filled.CallMissed
-}
-
-@Composable
-private fun CallType.tint(): Color = when (this) {
-    CallType.INCOMING, CallType.OUTGOING ->
-        MaterialTheme.colorScheme.onSurfaceVariant
-    CallType.MISSED, CallType.REJECTED ->
-        MaterialTheme.colorScheme.error
 }
 
 // Cached so we don't allocate a DateFormat per Recents row per recomposition.

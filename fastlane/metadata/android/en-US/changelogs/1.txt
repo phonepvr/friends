@@ -1,0 +1,1 @@
+First F-Droid release of Bondwidth — a private, fully offline phone, contacts and relationship app. Includes the default dialer with its own in-call UI, a full contacts manager, and per-person check-in cadences with birthday and anniversary reminders. Everything runs on-device with no network access.

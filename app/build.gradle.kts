@@ -15,10 +15,22 @@ android {
         applicationId = "com.phonepvr.friends"
         minSdk = 26
         targetSdk = 35
-        // CI sets APP_VERSION_CODE/APP_VERSION_NAME via env so each build
-        // installs as a distinct version. Local builds use the defaults.
-        versionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: 1
-        versionName = System.getenv("APP_VERSION_NAME") ?: "1.0.0"
+
+        // ── Release identity (the F-Droid channel) ──────────────────────────
+        // F-Droid builds the tagged source on its own infrastructure with NO
+        // environment set, so it reads these committed values. Bump BOTH for
+        // every F-Droid release, commit, then tag vX.Y.Z matching
+        // releaseVersionName; versionCode must increase by at least 1 each
+        // release. See RELEASING.md.
+        val releaseVersionCode = 1
+        val releaseVersionName = "1.0.0"
+
+        // CI experimentation overrides these via env (APP_VERSION_CODE /
+        // APP_VERSION_NAME, derived from github.run_number) so every branch
+        // build installs as a distinct version on a dev device. Those builds
+        // are signed with our key and never reach F-Droid.
+        versionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: releaseVersionCode
+        versionName = System.getenv("APP_VERSION_NAME") ?: releaseVersionName
     }
 
     signingConfigs {

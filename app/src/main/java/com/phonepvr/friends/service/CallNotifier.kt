@@ -192,6 +192,7 @@ class CallNotifier @Inject constructor(
 
     private fun activityIntent(): PendingIntent {
         val intent = Intent(context, InCallActivity::class.java)
+            .setPackage(context.packageName)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         return PendingIntent.getActivity(
             context,
@@ -202,7 +203,9 @@ class CallNotifier @Inject constructor(
     }
 
     private fun broadcast(action: String, requestCode: Int): PendingIntent {
-        val intent = Intent(context, CallActionReceiver::class.java).setAction(action)
+        val intent = Intent(context, CallActionReceiver::class.java)
+            .setAction(action)
+            .setPackage(context.packageName)
         return PendingIntent.getBroadcast(
             context,
             requestCode,

@@ -39,6 +39,7 @@ object ReminderNotifier {
         val notificationId = eventNotificationId(reminder)
 
         val openIntent = Intent(context, MainActivity::class.java).apply {
+            setPackage(context.packageName)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         }
         val openPi = PendingIntent.getActivity(
@@ -50,6 +51,7 @@ object ReminderNotifier {
 
         val eventLabel = eventLabel(reminder.type)
         val wishedIntent = Intent(context, MarkAsWishedReceiver::class.java).apply {
+            setPackage(context.packageName)
             putExtra(MarkAsWishedReceiver.EXTRA_PERSON_ID, reminder.personId)
             putExtra(MarkAsWishedReceiver.EXTRA_EVENT_LABEL, eventLabel)
             putExtra(MarkAsWishedReceiver.EXTRA_NOTIFICATION_ID, notificationId)
@@ -87,6 +89,7 @@ object ReminderNotifier {
         ensureChannel(manager)
 
         val openIntent = Intent(context, MainActivity::class.java).apply {
+            setPackage(context.packageName)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         }
         val pi = PendingIntent.getActivity(

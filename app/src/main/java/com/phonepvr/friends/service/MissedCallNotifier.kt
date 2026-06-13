@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.provider.Telephony
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.phonepvr.friends.MainActivity
@@ -55,11 +56,17 @@ class MissedCallNotifier @Inject constructor(
                 "Call back",
                 callBackIntent(number, id),
             )
-            builder.addAction(
-                android.R.drawable.sym_action_email,
-                "Message",
-                messageIntent(number),
-            )
+            // "Message" targets the user's default SMS app explicitly — an
+            // implicit SENDTO intent inside a PendingIntent would be a leak
+            // (CWE-927). Hide the action when there's no default SMS app to
+            // address.
+            defaultSmsPackage()?.let { smsPackage ->
+                builder.addAction(
+                    android.R.drawable.sym_action_email,
+                    "Message",
+                    messageIntent(number, smsPackage),
+                )
+            }
         }
         runCatching { manager.notify(id, builder.build()) }
     }
@@ -71,6 +78,7 @@ class MissedCallNotifier @Inject constructor(
 
     private fun openHistoryIntent(number: String?, notifId: Int): PendingIntent {
         val intent = Intent(context, MainActivity::class.java).apply {
+            setPackage(context.packageName)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             if (!number.isNullOrBlank()) {
                 putExtra(MainActivity.EXTRA_OPEN_CALL_HISTORY, number)
@@ -87,6 +95,7 @@ class MissedCallNotifier @Inject constructor(
     private fun callBackIntent(number: String, notifId: Int): PendingIntent {
         val intent = Intent(context, CallActionReceiver::class.java)
             .setAction(CallActionReceiver.ACTION_CALL_BACK)
+            .setPackage(context.packageName)
             .putExtra(CallActionReceiver.EXTRA_NUMBER, number)
         return PendingIntent.getBroadcast(
             context,
@@ -96,8 +105,9 @@ class MissedCallNotifier @Inject constructor(
         )
     }
 
-    private fun messageIntent(number: String): PendingIntent {
+    private fun messageIntent(number: String, smsPackage: String): PendingIntent {
         val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:$number"))
+            .setPackage(smsPackage)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         return PendingIntent.getActivity(
             context,
@@ -106,6 +116,10 @@ class MissedCallNotifier @Inject constructor(
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
     }
+
+    /** Package name of the user's default SMS app, or null if none is set. */
+    private fun defaultSmsPackage(): String? =
+        Telephony.Sms.getDefaultSmsPackage(context)
 
     private fun ensureChannel() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return

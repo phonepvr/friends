@@ -1,5 +1,6 @@
 package com.phonepvr.friends.ui.onboarding
 
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -249,7 +250,16 @@ private fun PermissionsSlide(viewModel: OnboardingViewModel) {
     }
     val roleLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
-    ) { viewModel.refreshDefaultDialer() }
+    ) {
+        val granted = viewModel.refreshDefaultDialer()
+        // On Android 13+, a sideloaded app's role request is silently blocked
+        // by "restricted settings": the picker returns without granting and
+        // with no error, so the user is left thinking it worked. Detect that
+        // and take them straight to the guided fix instead of a dead end.
+        if (!granted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            showRestrictedDialog = true
+        }
+    }
 
     Column(
         modifier = Modifier

@@ -123,7 +123,16 @@ fun SettingsScreen(
 
     val dialerRoleLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
-    ) { viewModel.refreshDialerRoleState() }
+    ) {
+        val granted = viewModel.refreshDialerRoleState()
+        // On Android 13+, a sideloaded app's role request is silently blocked
+        // by "restricted settings" — it returns without granting and with no
+        // error. Detect the no-op and open the guided fix automatically rather
+        // than relying on the user to find the "Can't set as default?" row.
+        if (!granted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            showRestrictedSettingsDialog = true
+        }
+    }
 
     Scaffold(
         topBar = {

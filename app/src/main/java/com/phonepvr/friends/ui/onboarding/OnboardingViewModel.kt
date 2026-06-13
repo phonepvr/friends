@@ -33,9 +33,16 @@ class OnboardingViewModel @Inject constructor(
         }
     }
 
-    /** Re-read after returning from the system "default phone app" picker. */
-    fun refreshDefaultDialer() {
-        _isDefaultDialer.value = dialerRoleManager.isDefaultDialer()
+    /**
+     * Re-read after returning from the system "default phone app" picker.
+     * Returns the fresh state so the caller can guide recovery when the
+     * request didn't take (e.g. Android 13+ silently blocks the role for
+     * sideloaded apps via "restricted settings").
+     */
+    fun refreshDefaultDialer(): Boolean {
+        val isDefault = dialerRoleManager.isDefaultDialer()
+        _isDefaultDialer.value = isDefault
+        return isDefault
     }
 
     /** Intent for the default-phone-app picker, or null if unavailable here. */

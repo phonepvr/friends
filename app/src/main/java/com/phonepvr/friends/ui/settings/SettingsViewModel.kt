@@ -57,8 +57,15 @@ class SettingsViewModel @Inject constructor(
     private val _isDefaultDialer = MutableStateFlow(dialerRoleManager.isDefaultDialer())
     val isDefaultDialer: StateFlow<Boolean> = _isDefaultDialer.asStateFlow()
 
-    fun refreshDialerRoleState() {
-        _isDefaultDialer.value = dialerRoleManager.isDefaultDialer()
+    /**
+     * Re-read after returning from the role picker. Returns the fresh state
+     * so the caller can guide recovery when the request didn't take (the
+     * Android 13+ restricted-settings block on sideloaded apps).
+     */
+    fun refreshDialerRoleState(): Boolean {
+        val isDefault = dialerRoleManager.isDefaultDialer()
+        _isDefaultDialer.value = isDefault
+        return isDefault
     }
 
     /**

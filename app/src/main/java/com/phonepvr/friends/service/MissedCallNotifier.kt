@@ -77,12 +77,11 @@ class MissedCallNotifier @Inject constructor(
     }
 
     private fun openHistoryIntent(number: String?, notifId: Int): PendingIntent {
-        val intent = Intent(context, MainActivity::class.java).apply {
-            setPackage(context.packageName)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-            if (!number.isNullOrBlank()) {
-                putExtra(MainActivity.EXTRA_OPEN_CALL_HISTORY, number)
-            }
+        val intent = Intent(context, MainActivity::class.java)
+            .setPackage(context.packageName)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        if (!number.isNullOrBlank()) {
+            intent.putExtra(MainActivity.EXTRA_OPEN_CALL_HISTORY, number)
         }
         return PendingIntent.getActivity(
             context,

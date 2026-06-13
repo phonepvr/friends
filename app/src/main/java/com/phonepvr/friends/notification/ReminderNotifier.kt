@@ -38,10 +38,9 @@ object ReminderNotifier {
         ensureChannel(manager)
         val notificationId = eventNotificationId(reminder)
 
-        val openIntent = Intent(context, MainActivity::class.java).apply {
-            setPackage(context.packageName)
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-        }
+        val openIntent = Intent(context, MainActivity::class.java)
+            .setPackage(context.packageName)
+            .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
         val openPi = PendingIntent.getActivity(
             context,
             notificationId,
@@ -50,12 +49,11 @@ object ReminderNotifier {
         )
 
         val eventLabel = eventLabel(reminder.type)
-        val wishedIntent = Intent(context, MarkAsWishedReceiver::class.java).apply {
-            setPackage(context.packageName)
-            putExtra(MarkAsWishedReceiver.EXTRA_PERSON_ID, reminder.personId)
-            putExtra(MarkAsWishedReceiver.EXTRA_EVENT_LABEL, eventLabel)
-            putExtra(MarkAsWishedReceiver.EXTRA_NOTIFICATION_ID, notificationId)
-        }
+        val wishedIntent = Intent(context, MarkAsWishedReceiver::class.java)
+            .setPackage(context.packageName)
+            .putExtra(MarkAsWishedReceiver.EXTRA_PERSON_ID, reminder.personId)
+            .putExtra(MarkAsWishedReceiver.EXTRA_EVENT_LABEL, eventLabel)
+            .putExtra(MarkAsWishedReceiver.EXTRA_NOTIFICATION_ID, notificationId)
         val wishedPi = PendingIntent.getBroadcast(
             context,
             notificationId,
@@ -88,10 +86,9 @@ object ReminderNotifier {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
         ensureChannel(manager)
 
-        val openIntent = Intent(context, MainActivity::class.java).apply {
-            setPackage(context.packageName)
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-        }
+        val openIntent = Intent(context, MainActivity::class.java)
+            .setPackage(context.packageName)
+            .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
         val pi = PendingIntent.getActivity(
             context,
             0,

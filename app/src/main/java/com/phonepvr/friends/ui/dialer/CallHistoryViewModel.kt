@@ -3,6 +3,7 @@ package com.phonepvr.friends.ui.dialer
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.phonepvr.friends.data.calllog.CallLogWriter
 import com.phonepvr.friends.data.calllog.DeviceCall
 import com.phonepvr.friends.data.contacts.SystemContactsRepository
 import com.phonepvr.friends.data.db.dao.PersonDao
@@ -16,6 +17,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
@@ -40,6 +42,7 @@ class CallHistoryViewModel @Inject constructor(
     systemContactsRepository: SystemContactsRepository,
     personDao: PersonDao,
     private val callPlacer: CallPlacer,
+    private val callLogWriter: CallLogWriter,
 ) : ViewModel() {
 
     val number: String =
@@ -111,6 +114,15 @@ class CallHistoryViewModel @Inject constructor(
 
     fun dismissPlaceError() {
         placeError.value = null
+    }
+
+    /**
+     * Deletes one entry from the system call log. The Recents flow observes
+     * the CallLog provider, so the list refreshes itself once the row is gone.
+     * Needs WRITE_CALL_LOG, which the screen requests before calling this.
+     */
+    fun deleteCall(id: Long) {
+        viewModelScope.launch { callLogWriter.deleteCall(id) }
     }
 
     companion object {

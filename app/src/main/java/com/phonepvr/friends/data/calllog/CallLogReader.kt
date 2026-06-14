@@ -13,6 +13,8 @@ data class DeviceCall(
     val timestampMillis: Long,
     /** Call length in seconds; 0 for missed/rejected. */
     val durationSeconds: Long,
+    /** Provider _ID, used to delete this specific entry. 0 when not read. */
+    val id: Long = 0L,
 )
 
 /** Read-only access to the device call log via the CallLog content provider. */
@@ -25,6 +27,7 @@ class CallLogReader @Inject constructor(
         context.contentResolver.query(
             CallLog.Calls.CONTENT_URI,
             arrayOf(
+                CallLog.Calls._ID,
                 CallLog.Calls.NUMBER,
                 CallLog.Calls.TYPE,
                 CallLog.Calls.DATE,
@@ -34,6 +37,7 @@ class CallLogReader @Inject constructor(
             arrayOf(sinceMillis.toString()),
             "${CallLog.Calls.DATE} DESC",
         )?.use { cursor ->
+            val idColumn = cursor.getColumnIndexOrThrow(CallLog.Calls._ID)
             val numberColumn = cursor.getColumnIndexOrThrow(CallLog.Calls.NUMBER)
             val typeColumn = cursor.getColumnIndexOrThrow(CallLog.Calls.TYPE)
             val dateColumn = cursor.getColumnIndexOrThrow(CallLog.Calls.DATE)
@@ -42,6 +46,7 @@ class CallLogReader @Inject constructor(
                 val type = mapCallType(cursor.getInt(typeColumn)) ?: continue
                 calls.add(
                     DeviceCall(
+                        id = cursor.getLong(idColumn),
                         number = cursor.getString(numberColumn).orEmpty(),
                         type = type,
                         timestampMillis = cursor.getLong(dateColumn),

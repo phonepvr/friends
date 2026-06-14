@@ -23,4 +23,15 @@ class CallLogWriter @Inject constructor(
             context.contentResolver.delete(CallLog.Calls.CONTENT_URI, null, null)
         }.getOrDefault(0)
     }
+
+    /** Deletes the single call-log entry with provider [id]. */
+    suspend fun deleteCall(id: Long): Boolean = withContext(Dispatchers.IO) {
+        runCatching {
+            context.contentResolver.delete(
+                CallLog.Calls.CONTENT_URI,
+                "${CallLog.Calls._ID} = ?",
+                arrayOf(id.toString()),
+            ) > 0
+        }.getOrDefault(false)
+    }
 }

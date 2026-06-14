@@ -59,6 +59,49 @@ android {
                 keyPassword = keyPass
             }
         }
+        create("release") {
+            // The release variant signs with the SAME CI keystore as debug. On
+            // F-Droid's build servers the SIGNING_* secrets are absent, so no
+            // keystore is applied and assembleRelease stays UNSIGNED there — which
+            // is exactly what reproducible builds needs: F-Droid builds the same
+            // source, byte-compares it to our signed APK (Binaries /
+            // AllowedAPKSigningKeys in the fdroiddata recipe), then ships OUR
+            // signature. See SIGNING.md / RELEASING.md.
+            val keystorePath = System.getenv("SIGNING_KEYSTORE_PATH")
+            val storePass = System.getenv("SIGNING_STORE_PASSWORD")
+            val alias = System.getenv("SIGNING_KEY_ALIAS")
+            val keyPass = System.getenv("SIGNING_KEY_PASSWORD")
+            if (!keystorePath.isNullOrBlank() &&
+                !storePass.isNullOrBlank() &&
+                !alias.isNullOrBlank() &&
+                !keyPass.isNullOrBlank() &&
+                file(keystorePath).exists()
+            ) {
+                storeFile = file(keystorePath)
+                storePassword = storePass
+                keyAlias = alias
+                keyPassword = keyPass
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("release") {
+            // Attach our signature only when the keystore is present (CI / local
+            // release builds). With no keystore (F-Droid) the release stays
+            // unsigned. minify stays OFF (AGP default) to keep output deterministic.
+            val releaseSigning = signingConfigs.getByName("release")
+            if (releaseSigning.storeFile != null) {
+                signingConfig = releaseSigning
+            }
+        }
+    }
+
+    // Reproducible builds: omit AGP's dependency-metadata block (a Google-signed,
+    // non-reproducible blob) from the APK so F-Droid's build byte-matches ours.
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
     }
 
     compileOptions {

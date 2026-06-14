@@ -55,8 +55,13 @@ jobs:
         run: |
           set -euo pipefail
           chmod +x ./gradlew
-          # No tests / no signing — just compile, fastest path for analysis.
-          ./gradlew assembleDebug -x test
+          # Clean, cache-free compile so CodeQL's build tracer always observes
+          # real kotlinc/javac invocations. With a restored Gradle build cache,
+          # assembleDebug can resolve entirely from cache (no compilation runs),
+          # leaving CodeQL with an empty database and a "configuration error"
+          # instead of a real analysis result. -x test keeps it to the fastest
+          # compile-only path; clean + --no-build-cache force actual compilation.
+          ./gradlew clean assembleDebug -x test --no-build-cache
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3

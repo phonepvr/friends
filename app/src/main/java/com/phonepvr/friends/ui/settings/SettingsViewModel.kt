@@ -238,6 +238,39 @@ class SettingsViewModel @Inject constructor(
         _clearCallHistoryState.value = ExportState.Idle
     }
 
+    // --- Import call history from CSV ---
+
+    private val _callHistoryImportState = MutableStateFlow<ImportState>(ImportState.Idle)
+    val callHistoryImportState: StateFlow<ImportState> = _callHistoryImportState.asStateFlow()
+
+    /**
+     * Reads [source] as CSV (see [CallHistoryCsv]) and inserts each row into
+     * the system call log via [CallLogWriter], skipping entries that already
+     * exist. Needs WRITE_CALL_LOG, which the caller requests first.
+     */
+    fun importCallHistory(source: Uri) {
+        if (_callHistoryImportState.value !is ImportState.Idle) return
+        _callHistoryImportState.value = ImportState.Reading
+        viewModelScope.launch {
+            val outcome = runCatching {
+                withContext(Dispatchers.IO) {
+                    val text = appContext.contentResolver.openInputStream(source)?.use {
+                        it.bufferedReader(Charsets.UTF_8).readText()
+                    } ?: throw IllegalStateException("Couldn't open the file.")
+                    callLogWriter.importCalls(CallHistoryCsv.fromCsv(text))
+                }
+            }
+            _callHistoryImportState.value = outcome.fold(
+                onSuccess = { ImportState.Done(imported = it.imported, skipped = it.skipped) },
+                onFailure = { ImportState.Error(it.message ?: "Import failed") },
+            )
+        }
+    }
+
+    fun acknowledgeCallHistoryImportResult() {
+        _callHistoryImportState.value = ImportState.Idle
+    }
+
     // --- Import contacts from a vCard file ---
 
     private val _importState = MutableStateFlow<ImportState>(ImportState.Idle)

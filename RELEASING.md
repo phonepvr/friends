@@ -66,8 +66,9 @@ containing `-build.`.
    [`fdroid/com.phonepvr.friends.yml`](fdroid/com.phonepvr.friends.yml).
    Copy it to `metadata/com.phonepvr.friends.yml` in a fork of
    <https://gitlab.com/fdroid/fdroiddata>.
-   - Confirm the `License:` value (we default to `GPL-3.0-only`; switch to
-     `GPL-3.0-or-later` if intended).
+   - `License:` is **`GPL-3.0-only`** (decided): the `LICENSE` is GPL-3.0 and
+     nothing grants "or any later version", so `-only` is accurate, and it's
+     compatible with the GPL-3.0 Fossify upstreams.
 3. **Validate locally** in the official build container:
    ```sh
    fdroid lint com.phonepvr.friends

@@ -100,6 +100,6 @@ The app is **Bondwidth** everywhere you see it. Some internal identifiers still 
 
 ## License & attribution
 
-Bondwidth is licensed under the **GNU General Public License v3.0** — see [`LICENSE`](LICENSE).
+Bondwidth is licensed under the **GNU General Public License v3.0 only** (`GPL-3.0-only`) — see [`LICENSE`](LICENSE).
 
 Its phone and contacts surfaces are derived from the excellent GPL-3.0 **[Fossify Phone](https://github.com/FossifyOrg/Phone)** and **[Fossify Contacts](https://github.com/FossifyOrg/Contacts)** projects; full attribution is in [`NOTICE.md`](NOTICE.md).

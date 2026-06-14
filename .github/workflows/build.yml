@@ -57,7 +57,11 @@ jobs:
           echo "APP_VERSION_CODE=$APP_VERSION_CODE" >> "$GITHUB_ENV"
           echo "APP_VERSION_NAME=$APP_VERSION_NAME" >> "$GITHUB_ENV"
           echo "APP_VERSION_CODE=$APP_VERSION_CODE  APP_VERSION_NAME=$APP_VERSION_NAME"
-          ./gradlew testDebugUnitTest assembleDebug --stacktrace
+          # assembleRelease verifies the variant F-Droid builds from source
+          # (it then signs with its own key). Catches release-only breakage
+          # here rather than in an F-Droid build. The release APK is unsigned
+          # and not published; the steps below still ship the debug APK.
+          ./gradlew testDebugUnitTest assembleDebug assembleRelease --stacktrace
 
       - name: Rename APK with Bondwidth branding
         run: |

@@ -13,9 +13,11 @@
 # key (NOT our release key), so F-Droid installs are separate from the APKs we
 # publish on GitHub.
 #
-# NOTE: confirm the License value. We use GPL-3.0-only conservatively; change
-# to GPL-3.0-or-later if that matches the project's intent (and the upstream
-# Fossify projects' "or later" choice).
+# License: GPL-3.0-only is the project's deliberate choice. The LICENSE file
+# is GPL-3.0 and nothing in the repo (NOTICE.md or source headers) grants
+# "or any later version", so -only is the accurate SPDX value. It is also
+# compatible with the GPL-3.0 Fossify upstreams (a v3-only derivative is
+# permitted regardless of whether upstream is -only or -or-later).
 
 Categories:
   - Phone & SMS

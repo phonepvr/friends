@@ -8,7 +8,9 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,6 +34,7 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -44,6 +47,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -101,6 +105,8 @@ fun CallHistoryScreen(
         )
     }
     var showCallRationale by remember { mutableStateOf(false) }
+    var confirmDeleteCall by remember { mutableStateOf<DeviceCall?>(null) }
+    var deleteAfterPermission by remember { mutableStateOf<Long?>(null) }
 
     // Shows the SIM chooser first on a multi-SIM device with no default.
     val simLauncher = rememberSimCallLauncher(
@@ -119,6 +125,16 @@ fun CallHistoryScreen(
     ) { granted ->
         hasCallPhone = granted
         if (granted) simLauncher.launch(viewModel.number)
+    }
+
+    // Deleting a call writes to the log; request WRITE_CALL_LOG, then delete
+    // the call the user confirmed once it's granted.
+    val writeCallLogPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        val id = deleteAfterPermission
+        deleteAfterPermission = null
+        if (granted && id != null) viewModel.deleteCall(id)
     }
 
     LaunchedEffect(state.placeError) {
@@ -146,6 +162,38 @@ fun CallHistoryScreen(
                 runCatching { context.startActivity(intent) }
             },
             onDismiss = { showCallRationale = false },
+        )
+    }
+
+    confirmDeleteCall?.let { call ->
+        AlertDialog(
+            onDismissRequest = { confirmDeleteCall = null },
+            title = { Text("Delete this call?") },
+            text = {
+                Text(
+                    "Remove this ${call.type.label().lowercase()} call from " +
+                        historyTimestampFormat.format(Date(call.timestampMillis)) +
+                        " from your call log. This can't be undone.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmDeleteCall = null
+                    val granted = ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.WRITE_CALL_LOG,
+                    ) == PackageManager.PERMISSION_GRANTED
+                    if (granted) {
+                        viewModel.deleteCall(call.id)
+                    } else {
+                        deleteAfterPermission = call.id
+                        writeCallLogPermissionLauncher.launch(Manifest.permission.WRITE_CALL_LOG)
+                    }
+                }) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDeleteCall = null }) { Text("Cancel") }
+            },
         )
     }
 
@@ -204,7 +252,10 @@ fun CallHistoryScreen(
                 onOpenPerson = state.bondedPersonId?.let { id -> { onOpenPerson(id) } },
             )
             HorizontalDivider()
-            CallsSection(calls = state.calls)
+            CallsSection(
+                calls = state.calls,
+                onDelete = { confirmDeleteCall = it },
+            )
         }
     }
 }
@@ -330,7 +381,7 @@ private fun HeaderAction(
 }
 
 @Composable
-private fun CallsSection(calls: List<DeviceCall>) {
+private fun CallsSection(calls: List<DeviceCall>, onDelete: (DeviceCall) -> Unit) {
     if (calls.isEmpty()) {
         Box(
             modifier = Modifier
@@ -354,18 +405,20 @@ private fun CallsSection(calls: List<DeviceCall>) {
             modifier = Modifier.padding(start = 24.dp, top = 16.dp, bottom = 8.dp),
         )
         LazyColumn {
-            items(calls, key = { "${it.timestampMillis}-${it.type}" }) { call ->
-                CallRow(call)
+            items(calls, key = { it.id }) { call ->
+                CallRow(call, onLongPress = { onDelete(call) })
             }
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun CallRow(call: DeviceCall) {
+private fun CallRow(call: DeviceCall, onLongPress: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .combinedClickable(onClick = {}, onLongClick = onLongPress)
             .padding(horizontal = 24.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

@@ -53,6 +53,9 @@ class CallLogReader @Inject constructor(
         return calls
     }
 
+    /** Every call-log entry (newest first), for the call-history export. */
+    fun allCalls(): List<DeviceCall> = recentCalls(0L)
+
     private fun mapCallType(value: Int): CallType? = when (value) {
         CallLog.Calls.INCOMING_TYPE -> CallType.INCOMING
         CallLog.Calls.OUTGOING_TYPE -> CallType.OUTGOING

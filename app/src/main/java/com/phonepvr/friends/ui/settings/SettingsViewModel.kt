@@ -5,6 +5,8 @@ import android.content.Intent
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.phonepvr.friends.data.calllog.CallHistoryCsv
+import com.phonepvr.friends.data.calllog.CallLogReader
 import com.phonepvr.friends.data.contacts.ContactsReader
 import com.phonepvr.friends.data.contacts.VCardBuilder
 import com.phonepvr.friends.data.contacts.VCardImporter
@@ -48,6 +50,7 @@ class SettingsViewModel @Inject constructor(
     private val dialerRoleManager: DialerRoleManager,
     private val contactsReader: ContactsReader,
     private val vCardImporter: VCardImporter,
+    private val callLogReader: CallLogReader,
     @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
 
@@ -168,6 +171,47 @@ class SettingsViewModel @Inject constructor(
         val date = java.time.LocalDate.now().toString()
         return "bondwidth-contacts-$date.vcf"
     }
+
+    // --- Export call history to CSV ---
+
+    private val _callHistoryExportState = MutableStateFlow<ExportState>(ExportState.Idle)
+    val callHistoryExportState: StateFlow<ExportState> = _callHistoryExportState.asStateFlow()
+
+    /**
+     * Writes the device call log to [destination] as CSV (see [CallHistoryCsv]).
+     * Needs READ_CALL_LOG, which the caller requests before launching the file
+     * picker; a missing permission surfaces as an error rather than a crash.
+     */
+    fun exportCallHistory(destination: Uri) {
+        if (_callHistoryExportState.value is ExportState.Running) return
+        _callHistoryExportState.value = ExportState.Running
+        viewModelScope.launch {
+            val outcome = runCatching {
+                withContext(Dispatchers.IO) {
+                    val calls = try {
+                        callLogReader.allCalls()
+                    } catch (e: SecurityException) {
+                        throw IllegalStateException("Call-log access is needed to export.")
+                    }
+                    appContext.contentResolver.openOutputStream(destination, "wt")?.use { out ->
+                        out.bufferedWriter(Charsets.UTF_8).use { it.write(CallHistoryCsv.toCsv(calls)) }
+                    } ?: throw IllegalStateException("Couldn't open the destination file.")
+                    calls.size
+                }
+            }
+            _callHistoryExportState.value = outcome.fold(
+                onSuccess = { ExportState.Done(it) },
+                onFailure = { ExportState.Error(it.message ?: "Export failed") },
+            )
+        }
+    }
+
+    fun acknowledgeCallHistoryExportResult() {
+        _callHistoryExportState.value = ExportState.Idle
+    }
+
+    fun defaultCallHistoryFileName(): String =
+        "bondwidth-call-history-${java.time.LocalDate.now()}.csv"
 
     // --- Import contacts from a vCard file ---
 

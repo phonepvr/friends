@@ -1,5 +1,7 @@
 package com.phonepvr.friends.ui.settings
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -15,6 +17,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -85,6 +88,7 @@ fun SettingsScreen(
     val isDefaultDialer by viewModel.isDefaultDialer.collectAsStateWithLifecycle()
     val exportState by viewModel.exportState.collectAsStateWithLifecycle()
     val importState by viewModel.importState.collectAsStateWithLifecycle()
+    val callHistoryExportState by viewModel.callHistoryExportState.collectAsStateWithLifecycle()
     var activeDialog by remember { mutableStateOf<SettingsDialog?>(null) }
     var showLockUnavailable by remember { mutableStateOf(false) }
     var showUpdateDialog by remember { mutableStateOf(false) }
@@ -105,6 +109,19 @@ fun SettingsScreen(
         ActivityResultContracts.OpenDocument(),
     ) { source ->
         if (source != null) viewModel.importContactsFromVcf(source)
+    }
+
+    val exportCallHistoryLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/csv"),
+    ) { destination ->
+        if (destination != null) viewModel.exportCallHistory(destination)
+    }
+    // Exporting reads the call log; request READ_CALL_LOG first when needed,
+    // then open the file picker on grant.
+    val callLogExportPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) exportCallHistoryLauncher.launch(viewModel.defaultCallHistoryFileName())
     }
 
     // Re-read the default-dialer state every time Settings becomes
@@ -371,6 +388,23 @@ fun SettingsScreen(
                 },
                 modifier = Modifier.clickable { onOpenMergeDuplicates() },
             )
+            ListItem(
+                headlineContent = { Text("Export call history") },
+                supportingContent = {
+                    Text("Save your call log as a CSV file you can keep or re-import later.")
+                },
+                modifier = Modifier.clickable {
+                    val granted = ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.READ_CALL_LOG,
+                    ) == PackageManager.PERMISSION_GRANTED
+                    if (granted) {
+                        exportCallHistoryLauncher.launch(viewModel.defaultCallHistoryFileName())
+                    } else {
+                        callLogExportPermissionLauncher.launch(Manifest.permission.READ_CALL_LOG)
+                    }
+                },
+            )
 
             HorizontalDivider()
             SectionHeader("About & more")
@@ -580,6 +614,47 @@ fun SettingsScreen(
             text = { Text(s.message) },
             confirmButton = {
                 TextButton(onClick = { viewModel.acknowledgeExportResult() }) { Text("OK") }
+            },
+        )
+    }
+
+    when (val s = callHistoryExportState) {
+        ExportState.Idle -> Unit
+        ExportState.Running -> AlertDialog(
+            onDismissRequest = {},
+            title = { Text("Exporting call history") },
+            text = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.height(20.dp).width(20.dp),
+                        strokeWidth = 2.dp,
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Text("Writing the CSV…")
+                }
+            },
+            confirmButton = {},
+        )
+        is ExportState.Done -> AlertDialog(
+            onDismissRequest = { viewModel.acknowledgeCallHistoryExportResult() },
+            title = { Text("Export complete") },
+            text = {
+                Text(if (s.count == 1) "1 call written." else "${s.count} calls written.")
+            },
+            confirmButton = {
+                TextButton(onClick = { viewModel.acknowledgeCallHistoryExportResult() }) {
+                    Text("OK")
+                }
+            },
+        )
+        is ExportState.Error -> AlertDialog(
+            onDismissRequest = { viewModel.acknowledgeCallHistoryExportResult() },
+            title = { Text("Export failed") },
+            text = { Text(s.message) },
+            confirmButton = {
+                TextButton(onClick = { viewModel.acknowledgeCallHistoryExportResult() }) {
+                    Text("OK")
+                }
             },
         )
     }

@@ -43,4 +43,36 @@ class CallHistoryCsvTest {
         assertEquals(5, row.split(',').size)
         assertTrue(row.startsWith("1 2 3,"))
     }
+
+    @Test
+    fun `fromCsv round-trips toCsv (ignoring provider id)`() {
+        val calls = listOf(
+            DeviceCall("+1 555-0142", CallType.OUTGOING, timestampMillis = 1_700_000_000_000L, durationSeconds = 65L),
+            DeviceCall("+1 555-0188", CallType.MISSED, timestampMillis = 1_700_000_100_000L, durationSeconds = 0L),
+        )
+        val parsed = CallHistoryCsv.fromCsv(CallHistoryCsv.toCsv(calls))
+        assertEquals(2, parsed.size)
+        assertEquals("+1 555-0142", parsed[0].number)
+        assertEquals(CallType.OUTGOING, parsed[0].type)
+        assertEquals(1_700_000_000_000L, parsed[0].timestampMillis)
+        assertEquals(65L, parsed[0].durationSeconds)
+        assertEquals(CallType.MISSED, parsed[1].type)
+    }
+
+    @Test
+    fun `fromCsv skips header, blanks, and malformed rows`() {
+        val csv = """
+            ${CallHistoryCsv.HEADER}
+            +1 555-0100,INCOMING,1000,30,1970-01-01T00:00:01Z
+
+            garbage,row
+            +1 555-0101,NOTATYPE,2000,0,x
+            +1 555-0102,OUTGOING,notanumber,0,x
+            +1 555-0103,OUTGOING,3000,12,1970-01-01T00:00:03Z
+        """.trimIndent()
+        val parsed = CallHistoryCsv.fromCsv(csv)
+        assertEquals(2, parsed.size)
+        assertEquals("+1 555-0100", parsed[0].number)
+        assertEquals("+1 555-0103", parsed[1].number)
+    }
 }

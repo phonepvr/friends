@@ -90,6 +90,7 @@ fun SettingsScreen(
     val importState by viewModel.importState.collectAsStateWithLifecycle()
     val callHistoryExportState by viewModel.callHistoryExportState.collectAsStateWithLifecycle()
     val clearCallHistoryState by viewModel.clearCallHistoryState.collectAsStateWithLifecycle()
+    val callHistoryImportState by viewModel.callHistoryImportState.collectAsStateWithLifecycle()
     var activeDialog by remember { mutableStateOf<SettingsDialog?>(null) }
     var showLockUnavailable by remember { mutableStateOf(false) }
     var showUpdateDialog by remember { mutableStateOf(false) }
@@ -130,6 +131,23 @@ fun SettingsScreen(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
         if (granted) viewModel.clearCallHistory()
+    }
+
+    val importCallHistoryLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { source ->
+        if (source != null) viewModel.importCallHistory(source)
+    }
+    // Importing inserts into the log; request WRITE_CALL_LOG, then open the
+    // file picker on grant. Mime list is lenient — CSVs report inconsistently.
+    val importCallLogPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) {
+            importCallHistoryLauncher.launch(
+                arrayOf("text/csv", "text/comma-separated-values", "text/plain", "*/*"),
+            )
+        }
     }
 
     // Re-read the default-dialer state every time Settings becomes
@@ -410,6 +428,25 @@ fun SettingsScreen(
                         exportCallHistoryLauncher.launch(viewModel.defaultCallHistoryFileName())
                     } else {
                         callLogExportPermissionLauncher.launch(Manifest.permission.READ_CALL_LOG)
+                    }
+                },
+            )
+            ListItem(
+                headlineContent = { Text("Import call history") },
+                supportingContent = {
+                    Text("Add calls from a previously exported CSV. Skips ones already on this device.")
+                },
+                modifier = Modifier.clickable {
+                    val granted = ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.WRITE_CALL_LOG,
+                    ) == PackageManager.PERMISSION_GRANTED
+                    if (granted) {
+                        importCallHistoryLauncher.launch(
+                            arrayOf("text/csv", "text/comma-separated-values", "text/plain", "*/*"),
+                        )
+                    } else {
+                        importCallLogPermissionLauncher.launch(Manifest.permission.WRITE_CALL_LOG)
                     }
                 },
             )
@@ -739,6 +776,56 @@ fun SettingsScreen(
             text = { Text(s.message) },
             confirmButton = {
                 TextButton(onClick = { viewModel.acknowledgeClearCallHistoryResult() }) {
+                    Text("OK")
+                }
+            },
+        )
+    }
+
+    when (val s = callHistoryImportState) {
+        ImportState.Idle -> Unit
+        ImportState.Reading -> AlertDialog(
+            onDismissRequest = {},
+            title = { Text("Importing call history") },
+            text = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.height(20.dp).width(20.dp),
+                        strokeWidth = 2.dp,
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Text("Reading the CSV…")
+                }
+            },
+            confirmButton = {},
+        )
+        is ImportState.Importing -> AlertDialog(
+            onDismissRequest = {},
+            title = { Text("Importing call history") },
+            text = { Text("Adding calls…") },
+            confirmButton = {},
+        )
+        is ImportState.Done -> AlertDialog(
+            onDismissRequest = { viewModel.acknowledgeCallHistoryImportResult() },
+            title = { Text("Import complete") },
+            text = {
+                Text(
+                    "Added ${s.imported} " + (if (s.imported == 1) "call" else "calls") +
+                        if (s.skipped > 0) ", skipped ${s.skipped} already present." else ".",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { viewModel.acknowledgeCallHistoryImportResult() }) {
+                    Text("OK")
+                }
+            },
+        )
+        is ImportState.Error -> AlertDialog(
+            onDismissRequest = { viewModel.acknowledgeCallHistoryImportResult() },
+            title = { Text("Import failed") },
+            text = { Text(s.message) },
+            confirmButton = {
+                TextButton(onClick = { viewModel.acknowledgeCallHistoryImportResult() }) {
                     Text("OK")
                 }
             },

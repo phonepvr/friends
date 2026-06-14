@@ -41,11 +41,13 @@ import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Dialpad
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -210,6 +212,18 @@ fun DialerScreen(
 
     var sheetEntry by remember { mutableStateOf<RecentEntry?>(null) }
     var numberPicker by remember { mutableStateOf<CallTarget.Pick?>(null) }
+    var confirmDeleteEntry by remember { mutableStateOf<RecentEntry?>(null) }
+    var deleteAfterPermission by remember { mutableStateOf<Long?>(null) }
+
+    // Deleting a call writes to the log; request WRITE_CALL_LOG, then delete
+    // the confirmed call once it's granted.
+    val writeCallLogPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        val id = deleteAfterPermission
+        deleteAfterPermission = null
+        if (granted && id != null) viewModel.deleteCall(id)
+    }
 
     numberPicker?.let { pick ->
         NumberPickerSheet(
@@ -246,6 +260,13 @@ fun DialerScreen(
             hasWhatsApp = hasWhatsApp,
             hasSignal = hasSignal,
             onDismiss = { sheetEntry = null },
+            // Only a real call-log entry (non-zero id) can be deleted; the
+            // sheet is also reused for search-result entries (id 0).
+            onDelete = if (entry.id != 0L) {
+                { sheetEntry = null; confirmDeleteEntry = entry }
+            } else {
+                null
+            },
             onCall = {
                 sheetEntry = null
                 placeCall(entry.number)
@@ -289,6 +310,38 @@ fun DialerScreen(
                     }
                     snackbarState.showSnackbar(msg)
                 }
+            },
+        )
+    }
+
+    confirmDeleteEntry?.let { entry ->
+        AlertDialog(
+            onDismissRequest = { confirmDeleteEntry = null },
+            title = { Text("Delete this call?") },
+            text = {
+                Text(
+                    "Remove this call with ${entry.displayName ?: entry.number} from " +
+                        "your call log. This can't be undone.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val id = entry.id
+                    confirmDeleteEntry = null
+                    val granted = ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.WRITE_CALL_LOG,
+                    ) == PackageManager.PERMISSION_GRANTED
+                    if (granted) {
+                        viewModel.deleteCall(id)
+                    } else {
+                        deleteAfterPermission = id
+                        writeCallLogPermissionLauncher.launch(Manifest.permission.WRITE_CALL_LOG)
+                    }
+                }) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDeleteEntry = null }) { Text("Cancel") }
             },
         )
     }
@@ -778,6 +831,7 @@ private fun RecentActionsSheet(
     onOpenContact: (() -> Unit)?,
     onAddContact: (() -> Unit)?,
     onToggleBlock: () -> Unit,
+    onDelete: (() -> Unit)?,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(modifier = Modifier.padding(bottom = 24.dp)) {
@@ -829,6 +883,9 @@ private fun RecentActionsSheet(
                     label = if (blocked) "Unblock this number" else "Block this number",
                     onClick = onToggleBlock,
                 )
+            }
+            onDelete?.let {
+                SheetAction(Icons.Filled.Delete, "Delete from call log", it)
             }
         }
     }

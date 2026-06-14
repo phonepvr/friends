@@ -65,6 +65,7 @@ Bondwidth asks only for what a phone-and-contacts app genuinely needs, and expla
 | --- | --- |
 | `READ_CONTACTS` / `WRITE_CONTACTS` | Browse, add to, and edit your address book |
 | `READ_CALL_LOG` | Detect recent calls so check-ins count automatically |
+| `WRITE_CALL_LOG` | Manage the call log as the default dialer — delete a call, clear or re-import history |
 | `CALL_PHONE` | Place calls from the in-app dialer |
 | `READ_PHONE_STATE` / `READ_PHONE_NUMBERS` | Route calls through the right SIM and surface call state |
 | `MANAGE_OWN_CALLS` / `ANSWER_PHONE_CALLS` | Act as the default phone app |

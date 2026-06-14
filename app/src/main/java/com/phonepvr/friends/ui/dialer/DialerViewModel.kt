@@ -3,6 +3,7 @@ package com.phonepvr.friends.ui.dialer
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.phonepvr.friends.data.blocking.BlockedNumberManager
+import com.phonepvr.friends.data.calllog.CallLogWriter
 import com.phonepvr.friends.data.contacts.ContactPhone
 import com.phonepvr.friends.data.contacts.DeviceContact
 import com.phonepvr.friends.data.contacts.SystemContactsRepository
@@ -24,6 +25,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
@@ -38,6 +40,8 @@ data class RecentEntry(
     val type: CallType,
     val timestampMillis: Long,
     val durationSeconds: Long,
+    /** Provider call-log _ID for deletion; 0 for synthetic (search-result) entries. */
+    val id: Long = 0L,
 )
 
 /**
@@ -94,6 +98,7 @@ class DialerViewModel @Inject constructor(
     favouritesRepository: FavouritesRepository,
     private val callPlacer: CallPlacer,
     private val blockedNumberManager: BlockedNumberManager,
+    private val callLogWriter: CallLogWriter,
 ) : ViewModel() {
 
     /** True iff blocking is supported on this device + we're the default dialer. */
@@ -105,6 +110,15 @@ class DialerViewModel @Inject constructor(
         blockedNumberManager.block(number)
     } else {
         blockedNumberManager.unblock(number)
+    }
+
+    /**
+     * Deletes one entry from the system call log by provider id. The recents
+     * flow observes the CallLog provider, so the list refreshes itself once
+     * the row is gone. Needs WRITE_CALL_LOG, which the screen requests first.
+     */
+    fun deleteCall(id: Long) {
+        viewModelScope.launch { callLogWriter.deleteCall(id) }
     }
 
     private val callLogGranted = MutableStateFlow(false)
@@ -166,6 +180,7 @@ class DialerViewModel @Inject constructor(
                 type = call.type,
                 timestampMillis = call.timestampMillis,
                 durationSeconds = call.durationSeconds,
+                id = call.id,
             )
         }
         DialerUiState(

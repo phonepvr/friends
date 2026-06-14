@@ -89,10 +89,12 @@ fun SettingsScreen(
     val exportState by viewModel.exportState.collectAsStateWithLifecycle()
     val importState by viewModel.importState.collectAsStateWithLifecycle()
     val callHistoryExportState by viewModel.callHistoryExportState.collectAsStateWithLifecycle()
+    val clearCallHistoryState by viewModel.clearCallHistoryState.collectAsStateWithLifecycle()
     var activeDialog by remember { mutableStateOf<SettingsDialog?>(null) }
     var showLockUnavailable by remember { mutableStateOf(false) }
     var showUpdateDialog by remember { mutableStateOf(false) }
     var showRestrictedSettingsDialog by remember { mutableStateOf(false) }
+    var showClearCallHistoryConfirm by remember { mutableStateOf(false) }
 
     // Storage-Access-Framework picker: user chooses where the .vcf goes.
     // No storage permission needed because the URI grants per-document access.
@@ -122,6 +124,12 @@ fun SettingsScreen(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
         if (granted) exportCallHistoryLauncher.launch(viewModel.defaultCallHistoryFileName())
+    }
+    // Clearing the log writes to it; request WRITE_CALL_LOG, then clear on grant.
+    val clearCallLogPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) viewModel.clearCallHistory()
     }
 
     // Re-read the default-dialer state every time Settings becomes
@@ -405,6 +413,13 @@ fun SettingsScreen(
                     }
                 },
             )
+            ListItem(
+                headlineContent = { Text("Clear call history") },
+                supportingContent = {
+                    Text("Permanently delete every call from this device's call log.")
+                },
+                modifier = Modifier.clickable { showClearCallHistoryConfirm = true },
+            )
 
             HorizontalDivider()
             SectionHeader("About & more")
@@ -653,6 +668,77 @@ fun SettingsScreen(
             text = { Text(s.message) },
             confirmButton = {
                 TextButton(onClick = { viewModel.acknowledgeCallHistoryExportResult() }) {
+                    Text("OK")
+                }
+            },
+        )
+    }
+
+    if (showClearCallHistoryConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearCallHistoryConfirm = false },
+            title = { Text("Clear call history?") },
+            text = {
+                Text(
+                    "This permanently deletes every call from this device's call " +
+                        "log. It can't be undone — export first if you want a copy.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showClearCallHistoryConfirm = false
+                    val granted = ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.WRITE_CALL_LOG,
+                    ) == PackageManager.PERMISSION_GRANTED
+                    if (granted) {
+                        viewModel.clearCallHistory()
+                    } else {
+                        clearCallLogPermissionLauncher.launch(Manifest.permission.WRITE_CALL_LOG)
+                    }
+                }) { Text("Clear") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearCallHistoryConfirm = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    when (val s = clearCallHistoryState) {
+        ExportState.Idle -> Unit
+        ExportState.Running -> AlertDialog(
+            onDismissRequest = {},
+            title = { Text("Clearing call history") },
+            text = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.height(20.dp).width(20.dp),
+                        strokeWidth = 2.dp,
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Text("Removing calls…")
+                }
+            },
+            confirmButton = {},
+        )
+        is ExportState.Done -> AlertDialog(
+            onDismissRequest = { viewModel.acknowledgeClearCallHistoryResult() },
+            title = { Text("Call history cleared") },
+            text = {
+                Text(if (s.count == 1) "1 call removed." else "${s.count} calls removed.")
+            },
+            confirmButton = {
+                TextButton(onClick = { viewModel.acknowledgeClearCallHistoryResult() }) {
+                    Text("OK")
+                }
+            },
+        )
+        is ExportState.Error -> AlertDialog(
+            onDismissRequest = { viewModel.acknowledgeClearCallHistoryResult() },
+            title = { Text("Couldn't clear call history") },
+            text = { Text(s.message) },
+            confirmButton = {
+                TextButton(onClick = { viewModel.acknowledgeClearCallHistoryResult() }) {
                     Text("OK")
                 }
             },

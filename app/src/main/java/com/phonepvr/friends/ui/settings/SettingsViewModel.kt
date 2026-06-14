@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.phonepvr.friends.data.calllog.CallHistoryCsv
 import com.phonepvr.friends.data.calllog.CallLogReader
+import com.phonepvr.friends.data.calllog.CallLogWriter
 import com.phonepvr.friends.data.contacts.ContactsReader
 import com.phonepvr.friends.data.contacts.VCardBuilder
 import com.phonepvr.friends.data.contacts.VCardImporter
@@ -51,6 +52,7 @@ class SettingsViewModel @Inject constructor(
     private val contactsReader: ContactsReader,
     private val vCardImporter: VCardImporter,
     private val callLogReader: CallLogReader,
+    private val callLogWriter: CallLogWriter,
     @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
 
@@ -212,6 +214,29 @@ class SettingsViewModel @Inject constructor(
 
     fun defaultCallHistoryFileName(): String =
         "bondwidth-call-history-${java.time.LocalDate.now()}.csv"
+
+    // --- Clear call history ---
+
+    private val _clearCallHistoryState = MutableStateFlow<ExportState>(ExportState.Idle)
+    val clearCallHistoryState: StateFlow<ExportState> = _clearCallHistoryState.asStateFlow()
+
+    /**
+     * Deletes every entry from the system call log. Needs WRITE_CALL_LOG,
+     * which the caller requests before invoking this. Reuses [ExportState];
+     * Done.count is the number of entries removed.
+     */
+    fun clearCallHistory() {
+        if (_clearCallHistoryState.value is ExportState.Running) return
+        _clearCallHistoryState.value = ExportState.Running
+        viewModelScope.launch {
+            val removed = callLogWriter.clearAll()
+            _clearCallHistoryState.value = ExportState.Done(removed)
+        }
+    }
+
+    fun acknowledgeClearCallHistoryResult() {
+        _clearCallHistoryState.value = ExportState.Idle
+    }
 
     // --- Import contacts from a vCard file ---
 

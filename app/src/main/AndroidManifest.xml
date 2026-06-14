@@ -22,8 +22,13 @@
          runtime the first time the user edits or creates a contact. -->
     <uses-permission android:name="android.permission.WRITE_CONTACTS" />
 
-    <!-- Read-only access to the call log, used to detect recent calls. -->
+    <!-- Read the call log, used to detect recent calls. -->
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
+
+    <!-- Write/delete call-log entries. As the default phone app, Bondwidth
+         offers call-history management: clear the history, delete a single
+         call, and re-import a previously exported CSV. Runtime. -->
+    <uses-permission android:name="android.permission.WRITE_CALL_LOG" />
 
     <!-- Place phone calls from the in-app dialer (all-in-one). Runtime. -->
     <uses-permission android:name="android.permission.CALL_PHONE" />

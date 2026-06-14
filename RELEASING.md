@@ -9,7 +9,7 @@ releases reach F-Droid.
 | Built by | our GitHub Actions CI | F-Droid's build servers, from source |
 | Signed with | **our** release key (see `SIGNING.md`) | **F-Droid's** key |
 | Trigger | every push to a `claude/**` or `main` branch | a clean `vX.Y.Z` git tag |
-| Version | `1.0.<run_number>` (from `github.run_number`) | committed `releaseVersionCode` / `releaseVersionName` |
+| Version | `1.0.<run_number>` (from `github.run_number`) | committed `versionCode` / `versionName` |
 | Tag | `v1.0.0-build.<N>.<attempt>` | `vX.Y.Z` |
 | Audience | us, for on-device testing (sideload) | end users |
 
@@ -30,15 +30,15 @@ containing `-build.`.
 ## Cutting an F-Droid release
 
 1. **Bump the committed version** in `app/build.gradle.kts`:
-   - `releaseVersionCode` → previous + 1 (must always increase)
-   - `releaseVersionName` → the new public version, e.g. `1.1.0`
+   - `versionCode` → previous + 1 (must always increase)
+   - `versionName` → the new public version, e.g. `1.1.0`
 2. **Add a changelog** at
-   `fastlane/metadata/android/en-US/changelogs/<releaseVersionCode>.txt`
+   `fastlane/metadata/android/en-US/changelogs/<versionCode>.txt`
    (the filename is the *versionCode*, e.g. `2.txt`).
 3. **Land it on `main`** via a normal PR.
 4. **Tag the release commit** with the matching version and push the tag:
    ```sh
-   git tag v1.1.0    # must equal releaseVersionName, prefixed with v
+   git tag v1.1.0    # must equal versionName, prefixed with v
    git push origin v1.1.0
    ```
    Tags do not trigger our CI (it runs on branch pushes), so this adds no
@@ -47,7 +47,7 @@ containing `-build.`.
    detect the new `vX.Y.Z` tag, build the tagged source, sign it, and publish
    — typically within ~24–48h. Nothing to upload.
 
-> Keep `releaseVersionName` and the `vX.Y.Z` tag in lockstep. F-Droid reads the
+> Keep `versionName` and the `vX.Y.Z` tag in lockstep. F-Droid reads the
 > version from the committed gradle values at the tagged commit, not from the
 > tag name.
 

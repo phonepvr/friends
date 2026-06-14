@@ -17,20 +17,24 @@ android {
         targetSdk = 35
 
         // ── Release identity (the F-Droid channel) ──────────────────────────
-        // F-Droid builds the tagged source on its own infrastructure with NO
-        // environment set, so it reads these committed values. Bump BOTH for
-        // every F-Droid release, commit, then tag vX.Y.Z matching
-        // releaseVersionName; versionCode must increase by at least 1 each
-        // release. See RELEASING.md.
-        val releaseVersionCode = 1
-        val releaseVersionName = "1.0.0"
+        // F-Droid builds the tagged source with NO environment set, so it ships
+        // exactly these literals. They are ALSO what F-Droid's metadata scanner
+        // reads to detect new releases (UpdateCheckMode: Tags), so they MUST stay
+        // plain literals here — `versionCode = <int>` and `versionName = "<str>"`.
+        // Moving them into a variable or a getenv/`?:` expression makes F-Droid's
+        // parser report no version and breaks auto-update. Bump BOTH for every
+        // F-Droid release, commit, then tag vX.Y.Z matching versionName;
+        // versionCode must increase by at least 1 each release. See RELEASING.md.
+        versionCode = 1
+        versionName = "1.0.0"
 
-        // CI experimentation overrides these via env (APP_VERSION_CODE /
-        // APP_VERSION_NAME, derived from github.run_number) so every branch
-        // build installs as a distinct version on a dev device. Those builds
-        // are signed with our key and never reach F-Droid.
-        versionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: releaseVersionCode
-        versionName = System.getenv("APP_VERSION_NAME") ?: releaseVersionName
+        // CI experimentation overrides the literals above via env (APP_VERSION_CODE
+        // / APP_VERSION_NAME, derived from github.run_number) so every branch build
+        // installs as a distinct version on a dev device. These run AFTER the
+        // literals, so the literals stay the value F-Droid reads. Such builds are
+        // signed with our key and never reach F-Droid.
+        System.getenv("APP_VERSION_CODE")?.toIntOrNull()?.let { versionCode = it }
+        System.getenv("APP_VERSION_NAME")?.let { versionName = it }
     }
 
     signingConfigs {

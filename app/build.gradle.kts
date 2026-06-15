@@ -87,12 +87,17 @@ android {
 
     buildTypes {
         getByName("release") {
-            // Attach our signature only when the keystore is present (CI / local
-            // release builds). With no keystore (F-Droid) the release stays
-            // unsigned. minify stays OFF (AGP default) to keep output deterministic.
-            val releaseSigning = signingConfigs.getByName("release")
-            if (releaseSigning.storeFile != null) {
-                signingConfig = releaseSigning
+            // Sign the release with our key only when the keystore is present
+            // (our CI / local release builds). The guard is on the ENV VAR, not on
+            // the signing-config object: F-Droid strips signing configs before it
+            // builds — it deletes the whole `signingConfigs { }` block AND the
+            // `signingConfig = …` line — leaving an empty guard and an UNSIGNED
+            // release, which is exactly what its reproducible build needs.
+            // Referencing signingConfigs.getByName("release") on any line that
+            // SURVIVES the strip would crash F-Droid's build with
+            // "SigningConfig with name 'release' not found". minify stays OFF.
+            if (!System.getenv("SIGNING_KEYSTORE_PATH").isNullOrBlank()) {
+                signingConfig = signingConfigs.getByName("release")
             }
         }
     }

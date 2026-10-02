@@ -184,6 +184,45 @@ class ContactWriter @Inject constructor(
         }
 
     /**
+     * Adds the contact to the groups in [change].add and removes it from those in
+     * [change].remove, on its first raw contact. Only those membership rows are
+     * written; every other row (including hidden/system group memberships) is left
+     * exactly as it was. Returns false if the provider rejected the batch.
+     */
+    suspend fun setGroupMemberships(contactId: Long, change: GroupMembershipChange): Boolean =
+        withContext(Dispatchers.IO) {
+            if (change.isEmpty) return@withContext true
+            val rawContactId = reader.firstRawContactId(contactId) ?: return@withContext false
+            val mime = ContactsContract.CommonDataKinds.GroupMembership.CONTENT_ITEM_TYPE
+            val ops = arrayListOf<ContentProviderOperation>()
+            change.remove.forEach { groupId ->
+                ops.add(
+                    ContentProviderOperation.newDelete(ContactsContract.Data.CONTENT_URI)
+                        .withSelection(
+                            "${ContactsContract.Data.RAW_CONTACT_ID} = ? AND " +
+                                "${ContactsContract.Data.MIMETYPE} = ? AND " +
+                                "${ContactsContract.CommonDataKinds.GroupMembership.GROUP_ROW_ID} = ?",
+                            arrayOf(rawContactId.toString(), mime, groupId.toString()),
+                        )
+                        .build(),
+                )
+            }
+            change.add.forEach { groupId ->
+                ops.add(
+                    ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
+                        .withValue(ContactsContract.Data.RAW_CONTACT_ID, rawContactId)
+                        .withValue(ContactsContract.Data.MIMETYPE, mime)
+                        .withValue(
+                            ContactsContract.CommonDataKinds.GroupMembership.GROUP_ROW_ID,
+                            groupId,
+                        )
+                        .build(),
+                )
+            }
+            runCatching { resolver.applyBatch(ContactsContract.AUTHORITY, ops) }.isSuccess
+        }
+
+    /**
      * Merges the given duplicate contacts into one by telling the platform's
      * aggregator to keep their raw contacts together (AggregationExceptions,
      * TYPE_KEEP_TOGETHER). We anchor on the first contact's raw id and join

@@ -153,7 +153,9 @@ class MainActivity : FragmentActivity() {
         // intents rarely offer one.
         if (intent.action == Intent.ACTION_VIEW) {
             val data = intent.data
-            if (data != null && isVCardIntent(intent)) {
+            // content:// only. A file:// URI lets another app point the importer at
+            // a path inside Bondwidth's own storage; modern senders use content://.
+            if (data != null && data.scheme == "content" && isVCardIntent(intent)) {
                 return Routes.importVcard(data.toString())
             }
         }

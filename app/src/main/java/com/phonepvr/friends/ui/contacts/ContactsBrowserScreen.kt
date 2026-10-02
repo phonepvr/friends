@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -43,12 +44,20 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -56,6 +65,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.phonepvr.friends.ui.components.PersonAvatar
 import com.phonepvr.friends.ui.permissions.PermissionRationaleSheet
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -155,53 +165,63 @@ private fun ContactList(
     onGroupSelected: (String?) -> Unit,
     onOpenContact: (Long, String) -> Unit,
 ) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        OutlinedTextField(
-            value = state.query,
-            onValueChange = onQueryChange,
-            placeholder = { Text("Search by name or phone") },
-            singleLine = true,
-            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
-            trailingIcon = if (state.query.isNotEmpty()) {
-                {
-                    IconButton(onClick = { onQueryChange("") }) {
-                        Icon(Icons.Filled.Clear, contentDescription = "Clear search")
+    val collapse = remember { HeaderCollapseState() }
+    // Changing the filter or group jumps the list back to the top, so bring the
+    // header back with it.
+    LaunchedEffect(state.filterMode, state.selectedGroup) { collapse.reset() }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .nestedScroll(collapse.connection),
+    ) {
+        CollapsingHeader(collapse) {
+            OutlinedTextField(
+                value = state.query,
+                onValueChange = onQueryChange,
+                placeholder = { Text("Search by name or phone") },
+                singleLine = true,
+                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                trailingIcon = if (state.query.isNotEmpty()) {
+                    {
+                        IconButton(onClick = { onQueryChange("") }) {
+                            Icon(Icons.Filled.Clear, contentDescription = "Clear search")
+                        }
                     }
-                }
-            } else {
-                null
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-        )
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            FilterChip(
-                selected = state.filterMode == ContactsFilterMode.ALL,
-                onClick = { onFilterChange(ContactsFilterMode.ALL) },
-                label = { Text("All (${state.totalCount})") },
+                } else {
+                    null
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
             )
-            FilterChip(
-                selected = state.filterMode == ContactsFilterMode.TRACKED,
-                onClick = { onFilterChange(ContactsFilterMode.TRACKED) },
-                label = { Text("Bonded (${state.bondedCount})") },
-            )
-        }
-        if (state.availableGroups.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                FilterChip(
+                    selected = state.filterMode == ContactsFilterMode.ALL,
+                    onClick = { onFilterChange(ContactsFilterMode.ALL) },
+                    label = { Text("All (${state.totalCount})") },
+                )
+                FilterChip(
+                    selected = state.filterMode == ContactsFilterMode.TRACKED,
+                    onClick = { onFilterChange(ContactsFilterMode.TRACKED) },
+                    label = { Text("Bonded (${state.bondedCount})") },
+                )
+            }
+            if (state.availableGroups.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                GroupFilterChip(
+                    groups = state.availableGroups,
+                    selected = state.selectedGroup,
+                    onSelect = onGroupSelected,
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
+            }
             Spacer(Modifier.height(8.dp))
-            GroupFilterChip(
-                groups = state.availableGroups,
-                selected = state.selectedGroup,
-                onSelect = onGroupSelected,
-                modifier = Modifier.padding(horizontal = 16.dp),
-            )
         }
-        Spacer(Modifier.height(8.dp))
         if (state.filtered.isEmpty()) {
             Box(
                 modifier = Modifier.fillMaxSize(),
@@ -246,6 +266,57 @@ private fun ContactList(
             }
         }
     }
+}
+
+/**
+ * Collapse state for the search / filter header: scrolling the list down hides
+ * it and scrolling back up brings it straight back ("enter always"), so the
+ * contact list gets the whole screen while you browse.
+ */
+@Stable
+private class HeaderCollapseState {
+    /** Full measured height of the header. */
+    var heightPx by mutableFloatStateOf(0f)
+
+    /** 0 = fully shown … -[heightPx] = fully hidden. */
+    var offsetPx by mutableFloatStateOf(0f)
+
+    val connection = object : NestedScrollConnection {
+        override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+            val previous = offsetPx
+            offsetPx = (previous + available.y).coerceIn(-heightPx, 0f)
+            // While the header is moving it absorbs the scroll, so the list
+            // follows the finger instead of moving twice as fast.
+            return Offset(0f, offsetPx - previous)
+        }
+    }
+
+    fun reset() {
+        offsetPx = 0f
+    }
+}
+
+@Composable
+private fun CollapsingHeader(
+    state: HeaderCollapseState,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .clipToBounds()
+            .layout { measurable, constraints ->
+                val placeable = measurable.measure(constraints)
+                val full = placeable.height.toFloat()
+                if (state.heightPx != full) state.heightPx = full
+                val offset = state.offsetPx.coerceIn(-full, 0f).roundToInt()
+                // Report the shrunken height so the list below slides up into the
+                // freed space; the header itself is shifted up and clipped.
+                layout(placeable.width, placeable.height + offset) {
+                    placeable.placeRelative(0, offset)
+                }
+            },
+        content = content,
+    )
 }
 
 /** First letter of the display name, uppercased; "#" for anything else. */

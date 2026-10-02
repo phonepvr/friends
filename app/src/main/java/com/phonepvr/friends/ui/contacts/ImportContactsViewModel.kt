@@ -2,12 +2,16 @@ package com.phonepvr.friends.ui.contacts
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.phonepvr.friends.data.calllog.CallLogReader
+import com.phonepvr.friends.data.contacts.BondIndex
 import com.phonepvr.friends.data.contacts.ContactDate
 import com.phonepvr.friends.data.contacts.ContactsReader
 import com.phonepvr.friends.data.contacts.DeviceContact
+import com.phonepvr.friends.data.db.dao.PersonDao
 import com.phonepvr.friends.data.db.entity.EventEntity
 import com.phonepvr.friends.data.db.entity.PersonEntity
 import com.phonepvr.friends.data.db.entity.PhoneNumberEntity
+import com.phonepvr.friends.data.dialer.RecentContacts
 import com.phonepvr.friends.data.photo.PhotoStorage
 import com.phonepvr.friends.data.repository.CallLogAutoSync
 import com.phonepvr.friends.data.repository.PeopleRepository
@@ -25,6 +29,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
 data class ImportUiState(
@@ -34,11 +39,20 @@ data class ImportUiState(
     val query: String = "",
     val selectedIds: Set<Long> = emptySet(),
     val importing: Boolean = false,
+    /** Contacts behind the most recent calls, newest first (empty without call-log access). */
+    val recent: List<DeviceContact> = emptyList(),
+    /** Contacts that already have a bond; shown but not selectable, so no duplicates. */
+    val bondedContactIds: Set<Long> = emptySet(),
 )
+
+/** How far back the call log is scanned for the "Recent" list. */
+private val RECENT_WINDOW_MILLIS = TimeUnit.DAYS.toMillis(90)
 
 @HiltViewModel
 class ImportContactsViewModel @Inject constructor(
     private val contactsReader: ContactsReader,
+    private val callLogReader: CallLogReader,
+    private val personDao: PersonDao,
     private val repository: PeopleRepository,
     private val photoStorage: PhotoStorage,
     private val settingsRepository: SettingsRepository,
@@ -64,11 +78,27 @@ class ImportContactsViewModel @Inject constructor(
         if (_state.value.loading || _state.value.contacts.isNotEmpty()) return
         _state.value = _state.value.copy(loading = true)
         viewModelScope.launch {
-            val contacts = withContext(Dispatchers.IO) { contactsReader.listContacts() }
+            val loaded = withContext(Dispatchers.IO) {
+                val contacts = contactsReader.listContacts()
+                // READ_CALL_LOG is optional here: without it the query throws and
+                // the "Recent" list is simply left out.
+                val calls = runCatching {
+                    callLogReader.recentCalls(System.currentTimeMillis() - RECENT_WINDOW_MILLIS)
+                }.getOrDefault(emptyList())
+                val bonds = BondIndex(personDao.getAll().filter { !it.isArchived })
+                Triple(
+                    contacts,
+                    RecentContacts.fromCalls(calls, contacts),
+                    contacts.filter { bonds.personFor(it) != null }.map { it.contactId }.toSet(),
+                )
+            }
+            val (contacts, recent, bonded) = loaded
             _state.value = _state.value.copy(
                 loading = false,
                 contacts = contacts,
                 filtered = filter(contacts, _state.value.query),
+                recent = recent,
+                bondedContactIds = bonded,
             )
         }
     }
@@ -82,6 +112,7 @@ class ImportContactsViewModel @Inject constructor(
     }
 
     fun toggleSelection(contactId: Long) {
+        if (contactId in _state.value.bondedContactIds) return
         val selected = _state.value.selectedIds.toMutableSet()
         if (!selected.add(contactId)) {
             selected.remove(contactId)
@@ -104,7 +135,7 @@ class ImportContactsViewModel @Inject constructor(
     }
 
     fun importSelected(onDone: () -> Unit) {
-        val ids = _state.value.selectedIds
+        val ids = _state.value.selectedIds - _state.value.bondedContactIds
         if (ids.isEmpty() || _state.value.importing) return
         _state.value = _state.value.copy(importing = true)
         viewModelScope.launch {

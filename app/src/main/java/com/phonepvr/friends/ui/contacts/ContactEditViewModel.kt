@@ -5,6 +5,8 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.phonepvr.friends.data.contacts.ContactDetails
+import com.phonepvr.friends.data.contacts.ContactGroupState
+import com.phonepvr.friends.data.contacts.GroupMembershipDiff
 import com.phonepvr.friends.data.contacts.ContactForm
 import com.phonepvr.friends.data.contacts.ContactPhotoProcessor
 import com.phonepvr.friends.data.contacts.ContactTracker
@@ -39,6 +41,10 @@ data class ContactEditUiState(
     val pickedPhotoUri: Uri? = null,
     /** True while the picked photo is being decoded + scaled in the background. */
     val processingPhoto: Boolean = false,
+    /** Groups the contact can be put into, and the ones it was in when the screen opened (EDIT only). */
+    val groups: ContactGroupState = ContactGroupState(),
+    /** The user's current group selection; written to the contact on save. */
+    val selectedGroupIds: Set<Long> = emptySet(),
 )
 
 @HiltViewModel
@@ -107,6 +113,10 @@ class ContactEditViewModel @Inject constructor(
                         existingPhotoUri = details?.photoUri,
                     )
                 }
+                // Groups load separately so a slow/failed groups query never delays
+                // (or breaks) the rest of the form.
+                val groups = systemContactsRepository.groupState(contactId)
+                _state.update { it.copy(groups = groups, selectedGroupIds = groups.memberOf) }
             }
         }
     }
@@ -143,6 +153,17 @@ class ContactEditViewModel @Inject constructor(
             pickedPhotoUri = null,
             existingPhotoUri = null,
             form = it.form.copy(photoChange = PhotoChange.Remove),
+        )
+    }
+
+    /** Ticks / unticks a group in the editor; nothing is written until Save. */
+    fun onToggleGroup(groupId: Long) = _state.update { s ->
+        s.copy(
+            selectedGroupIds = if (groupId in s.selectedGroupIds) {
+                s.selectedGroupIds - groupId
+            } else {
+                s.selectedGroupIds + groupId
+            },
         )
     }
 
@@ -255,6 +276,22 @@ class ContactEditViewModel @Inject constructor(
                                 it.copy(
                                     saving = false,
                                     error = "Couldn't save changes.",
+                                )
+                            }
+                            return@launch
+                        }
+                        // Only the memberships the user actually changed are written;
+                        // hidden/system groups are never touched.
+                        val change = GroupMembershipDiff.compute(
+                            current = _state.value.groups.memberOf,
+                            selected = _state.value.selectedGroupIds,
+                            editable = _state.value.groups.editable.map { it.id }.toSet(),
+                        )
+                        if (!contactWriter.setGroupMemberships(contactId, change)) {
+                            _state.update {
+                                it.copy(
+                                    saving = false,
+                                    error = "Saved, but the groups couldn't be changed.",
                                 )
                             }
                             return@launch

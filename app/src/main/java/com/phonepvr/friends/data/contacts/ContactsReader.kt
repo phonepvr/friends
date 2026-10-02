@@ -193,6 +193,61 @@ class ContactsReader @Inject constructor(
         return contacts
     }
 
+    /**
+     * Searchable text beyond name and phone, per contact id: organisation (company,
+     * title, department), nickname, notes, email addresses, postal address and
+     * website, newline-joined. One bulk query over the Data table, so loading it
+     * for the whole address book costs the same as one extra list pass; callers
+     * load it only while the user is searching.
+     */
+    fun readSearchText(): Map<Long, String> {
+        val builders = HashMap<Long, StringBuilder>()
+        resolver.query(
+            ContactsContract.Data.CONTENT_URI,
+            arrayOf(
+                ContactsContract.Data.CONTACT_ID,
+                ContactsContract.Data.MIMETYPE,
+                ContactsContract.Data.DATA1,
+                ContactsContract.Data.DATA4,
+                ContactsContract.Data.DATA5,
+            ),
+            "${ContactsContract.Data.MIMETYPE} IN (?,?,?,?,?,?)",
+            arrayOf(
+                ContactsContract.CommonDataKinds.Organization.CONTENT_ITEM_TYPE,
+                ContactsContract.CommonDataKinds.Nickname.CONTENT_ITEM_TYPE,
+                ContactsContract.CommonDataKinds.Note.CONTENT_ITEM_TYPE,
+                ContactsContract.CommonDataKinds.Email.CONTENT_ITEM_TYPE,
+                ContactsContract.CommonDataKinds.StructuredPostal.CONTENT_ITEM_TYPE,
+                ContactsContract.CommonDataKinds.Website.CONTENT_ITEM_TYPE,
+            ),
+            null,
+        )?.use { cursor ->
+            val idColumn = cursor.getColumnIndexOrThrow(ContactsContract.Data.CONTACT_ID)
+            val mimeColumn = cursor.getColumnIndexOrThrow(ContactsContract.Data.MIMETYPE)
+            val data1 = cursor.getColumnIndexOrThrow(ContactsContract.Data.DATA1)
+            val data4 = cursor.getColumnIndexOrThrow(ContactsContract.Data.DATA4)
+            val data5 = cursor.getColumnIndexOrThrow(ContactsContract.Data.DATA5)
+            while (cursor.moveToNext()) {
+                val text = builders.getOrPut(cursor.getLong(idColumn)) { StringBuilder() }
+                appendLine(text, cursor.getString(data1))
+                // Title and department are only meaningful on organisation rows.
+                if (cursor.getString(mimeColumn) ==
+                    ContactsContract.CommonDataKinds.Organization.CONTENT_ITEM_TYPE
+                ) {
+                    appendLine(text, cursor.getString(data4))
+                    appendLine(text, cursor.getString(data5))
+                }
+            }
+        }
+        return builders.mapValues { it.value.toString() }
+    }
+
+    private fun appendLine(into: StringBuilder, value: String?) {
+        if (value.isNullOrBlank()) return
+        if (into.isNotEmpty()) into.append('\n')
+        into.append(value)
+    }
+
     private fun readPhonesByContactId(): Map<Long, List<String>> {
         val map = HashMap<Long, MutableList<String>>()
         resolver.query(

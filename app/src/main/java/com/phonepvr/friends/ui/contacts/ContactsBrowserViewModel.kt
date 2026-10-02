@@ -3,6 +3,7 @@ package com.phonepvr.friends.ui.contacts
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.phonepvr.friends.data.contacts.BondIndex
+import com.phonepvr.friends.data.contacts.ContactSearch
 import com.phonepvr.friends.data.contacts.ContactTracker
 import com.phonepvr.friends.data.contacts.SystemContactsRepository
 import com.phonepvr.friends.data.db.dao.PersonDao
@@ -11,7 +12,9 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
@@ -27,6 +30,8 @@ data class BrowseContact(
     val lookupKey: String,
     val displayName: String,
     val primaryNumber: String?,
+    /** Every number the contact has (search matches any, not just the primary). */
+    val phoneNumbers: List<String> = emptyList(),
     val isTracked: Boolean,
     val trackedPersonId: Long?,
     val photoRelativePath: String?,
@@ -53,6 +58,8 @@ private data class BrowseControls(
     val query: String,
     val mode: ContactsFilterMode,
     val selectedGroup: String?,
+    /** Organisation / nickname / notes / email text per contact id; empty until loaded. */
+    val extraText: Map<Long, String>,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -80,8 +87,28 @@ class ContactsBrowserViewModel @Inject constructor(
             if (title == null) flowOf(null) else flow { emit(systemContactsRepository.contactIdsInGroup(title)) }
         }
 
-    private val controls = combine(query, filterMode, selectedGroup) { q, mode, group ->
-        BrowseControls(q, mode, group)
+    /**
+     * Extra searchable fields, loaded only while a search is active and dropped
+     * afterwards. They arrive asynchronously and never gate the query itself, so
+     * typing stays instant and the results simply widen once the fields load.
+     */
+    private val extraSearchText = MutableStateFlow<Map<Long, String>>(emptyMap())
+
+    init {
+        viewModelScope.launch {
+            combine(query.map { it.isNotBlank() }, permissionGranted) { searching, granted ->
+                searching && granted
+            }
+                .distinctUntilChanged()
+                .collectLatest { active ->
+                    extraSearchText.value =
+                        if (active) systemContactsRepository.searchText() else emptyMap()
+                }
+        }
+    }
+
+    private val controls = combine(query, filterMode, selectedGroup, extraSearchText) { q, mode, group, extra ->
+        BrowseControls(q, mode, group, extra)
     }
 
     val state: StateFlow<ContactsBrowserUiState> = combine(
@@ -103,6 +130,7 @@ class ContactsBrowserViewModel @Inject constructor(
                 lookupKey = dc.lookupKey,
                 displayName = dc.displayName,
                 primaryNumber = dc.phoneNumbers.firstOrNull(),
+                phoneNumbers = dc.phoneNumbers,
                 isTracked = person != null,
                 trackedPersonId = person?.id,
                 photoRelativePath = person?.photoRelativePath,
@@ -167,14 +195,14 @@ class ContactsBrowserViewModel @Inject constructor(
         if (groupMemberIds != null) {
             scoped = scoped.filter { it.contactId in groupMemberIds }
         }
-        val trimmed = controls.query.trim()
-        if (trimmed.isEmpty()) return scoped
-        val lowerName = trimmed.lowercase()
-        val digits = trimmed.filter { it.isDigit() }
+        if (controls.query.isBlank()) return scoped
         return scoped.filter { c ->
-            if (c.displayName.lowercase().contains(lowerName)) return@filter true
-            if (digits.isEmpty()) return@filter false
-            c.primaryNumber?.filter { it.isDigit() }?.contains(digits) == true
+            ContactSearch.matches(
+                query = controls.query,
+                displayName = c.displayName,
+                phoneNumbers = c.phoneNumbers,
+                extraText = controls.extraText[c.contactId],
+            )
         }
     }
 }

@@ -23,4 +23,14 @@ interface FavouriteContactDao {
 
     @Query("SELECT MAX(position) FROM favourite_contacts")
     suspend fun maxPosition(): Int?
+
+    @Query("SELECT * FROM favourite_contacts")
+    suspend fun getAll(): List<FavouriteContactEntity>
+
+    /** Points a favourite at its contact's current lookup key (and name). */
+    @Query(
+        "UPDATE favourite_contacts SET lookupKey = :newKey, displayName = :displayName " +
+            "WHERE lookupKey = :oldKey",
+    )
+    suspend fun rekey(oldKey: String, newKey: String, displayName: String)
 }

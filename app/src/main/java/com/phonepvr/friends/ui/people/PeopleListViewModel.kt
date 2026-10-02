@@ -3,6 +3,7 @@ package com.phonepvr.friends.ui.people
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.phonepvr.friends.data.contacts.BondContactReconciler
 import com.phonepvr.friends.data.db.relation.PersonWithDetails
 import com.phonepvr.friends.data.repository.PeopleRepository
 import com.phonepvr.friends.data.repository.TimelineRepository
@@ -32,6 +33,8 @@ import javax.inject.Inject
 data class PersonListItem(
     val person: PersonWithDetails,
     val cadence: CadenceStatus,
+    /** The bond's address-book contact has gone missing (see BondContactReconciler). */
+    val contactUnlinked: Boolean = false,
 )
 
 private const val DAY_MILLIS = 24L * 60L * 60L * 1000L
@@ -63,6 +66,7 @@ private fun CadenceState.bondsBucket(): Int = when (this) {
 class PeopleListViewModel @Inject constructor(
     repository: PeopleRepository,
     timelineRepository: TimelineRepository,
+    bondContactReconciler: BondContactReconciler,
     private val settingsRepository: SettingsRepository,
     private val quoteRepository: QuoteRepository,
     @ApplicationContext private val appContext: Context,
@@ -104,7 +108,8 @@ class PeopleListViewModel @Inject constructor(
             repository.observeActiveWithDetails(),
             timelineRepository.observeAll(),
             _searchQuery,
-        ) { people, timeline, query ->
+            bondContactReconciler.unlinkedPersonIds,
+        ) { people, timeline, query, unlinked ->
             val today = LocalDate.now()
             val zone = ZoneId.systemDefault()
             // Bucket the timeline by personId once so each row's cadence lookup
@@ -128,7 +133,7 @@ class PeopleListViewModel @Inject constructor(
                     cadenceTargetDays = detail.person.cadenceTargetDays,
                     today = today,
                 )
-                PersonListItem(detail, cadence)
+                PersonListItem(detail, cadence, contactUnlinked = detail.person.id in unlinked)
             }.sortedWith(BondsSortComparator)
         }.stateIn(
             scope = viewModelScope,

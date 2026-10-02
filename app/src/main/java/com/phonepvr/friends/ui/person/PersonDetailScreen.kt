@@ -121,6 +121,7 @@ fun PersonDetailScreen(
     onLogInteraction: (Long) -> Unit,
     onEditInteraction: (Long) -> Unit,
     onEditContact: (Long) -> Unit,
+    onLinkContact: (Long) -> Unit,
     viewModel: PersonDetailViewModel = hiltViewModel(),
 ) {
     val person by viewModel.person.collectAsStateWithLifecycle()
@@ -139,7 +140,9 @@ fun PersonDetailScreen(
     val contactDetails by viewModel.contactDetails.collectAsStateWithLifecycle()
     val contactId by viewModel.contactId.collectAsStateWithLifecycle()
     val isFavourite by viewModel.isFavourite.collectAsStateWithLifecycle()
+    val isContactUnlinked by viewModel.isContactUnlinked.collectAsStateWithLifecycle()
     var showDeleteContactDialog by remember { mutableStateOf(false) }
+    var showRemoveBondDialog by remember { mutableStateOf(false) }
     // Block state for the overflow menu's label. Re-queried whenever the
     // linked contact changes; the menu item flips it optimistically on tap.
     var isPrimaryBlocked by remember(contactDetails?.lookupKey) { mutableStateOf(false) }
@@ -418,6 +421,15 @@ fun PersonDetailScreen(
                         )
                     }
                 }
+                if (isContactUnlinked) {
+                    item {
+                        UnlinkedContactCard(
+                            onLink = { onLinkContact(viewModel.personId) },
+                            onKeep = viewModel::keepWithoutContact,
+                            onRemove = { showRemoveBondDialog = true },
+                        )
+                    }
+                }
                 item {
                     InfoSection(
                         person = current,
@@ -530,9 +542,70 @@ fun PersonDetailScreen(
         )
     }
 
+    if (showRemoveBondDialog) {
+        AlertDialog(
+            onDismissRequest = { showRemoveBondDialog = false },
+            title = { Text("Remove this bond?") },
+            text = {
+                Text(
+                    "This deletes the bond and its whole history — check-ins, notes " +
+                        "and dates. It can't be undone. Back up first if you might want it.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showRemoveBondDialog = false
+                        viewModel.removeBond(onRemoved = onBack)
+                    },
+                ) { Text("Remove", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRemoveBondDialog = false }) { Text("Cancel") }
+            },
+        )
+    }
+
     val deleted by viewModel.contactDeleted.collectAsStateWithLifecycle()
     LaunchedEffect(deleted) {
         if (deleted) snackbarHostState.showSnackbar("Contact deleted")
+    }
+}
+
+/**
+ * Shown when this bond's address-book contact has gone missing (deleted). The
+ * bond is never removed automatically — it holds the user's history — so the
+ * user chooses: link it to another contact, keep it without one, or remove it.
+ */
+@Composable
+private fun UnlinkedContactCard(
+    onLink: () -> Unit,
+    onKeep: () -> Unit,
+    onRemove: () -> Unit,
+) {
+    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text("Contact unlinked", style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = "The contact this bond was created from can't be found in your " +
+                    "address book any more — it may have been deleted. Your history " +
+                    "with them is safe.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onLink) { Text("Link to a contact") }
+                OutlinedButton(onClick = onKeep) { Text("Keep without one") }
+            }
+            TextButton(onClick = onRemove) {
+                Text("Remove bond", color = MaterialTheme.colorScheme.error)
+            }
+        }
     }
 }
 

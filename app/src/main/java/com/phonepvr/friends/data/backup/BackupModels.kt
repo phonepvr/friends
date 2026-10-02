@@ -55,6 +55,10 @@ data class BackupPerson(
     val cadenceTargetDays: Int? = null,
     val photoRelativePath: String? = null,
     val contactLookupKey: String? = null,
+    // PersonEntity.contactId is deliberately NOT exported: it is a device-local
+    // Contacts._ID that means nothing (or the wrong person) on another phone. The
+    // lookup key is exported, and BondContactReconciler re-resolves the id after
+    // a restore. The file format is therefore unchanged and old exports import as-is.
     val notes: String? = null,
     val isArchived: Boolean = false,
     val createdAt: Long,

@@ -20,6 +20,7 @@ fragment = "1.8.5"
 coil = "2.7.0"
 profileinstaller = "1.4.1"
 junit = "4.13.2"
+sqliteJdbc = "3.53.4.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -53,6 +54,9 @@ androidx-fragment = { group = "androidx.fragment", name = "fragment-ktx", versio
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
 androidx-profileinstaller = { group = "androidx.profileinstaller", name = "profileinstaller", version.ref = "profileinstaller" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
+# Test-only: a real SQLite on the JVM so the Room migration test can run the
+# actual migration SQL without an emulator. Never part of the shipped app.
+sqlite-jdbc = { group = "org.xerial", name = "sqlite-jdbc", version.ref = "sqliteJdbc" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

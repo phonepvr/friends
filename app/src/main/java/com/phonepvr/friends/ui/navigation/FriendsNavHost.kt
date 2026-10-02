@@ -31,6 +31,7 @@ import com.phonepvr.friends.ui.dialer.SpeedDialScreen
 import com.phonepvr.friends.ui.onboarding.OnboardingScreen
 import com.phonepvr.friends.ui.people.AddEditPersonScreen
 import com.phonepvr.friends.ui.people.PeopleListScreen
+import com.phonepvr.friends.ui.person.LinkContactScreen
 import com.phonepvr.friends.ui.person.PersonDetailScreen
 import com.phonepvr.friends.ui.quickreplies.QuickRepliesScreen
 import com.phonepvr.friends.ui.quotes.MyQuotesScreen
@@ -42,6 +43,7 @@ object Routes {
     const val PEOPLE_LIST = "people"
     const val EDIT_PERSON = "person/edit/{personId}"
     const val PERSON_DETAIL = "person/detail/{personId}"
+    const val LINK_CONTACT = "person/link/{personId}"
     const val LOG_INTERACTION = "interaction/log/{personId}"
     const val EDIT_INTERACTION = "interaction/edit/{entryId}"
     const val IMPORT_CONTACTS = "contacts/import"
@@ -71,6 +73,7 @@ object Routes {
 
     fun editPerson(personId: Long): String = "person/edit/$personId"
     fun personDetail(personId: Long): String = "person/detail/$personId"
+    fun linkContact(personId: Long): String = "person/link/$personId"
     fun logInteraction(personId: Long): String = "interaction/log/$personId"
     fun editInteraction(entryId: Long): String = "interaction/edit/$entryId"
     fun contactDetail(contactId: Long): String = "contacts/detail/$contactId"
@@ -198,7 +201,16 @@ fun FriendsNavHost(
                 onEditContact = { contactId ->
                     navController.navigate(Routes.contactEdit(contactId))
                 },
+                onLinkContact = { personId ->
+                    navController.navigate(Routes.linkContact(personId))
+                },
             )
+        }
+        composable(
+            route = Routes.LINK_CONTACT,
+            arguments = listOf(navArgument(Routes.PERSON_ID_ARG) { type = NavType.LongType }),
+        ) {
+            LinkContactScreen(onDone = { navController.popBackStack() })
         }
         composable(
             route = Routes.LOG_INTERACTION,

@@ -80,7 +80,7 @@ class ContactDetailViewModel @Inject constructor(
     private val trackedPerson: Flow<PersonEntity?> =
         details.flatMapLatest { d ->
             if (d != null && d.lookupKey.isNotBlank()) {
-                personDao.observeActiveByContactLookupKey(d.lookupKey)
+                personDao.observeActiveByContact(d.lookupKey, contactId)
             } else {
                 flowOf(null)
             }
@@ -155,7 +155,7 @@ class ContactDetailViewModel @Inject constructor(
             mutating.value = true
             try {
                 if (isTracked) {
-                    contactTracker.untrack(d.lookupKey)
+                    contactTracker.untrack(d.lookupKey, contactId)
                 } else {
                     contactTracker.track(contactId, d.lookupKey)
                 }
@@ -236,7 +236,7 @@ class ContactDetailViewModel @Inject constructor(
                 // Untrack first so the linked Bondwidth person is archived
                 // (preserves any timeline history accumulated before the
                 // contact gets erased from the system provider).
-                contactTracker.untrack(d.lookupKey)
+                contactTracker.untrack(d.lookupKey, contactId)
                 val ok = contactWriter.delete(contactId, d.lookupKey)
                 if (ok) deleted.value = true
             } finally {

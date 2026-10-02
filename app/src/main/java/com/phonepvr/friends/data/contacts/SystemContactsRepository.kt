@@ -49,6 +49,16 @@ class SystemContactsRepository @Inject constructor(
     suspend fun details(contactId: Long): ContactDetails? =
         withContext(Dispatchers.IO) { reader.readDetails(contactId) }
 
+    /**
+     * Each contact's other searchable text (organisation, nickname, notes, emails,
+     * address, website), already folded for [ContactSearch.matches]. Loaded on
+     * demand — it reads every contact's notes — so only while a search is active.
+     */
+    suspend fun searchText(): Map<Long, String> =
+        withContext(Dispatchers.IO) {
+            reader.readSearchText().mapValues { ContactSearch.fold(it.value) }
+        }
+
     /** User-visible contact-group titles for the browser's group filter. */
     suspend fun listGroupTitles(): List<String> =
         withContext(Dispatchers.IO) { reader.listGroupTitles() }

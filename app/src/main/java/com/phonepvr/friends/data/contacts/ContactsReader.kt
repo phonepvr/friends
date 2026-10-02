@@ -113,6 +113,99 @@ class ContactsReader @Inject constructor(
     }
 
     /**
+     * The groups [contactId] can be put into, and the ones it is already in.
+     *
+     * A contact can only join groups of the account its raw contact lives in, and
+     * writes go to the contact's first raw contact (as in ContactWriter), so both
+     * the choices and the current memberships are read for that one raw contact.
+     * Only user-facing groups are offered — the same filter as [listGroupTitles]:
+     * not hidden, deleted, auto-add ("My Contacts") or the favourites group.
+     */
+    fun editableGroupsFor(contactId: Long): ContactGroupState {
+        val rawContactId = firstRawContactId(contactId) ?: return ContactGroupState()
+        var accountName: String? = null
+        var accountType: String? = null
+        var dataSet: String? = null
+        var found = false
+        resolver.query(
+            ContactsContract.RawContacts.CONTENT_URI,
+            arrayOf(
+                ContactsContract.RawContacts.ACCOUNT_NAME,
+                ContactsContract.RawContacts.ACCOUNT_TYPE,
+                ContactsContract.RawContacts.DATA_SET,
+            ),
+            "${ContactsContract.RawContacts._ID} = ?",
+            arrayOf(rawContactId.toString()),
+            null,
+        )?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                accountName = cursor.getString(0)
+                accountType = cursor.getString(1)
+                dataSet = cursor.getString(2)
+                found = true
+            }
+        }
+        if (!found) return ContactGroupState()
+
+        // Match the account exactly; local contacts have a null account, which a
+        // plain "= ?" would never match.
+        val selection = StringBuilder(
+            "${ContactsContract.Groups.DELETED} = 0 AND " +
+                "${ContactsContract.Groups.GROUP_VISIBLE} = 1 AND " +
+                "${ContactsContract.Groups.AUTO_ADD} = 0 AND " +
+                "${ContactsContract.Groups.FAVORITES} = 0",
+        )
+        val args = ArrayList<String>()
+        fun addAccountClause(column: String, value: String?) {
+            if (value == null) {
+                selection.append(" AND $column IS NULL")
+            } else {
+                selection.append(" AND $column = ?")
+                args.add(value)
+            }
+        }
+        addAccountClause(ContactsContract.Groups.ACCOUNT_NAME, accountName)
+        addAccountClause(ContactsContract.Groups.ACCOUNT_TYPE, accountType)
+        addAccountClause(ContactsContract.Groups.DATA_SET, dataSet)
+
+        val groups = ArrayList<ContactGroup>()
+        runCatching {
+            resolver.query(
+                ContactsContract.Groups.CONTENT_URI,
+                arrayOf(ContactsContract.Groups._ID, ContactsContract.Groups.TITLE),
+                selection.toString(),
+                args.toTypedArray(),
+                null,
+            )?.use { cursor ->
+                while (cursor.moveToNext()) {
+                    val title = cursor.getString(1)?.trim()?.takeIf { it.isNotBlank() } ?: continue
+                    groups.add(ContactGroup(cursor.getLong(0), title))
+                }
+            }
+        }
+        groups.sortWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.title })
+
+        val editableIds = groups.map { it.id }.toSet()
+        val memberOf = HashSet<Long>()
+        resolver.query(
+            ContactsContract.Data.CONTENT_URI,
+            arrayOf(ContactsContract.CommonDataKinds.GroupMembership.GROUP_ROW_ID),
+            "${ContactsContract.Data.RAW_CONTACT_ID} = ? AND ${ContactsContract.Data.MIMETYPE} = ?",
+            arrayOf(
+                rawContactId.toString(),
+                ContactsContract.CommonDataKinds.GroupMembership.CONTENT_ITEM_TYPE,
+            ),
+            null,
+        )?.use { cursor ->
+            while (cursor.moveToNext()) {
+                val id = cursor.getLong(0)
+                if (id in editableIds) memberOf.add(id)
+            }
+        }
+        return ContactGroupState(editable = groups, memberOf = memberOf)
+    }
+
+    /**
      * Contact ids belonging to any group titled [title]. Unions across
      * accounts, since the same group name can exist once per account.
      */

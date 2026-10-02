@@ -77,7 +77,14 @@ class ContactsBrowserViewModel @Inject constructor(
     /** Contact ids in the selected group, or null when no group is selected. */
     private val groupMemberIds: kotlinx.coroutines.flow.Flow<Set<Long>?> =
         selectedGroup.flatMapLatest { title ->
-            if (title == null) flowOf(null) else flow { emit(systemContactsRepository.contactIdsInGroup(title)) }
+            if (title == null) {
+                flowOf(null)
+            } else {
+                // Re-read on every contacts change (it emits once straight away), so
+                // group edits made in the contact editor show up here immediately.
+                systemContactsRepository.observeChanges()
+                    .map { systemContactsRepository.contactIdsInGroup(title) }
+            }
         }
 
     private val controls = combine(query, filterMode, selectedGroup) { q, mode, group ->

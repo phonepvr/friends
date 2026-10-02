@@ -9,6 +9,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -31,6 +33,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -60,6 +63,7 @@ import androidx.core.net.toUri
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.phonepvr.friends.data.contacts.ContactGroup
 import com.phonepvr.friends.data.contacts.EmailEntry
 import com.phonepvr.friends.data.contacts.EmailType
 import com.phonepvr.friends.data.contacts.PhoneEntry
@@ -173,6 +177,7 @@ fun ContactEditScreen(
                     onWebsiteChange = viewModel::onWebsiteChange,
                     onPickPhoto = viewModel::onPhotoPicked,
                     onRemovePhoto = viewModel::onRemovePhoto,
+                    onToggleGroup = viewModel::onToggleGroup,
                 )
             }
         }
@@ -199,6 +204,7 @@ private fun EditForm(
     onWebsiteChange: (String) -> Unit,
     onPickPhoto: (android.net.Uri) -> Unit,
     onRemovePhoto: () -> Unit,
+    onToggleGroup: (Long) -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -265,6 +271,13 @@ private fun EditForm(
             minLines = 3,
             modifier = Modifier.fillMaxWidth(),
         )
+        if (state.groups.editable.isNotEmpty()) {
+            GroupSection(
+                groups = state.groups.editable,
+                selected = state.selectedGroupIds,
+                onToggle = onToggleGroup,
+            )
+        }
         state.error?.let { msg ->
             Text(
                 text = msg,
@@ -273,6 +286,34 @@ private fun EditForm(
             )
         }
         Spacer(Modifier.height(48.dp))
+    }
+}
+
+/**
+ * Tick the groups (Family, Work, …) this contact belongs to; un-ticking one and
+ * ticking another moves the contact between groups. Applied when the form is saved.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun GroupSection(
+    groups: List<ContactGroup>,
+    selected: Set<Long>,
+    onToggle: (Long) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Groups", style = MaterialTheme.typography.titleSmall)
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            groups.forEach { group ->
+                FilterChip(
+                    selected = group.id in selected,
+                    onClick = { onToggle(group.id) },
+                    label = { Text(group.title) },
+                )
+            }
+        }
     }
 }
 

@@ -11,6 +11,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -53,6 +54,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -224,7 +226,7 @@ fun DialpadScreen(
                 .padding(padding)
                 .fillMaxSize(),
         ) {
-            InputBar(input = state.input, onBackspace = viewModel::onBackspace)
+            InputBar(input = state.input)
             Box(modifier = Modifier.weight(1f)) {
                 if (state.matches.isNotEmpty()) {
                     LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -282,21 +284,35 @@ fun DialpadScreen(
                 onLongPressKey = onLongPressKey,
                 speedDialKeys = speedDial.keys,
             )
+            // Three cells aligned with the keypad columns: call in the middle and
+            // backspace under the right-hand key, where a one-handed thumb already is.
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.Center,
+                    .padding(horizontal = 8.dp, vertical = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                FloatingActionButton(
-                    onClick = {
-                        val target = state.matches.firstOrNull()?.matchedNumber
-                            ?.takeIf { it.isNotBlank() }
-                            ?: state.input
-                        placeCall(target)
-                    },
-                ) {
-                    Icon(Icons.Filled.Call, contentDescription = "Call")
+                Spacer(Modifier.weight(1f))
+                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                    FloatingActionButton(
+                        onClick = {
+                            val target = state.matches.firstOrNull()?.matchedNumber
+                                ?.takeIf { it.isNotBlank() }
+                                ?: state.input
+                            placeCall(target)
+                        },
+                    ) {
+                        Icon(Icons.Filled.Call, contentDescription = "Call")
+                    }
+                }
+                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                    if (state.input.isNotEmpty()) {
+                        BackspaceKey(
+                            onBackspace = viewModel::onBackspace,
+                            onClear = viewModel::onClearInput,
+                        )
+                    }
                 }
             }
         }
@@ -304,27 +320,48 @@ fun DialpadScreen(
 }
 
 @Composable
-private fun InputBar(input: String, onBackspace: () -> Unit) {
-    Row(
+private fun InputBar(input: String) {
+    Text(
+        text = input.ifEmpty { " " },
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        style = MaterialTheme.typography.headlineMedium,
+        textAlign = TextAlign.End,
+    )
+}
+
+/**
+ * Backspace lives in the keypad's bottom row (next to the call button) so it can
+ * be reached one-handed. Tap removes the last character; long-press clears the
+ * whole number.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun BackspaceKey(onBackspace: () -> Unit, onClear: () -> Unit) {
+    val view = LocalView.current
+    Box(
+        modifier = Modifier
+            .size(56.dp)
+            .clip(CircleShape)
+            .combinedClickable(
+                onClickLabel = "Delete last digit",
+                onClick = {
+                    view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                    onBackspace()
+                },
+                onLongClickLabel = "Clear number",
+                onLongClick = {
+                    view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                    onClear()
+                },
+            ),
+        contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = input.ifEmpty { " " },
-            modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.headlineMedium,
-            textAlign = TextAlign.End,
+        Icon(
+            Icons.AutoMirrored.Filled.Backspace,
+            contentDescription = "Backspace",
         )
-        if (input.isNotEmpty()) {
-            IconButton(onClick = onBackspace) {
-                Icon(
-                    Icons.AutoMirrored.Filled.Backspace,
-                    contentDescription = "Backspace",
-                )
-            }
-        }
     }
 }
 

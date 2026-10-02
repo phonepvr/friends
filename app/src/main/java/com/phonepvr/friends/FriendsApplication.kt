@@ -5,6 +5,7 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.phonepvr.friends.data.calllog.CallLogChangeObserver
+import com.phonepvr.friends.data.contacts.BondContactReconciler
 import com.phonepvr.friends.data.repository.CallLogAutoSync
 import com.phonepvr.friends.data.settings.SettingsRepository
 import com.phonepvr.friends.widget.WidgetRefreshObserver
@@ -34,6 +35,9 @@ class FriendsApplication : Application() {
     @Inject
     lateinit var callLogChangeObserver: CallLogChangeObserver
 
+    @Inject
+    lateinit var bondContactReconciler: BondContactReconciler
+
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override fun onCreate() {
@@ -56,6 +60,10 @@ class FriendsApplication : Application() {
         // alive land in the timeline without waiting for a cold launch.
         // No-op without READ_CALL_LOG.
         callLogChangeObserver.start(appScope)
+        // Keep every bond pointing at its address-book contact across renames:
+        // reconciles now and whenever the system contacts change. No-op without
+        // READ_CONTACTS.
+        bondContactReconciler.start(appScope)
         // Sync once now and every time the app comes back to the foreground.
         // onStart fires on cold launch AND every return-to-foreground, which
         // covers the gap when the process was killed.
@@ -63,6 +71,9 @@ class FriendsApplication : Application() {
             object : DefaultLifecycleObserver {
                 override fun onStart(owner: LifecycleOwner) {
                     appScope.launch(Dispatchers.IO) {
+                        // Also catches changes made while the process was dead and
+                        // permission grants that arrived after launch.
+                        bondContactReconciler.reconcile()
                         runCatching { callLogAutoSync.syncAllPeople() }
                     }
                 }

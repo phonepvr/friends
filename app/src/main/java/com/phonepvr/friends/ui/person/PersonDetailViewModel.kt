@@ -6,6 +6,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.phonepvr.friends.data.blocking.BlockedNumberManager
+import com.phonepvr.friends.data.contacts.BondContactReconciler
 import com.phonepvr.friends.data.contacts.ContactDetails
 import com.phonepvr.friends.data.contacts.ContactWriter
 import com.phonepvr.friends.data.contacts.SystemContactsRepository
@@ -57,6 +58,7 @@ private const val SUMMARY_WINDOW_MILLIS = SUMMARY_WINDOW_DAYS * 24L * 60L * 60L 
 @HiltViewModel
 class PersonDetailViewModel @Inject constructor(
     private val peopleRepository: PeopleRepository,
+    private val bondContactReconciler: BondContactReconciler,
     private val timelineRepository: TimelineRepository,
     private val settingsRepository: SettingsRepository,
     private val systemContactsRepository: SystemContactsRepository,
@@ -84,6 +86,29 @@ class PersonDetailViewModel @Inject constructor(
     val contactDetails: StateFlow<ContactDetails?> = _contactSnapshot
         .map { it?.second }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /**
+     * True when this bond was linked to an address-book contact that can no longer
+     * be found (deleted). The bond itself is kept — it holds the user's history.
+     */
+    val isContactUnlinked: StateFlow<Boolean> =
+        combine(person, bondContactReconciler.unlinkedPersonIds) { p, unlinked ->
+            p?.person?.id?.let { it in unlinked } == true
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    /** Detaches the bond from the missing contact; it stays as a standalone bond. */
+    fun keepWithoutContact() {
+        viewModelScope.launch { bondContactReconciler.detach(personId) }
+    }
+
+    /** Deletes the bond (and its history) after the user confirmed. */
+    fun removeBond(onRemoved: () -> Unit) {
+        val existing = person.value?.person ?: return
+        viewModelScope.launch {
+            peopleRepository.deletePerson(existing)
+            onRemoved()
+        }
+    }
 
     /** The contact id that backs [contactDetails], for navigating to its editor. */
     val contactId: StateFlow<Long?> = _contactSnapshot

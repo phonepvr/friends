@@ -2,6 +2,7 @@ package com.phonepvr.friends.ui.contacts
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.phonepvr.friends.data.contacts.BondIndex
 import com.phonepvr.friends.data.contacts.ContactTracker
 import com.phonepvr.friends.data.contacts.SystemContactsRepository
 import com.phonepvr.friends.data.db.dao.PersonDao
@@ -92,11 +93,11 @@ class ContactsBrowserViewModel @Inject constructor(
         groupMemberIds,
         availableGroups,
     ) { contacts, tracked, ctrl, memberIds, groups ->
-        val trackedByKey = tracked
-            .mapNotNull { p -> p.contactLookupKey?.takeIf { it.isNotBlank() }?.let { it to p } }
-            .toMap()
+        // One shared matcher: lookup key first, then contact id, so a bond whose
+        // contact was renamed (new key, same id) still counts as bonded (#33).
+        val bondIndex = BondIndex(tracked)
         val annotated = contacts.map { dc ->
-            val person = trackedByKey[dc.lookupKey]
+            val person = bondIndex.personFor(dc)
             BrowseContact(
                 contactId = dc.contactId,
                 lookupKey = dc.lookupKey,
@@ -146,7 +147,7 @@ class ContactsBrowserViewModel @Inject constructor(
     fun toggleTracked(contact: BrowseContact) {
         viewModelScope.launch {
             if (contact.isTracked) {
-                contactTracker.untrack(contact.lookupKey)
+                contactTracker.untrack(contact.lookupKey, contact.contactId)
             } else {
                 contactTracker.track(contact.contactId, contact.lookupKey)
             }

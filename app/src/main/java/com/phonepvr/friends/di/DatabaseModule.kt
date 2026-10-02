@@ -6,6 +6,7 @@ import com.phonepvr.friends.data.db.FriendsDatabase
 import com.phonepvr.friends.data.db.MIGRATION_1_2
 import com.phonepvr.friends.data.db.MIGRATION_2_3
 import com.phonepvr.friends.data.db.MIGRATION_3_4
+import com.phonepvr.friends.data.db.MIGRATION_4_5
 import com.phonepvr.friends.data.db.dao.EventDao
 import com.phonepvr.friends.data.db.dao.FavouriteContactDao
 import com.phonepvr.friends.data.db.dao.PersonDao
@@ -26,7 +27,7 @@ object DatabaseModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): FriendsDatabase =
         Room.databaseBuilder(context, FriendsDatabase::class.java, "friends.db")
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
             .build()
 
     @Provides

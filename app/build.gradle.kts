@@ -176,4 +176,5 @@ dependencies {
     implementation(libs.androidx.profileinstaller)
 
     testImplementation(libs.junit)
+    testImplementation(libs.sqlite.jdbc)
 }

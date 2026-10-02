@@ -24,7 +24,7 @@ import com.phonepvr.friends.data.db.entity.TimelineEntryEntity
         TimelineEntryEntity::class,
         FavouriteContactEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)
@@ -80,5 +80,17 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
             )
             """.trimIndent(),
         )
+    }
+}
+
+/**
+ * Adds the numeric contact id next to the lookup key on `people`, so a bond can
+ * still find its contact after the contact is renamed (which changes many local
+ * contacts' lookup keys). Nullable with no backfill: the bond reconciler fills
+ * it in the first time it resolves each bond's contact.
+ */
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE people ADD COLUMN contactId INTEGER DEFAULT NULL")
     }
 }

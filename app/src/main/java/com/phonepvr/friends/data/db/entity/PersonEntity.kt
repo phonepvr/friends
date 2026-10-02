@@ -20,6 +20,14 @@ data class PersonEntity(
     val photoRelativePath: String? = null,
     /** Device-contact lookup key, used to refresh details from contacts. */
     val contactLookupKey: String? = null,
+    /**
+     * Numeric `Contacts._ID` last seen for the linked contact. Kept next to
+     * [contactLookupKey] (as ContactsContract recommends) because a lookup key
+     * can go stale when the contact is renamed or re-aggregated; the pair lets
+     * [com.phonepvr.friends.data.contacts.BondContactMatcher] find the contact
+     * again. Device-local, so it is never exported in a backup.
+     */
+    val contactId: Long? = null,
     val notes: String? = null,
     val isArchived: Boolean = false,
     val createdAt: Long,

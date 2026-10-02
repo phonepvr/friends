@@ -3,10 +3,10 @@ package com.phonepvr.friends.ui.dialer
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.phonepvr.friends.data.contacts.BondIndex
 import com.phonepvr.friends.data.contacts.DeviceContact
 import com.phonepvr.friends.data.contacts.SystemContactsRepository
 import com.phonepvr.friends.data.db.dao.PersonDao
-import com.phonepvr.friends.data.db.entity.PersonEntity
 import com.phonepvr.friends.data.dialer.CallPlacer
 import com.phonepvr.friends.data.dialer.T9
 import com.phonepvr.friends.data.settings.SettingsRepository
@@ -92,24 +92,18 @@ class DialpadViewModel @Inject constructor(
         }
     }
 
-    private val trackedByKeyFlow: Flow<Map<String, PersonEntity>> =
-        personDao.observeActive().map { tracked ->
-            tracked.asSequence()
-                .mapNotNull { p ->
-                    p.contactLookupKey?.takeIf { it.isNotBlank() }?.let { it to p }
-                }
-                .toMap()
-        }
+    private val bondIndexFlow: Flow<BondIndex> =
+        personDao.observeActive().map { BondIndex(it) }
 
     val state: StateFlow<DialpadUiState> = combine(
         input,
         indexedContacts,
-        trackedByKeyFlow,
+        bondIndexFlow,
         placeError,
-    ) { value, entries, trackedByKey, err ->
+    ) { value, entries, bondIndex, err ->
         DialpadUiState(
             input = value,
-            matches = buildMatches(value, entries, trackedByKey),
+            matches = buildMatches(value, entries, bondIndex),
             placeError = err,
         )
     }.stateIn(
@@ -161,7 +155,7 @@ class DialpadViewModel @Inject constructor(
     private fun buildMatches(
         input: String,
         entries: List<IndexedContact>,
-        trackedByKey: Map<String, PersonEntity>,
+        bondIndex: BondIndex,
     ): List<DialpadMatch> {
         if (input.length < 2) return emptyList()
         val q = T9.digitsOnly(input)
@@ -177,7 +171,7 @@ class DialpadViewModel @Inject constructor(
                 phoneIndex >= 0 -> RANK_PHONE
                 else -> continue
             }
-            val person = trackedByKey[e.contact.lookupKey]
+            val person = bondIndex.personFor(e.contact)
             scored.add(
                 ScoredMatch(
                     rank = rank,

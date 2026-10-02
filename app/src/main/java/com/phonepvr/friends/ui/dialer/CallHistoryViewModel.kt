@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.phonepvr.friends.data.calllog.CallLogWriter
 import com.phonepvr.friends.data.calllog.DeviceCall
+import com.phonepvr.friends.data.contacts.BondIndex
 import com.phonepvr.friends.data.contacts.SystemContactsRepository
 import com.phonepvr.friends.data.db.dao.PersonDao
 import com.phonepvr.friends.data.dialer.CallPlacer
@@ -74,9 +75,7 @@ class CallHistoryViewModel @Inject constructor(
                 }
             }
         }
-        val person = contact?.lookupKey
-            ?.takeIf { it.isNotBlank() }
-            ?.let { key -> tracked.firstOrNull { it.contactLookupKey == key } }
+        val person = contact?.let { BondIndex(tracked).personFor(it) }
         CallHistoryUiState(
             loading = false,
             number = number,

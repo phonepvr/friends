@@ -207,6 +207,16 @@ private fun PersonCard(item: PersonListItem, onClick: () -> Unit) {
                 textAlign = TextAlign.Center,
             )
             CadenceSubtitle(item.cadence)
+            if (item.contactUnlinked) {
+                Text(
+                    text = "Contact unlinked",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                )
+            }
         }
     }
 }

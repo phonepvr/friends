@@ -123,6 +123,7 @@ class ImportContactsViewModel @Inject constructor(
                         uuid = uuid,
                         displayName = details.displayName,
                         contactLookupKey = details.lookupKey.ifBlank { null },
+                        contactId = contactId,
                         photoRelativePath = photoRelativePath,
                         cadenceTargetDays = defaultCadence,
                         createdAt = now,

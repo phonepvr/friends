@@ -3,6 +3,7 @@ package com.phonepvr.friends.data.backup
 import android.content.Context
 import android.net.Uri
 import androidx.room.withTransaction
+import com.phonepvr.friends.data.contacts.BondContactReconciler
 import com.phonepvr.friends.data.db.FriendsDatabase
 import com.phonepvr.friends.data.db.dao.EventDao
 import com.phonepvr.friends.data.db.dao.PersonDao
@@ -65,6 +66,7 @@ class BackupManager @Inject constructor(
     private val timelineDao: TimelineDao,
     private val photoStorage: PhotoStorage,
     private val settingsRepository: SettingsRepository,
+    private val bondContactReconciler: BondContactReconciler,
 ) {
     private val json = Json {
         prettyPrint = true
@@ -136,6 +138,10 @@ class BackupManager @Inject constructor(
             // Settings: v2+ backups carry a snapshot; v1 backups have null and
             // the restored device keeps whatever preferences it already had.
             parsed.settings?.let { settingsRepository.restore(it) }
+            // Restored bonds carry their saved lookup key but no contact id (ids
+            // are device-local and never exported). Re-link them to this device's
+            // address book now rather than waiting for the next app start.
+            bondContactReconciler.reconcile()
             entities.counts()
         }
 

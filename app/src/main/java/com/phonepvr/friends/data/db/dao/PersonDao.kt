@@ -47,23 +47,58 @@ interface PersonDao {
     fun observeActive(): Flow<List<PersonEntity>>
 
     /**
-     * Active person matching this contact's lookupKey, or null when the
-     * contact isn't tracked. Drives the Contact detail screen's "Track in
-     * Bondwidth" toggle state.
+     * Active person linked to this contact, or null when the contact isn't
+     * tracked. Matches on the lookupKey OR the contact id: a rename can change
+     * a contact's lookupKey while its id stays put, so either one identifies
+     * the bond. Drives the Contact detail screen's "Track in Bondwidth" toggle.
+     * (A blank [lookupKey] never matches a person with no key.)
      */
     @Query(
-        "SELECT * FROM people " +
-            "WHERE isArchived = 0 AND contactLookupKey = :lookupKey LIMIT 1",
+        "SELECT * FROM people WHERE isArchived = 0 AND " +
+            "((contactLookupKey = :lookupKey AND :lookupKey != '') OR contactId = :contactId) " +
+            "ORDER BY (contactLookupKey = :lookupKey) DESC, id ASC LIMIT 1",
     )
-    fun observeActiveByContactLookupKey(lookupKey: String): Flow<PersonEntity?>
+    fun observeActiveByContact(lookupKey: String, contactId: Long): Flow<PersonEntity?>
 
     /**
-     * Any person row matching this contact's lookupKey, archived or not.
-     * The tracker uses this to revive an archived row when the user
-     * re-tracks a contact, preserving the existing timeline + events.
+     * Any person row linked to this contact (by lookupKey or contact id),
+     * archived or not. The tracker uses this to revive an archived row when the
+     * user re-tracks a contact, preserving the existing timeline + events.
      */
-    @Query("SELECT * FROM people WHERE contactLookupKey = :lookupKey LIMIT 1")
-    suspend fun findAnyByContactLookupKey(lookupKey: String): PersonEntity?
+    @Query(
+        "SELECT * FROM people WHERE " +
+            "((contactLookupKey = :lookupKey AND :lookupKey != '') OR contactId = :contactId) " +
+            "ORDER BY (contactLookupKey = :lookupKey) DESC, isArchived ASC, id ASC LIMIT 1",
+    )
+    suspend fun findAnyByContact(lookupKey: String, contactId: Long): PersonEntity?
+
+    /** Every person with phones + events, for the bond↔contact reconciler. */
+    @Transaction
+    @Query("SELECT * FROM people")
+    suspend fun getAllWithDetails(): List<PersonWithDetails>
+
+    /**
+     * Points a bond at its (re-)resolved contact: current lookupKey, contact id
+     * and name. Targeted so it never touches cadence, notes, phones or events.
+     */
+    @Query(
+        "UPDATE people SET contactLookupKey = :lookupKey, contactId = :contactId, " +
+            "displayName = :displayName, updatedAt = :now WHERE id = :id",
+    )
+    suspend fun updateContactLink(
+        id: Long,
+        lookupKey: String?,
+        contactId: Long?,
+        displayName: String,
+        now: Long,
+    )
+
+    /** Detaches a bond from any contact; it stays as a standalone bond. */
+    @Query(
+        "UPDATE people SET contactLookupKey = NULL, contactId = NULL, updatedAt = :now " +
+            "WHERE id = :id",
+    )
+    suspend fun clearContactLink(id: Long, now: Long)
 
     @Query(
         "UPDATE people SET isArchived = :archived, updatedAt = :now WHERE id = :id",

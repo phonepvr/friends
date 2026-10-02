@@ -30,6 +30,9 @@ import javax.inject.Singleton
  *  - Untracking ARCHIVES the person row — never deletes. The Contacts
  *    browser then renders the contact as untracked again, but if the
  *    user toggles back on, they pick up exactly where they left off.
+ *
+ * A contact is identified by its lookup key OR its numeric id, because
+ * renaming a contact can change the key while the id stays put (issue #33).
  */
 @Singleton
 class ContactTracker @Inject constructor(
@@ -46,11 +49,7 @@ class ContactTracker @Inject constructor(
      */
     suspend fun track(contactId: Long, lookupKey: String): Long? =
         withContext(Dispatchers.IO) {
-            val existing = if (lookupKey.isNotBlank()) {
-                personDao.findAnyByContactLookupKey(lookupKey)
-            } else {
-                null
-            }
+            val existing = personDao.findAnyByContact(lookupKey, contactId)
             if (existing != null) {
                 if (existing.isArchived) {
                     personDao.setArchived(
@@ -77,6 +76,7 @@ class ContactTracker @Inject constructor(
                 displayName = details.displayName,
                 contactLookupKey = details.lookupKey
                     .ifBlank { lookupKey.ifBlank { null } },
+                contactId = contactId,
                 photoRelativePath = photoRelativePath,
                 cadenceTargetDays = defaultCadence,
                 createdAt = now,
@@ -100,8 +100,8 @@ class ContactTracker @Inject constructor(
             newId
         }
 
-    suspend fun untrack(lookupKey: String) = withContext(Dispatchers.IO) {
-        val person = personDao.findAnyByContactLookupKey(lookupKey)
+    suspend fun untrack(lookupKey: String, contactId: Long) = withContext(Dispatchers.IO) {
+        val person = personDao.findAnyByContact(lookupKey, contactId)
             ?: return@withContext
         if (!person.isArchived) {
             personDao.setArchived(
@@ -121,8 +121,9 @@ class ContactTracker @Inject constructor(
      */
     suspend fun refreshTrackedFields(contactId: Long, lookupKey: String) =
         withContext(Dispatchers.IO) {
-            if (lookupKey.isBlank()) return@withContext
-            val person = personDao.findAnyByContactLookupKey(lookupKey)
+            // Match on the id as well as the key: renaming a contact changes
+            // its lookup key, so the key the bond saved is no longer current.
+            val person = personDao.findAnyByContact(lookupKey, contactId)
                 ?: return@withContext
             if (person.isArchived) return@withContext
             val details = contactsReader.readDetails(contactId)
@@ -130,6 +131,8 @@ class ContactTracker @Inject constructor(
             val now = System.currentTimeMillis()
             val updatedPerson = person.copy(
                 displayName = details.displayName.ifBlank { person.displayName },
+                contactLookupKey = details.lookupKey.ifBlank { null } ?: person.contactLookupKey,
+                contactId = contactId,
                 updatedAt = now,
             )
             val phones = details.phoneNumbers.map { raw ->

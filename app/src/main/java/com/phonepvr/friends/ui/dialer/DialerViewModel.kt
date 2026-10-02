@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.phonepvr.friends.data.blocking.BlockedNumberManager
 import com.phonepvr.friends.data.calllog.CallLogWriter
+import com.phonepvr.friends.data.contacts.BondIndex
 import com.phonepvr.friends.data.contacts.ContactPhone
 import com.phonepvr.friends.data.contacts.DeviceContact
 import com.phonepvr.friends.data.contacts.SystemContactsRepository
@@ -154,22 +155,18 @@ class DialerViewModel @Inject constructor(
         ContactsIndex(byPhoneSuffix, photoByLookupKey)
     }
 
-    private val trackedByKeyFlow = personDao.observeActive().map { tracked ->
-        tracked.asSequence()
-            .mapNotNull { p -> p.contactLookupKey?.takeIf { it.isNotBlank() }?.let { it to p } }
-            .toMap()
-    }
+    private val bondIndexFlow = personDao.observeActive().map { BondIndex(it) }
 
     private val baseState: Flow<DialerUiState> = combine(
         recentsFlow,
         contactsIndex,
-        trackedByKeyFlow,
+        bondIndexFlow,
         favouritesRepository.observeAll(),
         placeError,
-    ) { calls, index, trackedByKey, favourites, err ->
+    ) { calls, index, bondIndex, favourites, err ->
         val recents = calls.map { call ->
             val contact = lookupCallContact(call.number, index.byPhoneSuffix)
-            val person = contact?.lookupKey?.let { trackedByKey[it] }
+            val person = contact?.let { bondIndex.personFor(it) }
             RecentEntry(
                 number = call.number,
                 displayName = contact?.displayName,
@@ -199,7 +196,7 @@ class DialerViewModel @Inject constructor(
      * the whole address book.
      */
     private val searchResults: Flow<List<ContactSearchResult>> =
-        combine(query, contactsFlow, trackedByKeyFlow) { q, contacts, trackedByKey ->
+        combine(query, contactsFlow, bondIndexFlow) { q, contacts, bondIndex ->
             val trimmed = q.trim()
             if (trimmed.length < 2) return@combine emptyList()
             val lowerName = trimmed.lowercase()
@@ -214,7 +211,7 @@ class DialerViewModel @Inject constructor(
                 }
                 .take(SEARCH_RESULT_LIMIT)
                 .map { c ->
-                    val person = trackedByKey[c.lookupKey]
+                    val person = bondIndex.personFor(c)
                     ContactSearchResult(
                         contactId = c.contactId,
                         lookupKey = c.lookupKey,

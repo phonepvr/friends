@@ -11,6 +11,8 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.phonepvr.friends.data.backup.AutoBackupFiles
+import com.phonepvr.friends.data.backup.AutoBackupFrequency
 import com.phonepvr.friends.domain.model.ThemeMode
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
@@ -84,6 +86,21 @@ data class AppSettings(
      * the key on the dialpad to call it. Empty by default.
      */
     val speedDial: Map<Int, String> = emptyMap(),
+    /**
+     * Scheduled local backup (opt-in). Everything here is device-local and is
+     * deliberately NOT part of the backup snapshot: a folder URI is meaningless on
+     * another phone.
+     */
+    val autoBackupEnabled: Boolean = false,
+    /** Persisted SAF tree URI of the folder the user picked, or null if none. */
+    val autoBackupFolderUri: String? = null,
+    val autoBackupFrequency: AutoBackupFrequency = AutoBackupFrequency.DEFAULT,
+    /** How many scheduled backups to keep in the folder; older ones are deleted. */
+    val autoBackupKeep: Int = AutoBackupFiles.DEFAULT_KEEP,
+    /** Epoch ms of the last scheduled attempt (success or failure), null if never. */
+    val autoBackupLastRunAt: Long? = null,
+    /** Why the last scheduled attempt failed; null when it succeeded or hasn't run. */
+    val autoBackupLastError: String? = null,
 )
 
 /** First-launch defaults for [AppSettings.quickReplyMessages]. */
@@ -132,6 +149,13 @@ class SettingsRepository @Inject constructor(
                 cadenceBackfilled = prefs[Keys.CADENCE_BACKFILLED] ?: false,
                 dismissedTooltipIds = prefs[Keys.DISMISSED_TOOLTIPS].orEmpty(),
                 hideFromScreenshots = prefs[Keys.HIDE_FROM_SCREENSHOTS] ?: false,
+                autoBackupEnabled = prefs[Keys.AUTO_BACKUP_ENABLED] ?: false,
+                autoBackupFolderUri = prefs[Keys.AUTO_BACKUP_FOLDER]?.takeIf { it.isNotBlank() },
+                autoBackupFrequency = AutoBackupFrequency.fromName(prefs[Keys.AUTO_BACKUP_FREQUENCY]),
+                autoBackupKeep = (prefs[Keys.AUTO_BACKUP_KEEP] ?: AutoBackupFiles.DEFAULT_KEEP)
+                    .coerceIn(AutoBackupFiles.MIN_KEEP, AutoBackupFiles.MAX_KEEP),
+                autoBackupLastRunAt = prefs[Keys.AUTO_BACKUP_LAST_RUN]?.takeIf { it > 0L },
+                autoBackupLastError = prefs[Keys.AUTO_BACKUP_LAST_ERROR]?.takeIf { it.isNotBlank() },
                 // Stored as newline-joined to keep ordering. Absent → defaults;
                 // explicit empty stored value → empty (user cleared the list,
                 // intentionally hiding the long-press chip).
@@ -168,6 +192,34 @@ class SettingsRepository @Inject constructor(
 
     suspend fun setLastSuccessfulBackupAt(epochMillis: Long) {
         dataStore.edit { it[Keys.LAST_BACKUP] = epochMillis }
+    }
+
+    suspend fun setAutoBackupEnabled(enabled: Boolean) {
+        dataStore.edit { it[Keys.AUTO_BACKUP_ENABLED] = enabled }
+    }
+
+    suspend fun setAutoBackupFolderUri(uri: String?) {
+        dataStore.edit { prefs ->
+            if (uri.isNullOrBlank()) prefs.remove(Keys.AUTO_BACKUP_FOLDER) else prefs[Keys.AUTO_BACKUP_FOLDER] = uri
+        }
+    }
+
+    suspend fun setAutoBackupFrequency(frequency: AutoBackupFrequency) {
+        dataStore.edit { it[Keys.AUTO_BACKUP_FREQUENCY] = frequency.name }
+    }
+
+    suspend fun setAutoBackupKeep(keep: Int) {
+        dataStore.edit {
+            it[Keys.AUTO_BACKUP_KEEP] = keep.coerceIn(AutoBackupFiles.MIN_KEEP, AutoBackupFiles.MAX_KEEP)
+        }
+    }
+
+    /** Records the outcome of a scheduled attempt: [error] null means it succeeded. */
+    suspend fun recordAutoBackupAttempt(atMillis: Long, error: String?) {
+        dataStore.edit { prefs ->
+            prefs[Keys.AUTO_BACKUP_LAST_RUN] = atMillis
+            if (error == null) prefs.remove(Keys.AUTO_BACKUP_LAST_ERROR) else prefs[Keys.AUTO_BACKUP_LAST_ERROR] = error
+        }
     }
 
     suspend fun setBackupNudgeIntervalDays(days: Int) {
@@ -326,6 +378,12 @@ class SettingsRepository @Inject constructor(
         val HIDE_FROM_SCREENSHOTS = booleanPreferencesKey("hide_from_screenshots")
         val QUICK_REPLIES = stringPreferencesKey("quick_reply_messages")
         val SPEED_DIAL = stringPreferencesKey("speed_dial_map")
+        val AUTO_BACKUP_ENABLED = booleanPreferencesKey("auto_backup_enabled")
+        val AUTO_BACKUP_FOLDER = stringPreferencesKey("auto_backup_folder_uri")
+        val AUTO_BACKUP_FREQUENCY = stringPreferencesKey("auto_backup_frequency")
+        val AUTO_BACKUP_KEEP = intPreferencesKey("auto_backup_keep")
+        val AUTO_BACKUP_LAST_RUN = longPreferencesKey("auto_backup_last_run_at")
+        val AUTO_BACKUP_LAST_ERROR = stringPreferencesKey("auto_backup_last_error")
     }
 
     private object Snapshot {

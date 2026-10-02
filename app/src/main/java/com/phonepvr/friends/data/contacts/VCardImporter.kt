@@ -25,10 +25,12 @@ class VCardImporter @Inject constructor(
     /** Parses the file and returns its cards without writing anything — used
      *  for the preview an attachment shows before the user confirms. */
     suspend fun preview(source: Uri): List<ParsedVCard> = withContext(Dispatchers.IO) {
+        // The file comes from outside the app, so its size is capped before it is
+        // held in memory, and so is the number of contacts it may add.
         val text = context.contentResolver.openInputStream(source)?.use {
-            it.bufferedReader(Charsets.UTF_8).readText()
+            VCardLimits.readCapped(it)
         } ?: throw IllegalStateException("Couldn't open the vCard file.")
-        VCardParser.parse(text)
+        VCardParser.parse(text).also { VCardLimits.requireCardCount(it.size) }
     }
 
     /**

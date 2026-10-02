@@ -7,24 +7,36 @@ on:
       - "main"
   workflow_dispatch:
 
+# Least privilege: building and testing only needs to read the repo. Only the
+# separate `publish` job (below), which creates the GitHub release, is granted
+# `contents: write`.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      version_name: ${{ steps.build.outputs.version_name }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "17"
 
+      # gradle/actions v6 ships its default ("enhanced") cache as a proprietary
+      # component with separate Terms of Use. `basic` is the open-source
+      # (MIT) GitHub-Actions-cache implementation, which is all this project needs.
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          cache-provider: basic
 
       - name: Make gradlew executable
         run: chmod +x ./gradlew
@@ -42,6 +54,7 @@ jobs:
           fi
 
       - name: Run unit tests and assemble debug APK
+        id: build
         env:
           SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
           SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
@@ -56,6 +69,7 @@ jobs:
           # Expose to later steps (release rename, body, file path).
           echo "APP_VERSION_CODE=$APP_VERSION_CODE" >> "$GITHUB_ENV"
           echo "APP_VERSION_NAME=$APP_VERSION_NAME" >> "$GITHUB_ENV"
+          echo "version_name=$APP_VERSION_NAME" >> "$GITHUB_OUTPUT"
           echo "APP_VERSION_CODE=$APP_VERSION_CODE  APP_VERSION_NAME=$APP_VERSION_NAME"
           # assembleRelease verifies the variant F-Droid builds from source
           # (it then signs with its own key). Catches release-only breakage
@@ -91,10 +105,39 @@ jobs:
           fi
           echo "OK: APK declares no INTERNET or ACCESS_NETWORK_STATE permission."
 
+      # Hand the APK to the `publish` job. It is public anyway (it ends up in
+      # Releases), so a short-lived workflow artifact leaks nothing.
+      - name: Upload APK for the publish job
+        uses: actions/upload-artifact@v7
+        with:
+          name: bondwidth-apk
+          path: release/
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: Publish APK to GitHub Releases
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      APP_VERSION_NAME: ${{ needs.build.outputs.version_name }}
+    steps:
+      - name: Download APK
+        uses: actions/download-artifact@v8
+        with:
+          name: bondwidth-apk
+          path: release/
+
       - name: Publish APK to GitHub Releases
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           tag_name: v1.0.0-build.${{ github.run_number }}.${{ github.run_attempt }}
+          # No checkout in this job, so name the commit the tag must point at:
+          # the one that was built, not the default branch's HEAD.
+          target_commitish: ${{ github.sha }}
           name: Bondwidth v${{ env.APP_VERSION_NAME }}
           body: "Bondwidth build ${{ github.run_number }} (v${{ env.APP_VERSION_NAME }})."
           files: release/Bondwidth-v${{ env.APP_VERSION_NAME }}.apk
+          fail_on_unmatched_files: true

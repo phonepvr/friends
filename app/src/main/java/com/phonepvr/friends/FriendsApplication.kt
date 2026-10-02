@@ -9,6 +9,7 @@ import com.phonepvr.friends.data.contacts.BondContactReconciler
 import com.phonepvr.friends.data.repository.CallLogAutoSync
 import com.phonepvr.friends.data.settings.SettingsRepository
 import com.phonepvr.friends.widget.WidgetRefreshObserver
+import com.phonepvr.friends.work.scheduleAutoBackupWork
 import com.phonepvr.friends.work.scheduleBackupNudgeWork
 import com.phonepvr.friends.work.scheduleCallLogSyncWork
 import com.phonepvr.friends.work.scheduleReminderWork
@@ -50,6 +51,12 @@ class FriendsApplication : Application() {
             val hour = settingsRepository.settings.first().notificationHour
             scheduleReminderWork(this@FriendsApplication, hour)
             scheduleBackupNudgeWork(this@FriendsApplication)
+            // Opt-in scheduled backup: make sure the timer exists if it is switched on
+            // (KEEP, so a relaunch doesn't push the next run back).
+            val settings = settingsRepository.settings.first()
+            if (settings.autoBackupEnabled && settings.autoBackupFolderUri != null) {
+                scheduleAutoBackupWork(this@FriendsApplication, settings.autoBackupFrequency, replace = false)
+            }
             scheduleCallLogSyncWork(this@FriendsApplication)
         }
         // Live widget refresh: broadcasts an APPWIDGET_UPDATE to the

@@ -4,6 +4,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -17,12 +18,14 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -38,8 +41,13 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.phonepvr.friends.data.backup.AutoBackupFrequency
 import com.phonepvr.friends.data.backup.BackupCounts
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -48,6 +56,7 @@ fun BackupScreen(
     viewModel: BackupViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val auto by viewModel.autoBackup.collectAsStateWithLifecycle()
     var showExportDialog by remember { mutableStateOf(false) }
     var showImportConfirm by remember { mutableStateOf(false) }
     var pendingExportPassphrase by remember { mutableStateOf("") }
@@ -63,6 +72,11 @@ fun BackupScreen(
         ActivityResultContracts.OpenDocument(),
     ) { uri ->
         if (uri != null) viewModel.onFilePicked(uri)
+    }
+    val pickFolder = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree(),
+    ) { uri ->
+        if (uri != null) viewModel.onFolderPicked(uri)
     }
 
     Scaffold(
@@ -99,6 +113,21 @@ fun BackupScreen(
                 buttonText = "Export backup",
                 enabled = !state.busy,
                 onClick = { showExportDialog = true },
+            )
+            AutoBackupCard(
+                state = auto,
+                onToggle = { on ->
+                    // Switching on needs a folder first; picking one turns it on.
+                    if (on && auto.folderLabel == null) {
+                        pickFolder.launch(null)
+                    } else {
+                        viewModel.setAutoBackupEnabled(on)
+                    }
+                },
+                onChooseFolder = { pickFolder.launch(null) },
+                onFrequency = viewModel::setAutoBackupFrequency,
+                onKeep = viewModel::setAutoBackupKeep,
+                onBackUpNow = viewModel::backUpNow,
             )
             ActionCard(
                 title = "Restore from a backup",
@@ -169,6 +198,114 @@ private fun ActionCard(
                 modifier = Modifier.align(Alignment.End),
             ) {
                 Text(buttonText)
+            }
+        }
+    }
+}
+
+private val AUTO_BACKUP_KEEP_CHOICES = listOf(3, 5, 10, 20)
+
+private fun frequencyLabel(frequency: AutoBackupFrequency): String = when (frequency) {
+    AutoBackupFrequency.DAILY -> "Daily"
+    AutoBackupFrequency.WEEKLY -> "Weekly"
+    AutoBackupFrequency.MONTHLY -> "Monthly"
+}
+
+private val autoBackupTimeFormat: DateTimeFormatter =
+    DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM)
+
+private fun formatBackupTime(epochMillis: Long): String =
+    autoBackupTimeFormat.format(Instant.ofEpochMilli(epochMillis).atZone(ZoneId.systemDefault()))
+
+/**
+ * Opt-in scheduled backup: saves a backup file to a folder the user picks, on a
+ * schedule, keeping the last few. Entirely on-device; nothing is uploaded. Shows
+ * when the last backup happened and, if the last attempt failed, why.
+ */
+@Composable
+private fun AutoBackupCard(
+    state: AutoBackupUiState,
+    onToggle: (Boolean) -> Unit,
+    onChooseFolder: () -> Unit,
+    onFrequency: (AutoBackupFrequency) -> Unit,
+    onKeep: (Int) -> Unit,
+    onBackUpNow: () -> Unit,
+) {
+    val active = state.enabled && state.folderLabel != null
+    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "Automatic backup",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                Switch(checked = active, onCheckedChange = onToggle)
+            }
+            Text(
+                text = "Saves a backup file to a folder you choose, on a schedule, and keeps " +
+                    "the most recent few. It never leaves this phone unless you point the " +
+                    "folder at a sync tool such as Syncthing. Backups here are not encrypted; " +
+                    "use Export for an encrypted copy.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (state.folderLabel != null) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Folder: ${state.folderLabel}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = onChooseFolder) { Text("Change") }
+                }
+            }
+            if (active) {
+                Text("How often", style = MaterialTheme.typography.labelLarge)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AutoBackupFrequency.entries.forEach { f ->
+                        FilterChip(
+                            selected = state.frequency == f,
+                            onClick = { onFrequency(f) },
+                            label = { Text(frequencyLabel(f)) },
+                        )
+                    }
+                }
+                Text("Backups to keep", style = MaterialTheme.typography.labelLarge)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AUTO_BACKUP_KEEP_CHOICES.forEach { n ->
+                        FilterChip(
+                            selected = state.keep == n,
+                            onClick = { onKeep(n) },
+                            label = { Text(n.toString()) },
+                        )
+                    }
+                }
+                Text(
+                    text = state.lastSuccessAt
+                        ?.let { "Last backup: ${formatBackupTime(it)}" }
+                        ?: "No backup yet",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                state.lastError?.let { error ->
+                    Text(
+                        text = "Last attempt failed" +
+                            (state.lastAttemptAt?.let { " (${formatBackupTime(it)})" } ?: "") +
+                            ": $error",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                Button(
+                    onClick = onBackUpNow,
+                    enabled = !state.running,
+                    modifier = Modifier.align(Alignment.End),
+                ) {
+                    Text(if (state.running) "Backing up…" else "Back up now")
+                }
             }
         }
     }

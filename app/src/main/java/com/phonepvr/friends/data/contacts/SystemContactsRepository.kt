@@ -59,6 +59,27 @@ class SystemContactsRepository @Inject constructor(
             reader.readSearchText().mapValues { ContactSearch.fold(it.value) }
         }
 
+    /** The groups [contactId] can join and the ones it is in; see [ContactsReader.editableGroupsFor]. */
+    suspend fun groupState(contactId: Long): ContactGroupState =
+        withContext(Dispatchers.IO) { runCatching { reader.editableGroupsFor(contactId) }.getOrDefault(ContactGroupState()) }
+
+    /**
+     * Emits once immediately and again whenever the system contacts change (which
+     * includes group-membership edits). A cheap trigger for things that must stay
+     * current without re-reading the whole address book.
+     */
+    fun observeChanges(): Flow<Unit> = callbackFlow {
+        val resolver = context.contentResolver
+        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) {
+                trySend(Unit)
+            }
+        }
+        resolver.registerContentObserver(ContactsContract.Contacts.CONTENT_URI, true, observer)
+        trySend(Unit)
+        awaitClose { resolver.unregisterContentObserver(observer) }
+    }
+
     /** User-visible contact-group titles for the browser's group filter. */
     suspend fun listGroupTitles(): List<String> =
         withContext(Dispatchers.IO) { reader.listGroupTitles() }

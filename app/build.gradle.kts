@@ -25,8 +25,8 @@ android {
         // parser report no version and breaks auto-update. Bump BOTH for every
         // F-Droid release, commit, then tag vX.Y.Z matching versionName;
         // versionCode must increase by at least 1 each release. See RELEASING.md.
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
 
         // CI experimentation overrides the literals above via env (APP_VERSION_CODE
         // / APP_VERSION_NAME, derived from github.run_number) so every branch build

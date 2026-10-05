@@ -41,11 +41,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.phonepvr.friends.data.contacts.DeviceContact
 import com.phonepvr.friends.ui.permissions.PermissionRationaleSheet
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -200,14 +202,21 @@ fun ImportContactsScreen(
                             )
                         }
                     } else {
+                        // The Recent shortcut only shows for the full list; once the
+                        // user searches they are looking for someone specific.
+                        val showRecent = state.query.isBlank() && state.recent.isNotEmpty()
                         LazyColumn(modifier = Modifier.fillMaxSize()) {
-                            items(state.filtered, key = { it.contactId }) { contact ->
-                                ContactRow(
-                                    name = contact.displayName,
-                                    subtitle = contact.phoneNumbers.firstOrNull(),
-                                    selected = contact.contactId in state.selectedIds,
-                                    onToggle = { viewModel.toggleSelection(contact.contactId) },
-                                )
+                            if (showRecent) {
+                                item(key = "header-recent") { SectionLabel("Recent calls") }
+                                // Keys are prefixed because a contact can appear in both
+                                // sections and LazyColumn keys must be unique.
+                                items(state.recent, key = { "recent-${it.contactId}" }) { contact ->
+                                    ImportRow(contact, state, viewModel)
+                                }
+                                item(key = "header-all") { SectionLabel("All contacts") }
+                            }
+                            items(state.filtered, key = { "all-${it.contactId}" }) { contact ->
+                                ImportRow(contact, state, viewModel)
                             }
                         }
                     }
@@ -218,20 +227,48 @@ fun ImportContactsScreen(
 }
 
 @Composable
+private fun ImportRow(
+    contact: DeviceContact,
+    state: ImportUiState,
+    viewModel: ImportContactsViewModel,
+) {
+    val bonded = contact.contactId in state.bondedContactIds
+    ContactRow(
+        name = contact.displayName,
+        subtitle = if (bonded) "Already bonded" else contact.phoneNumbers.firstOrNull(),
+        selected = contact.contactId in state.selectedIds,
+        enabled = !bonded,
+        onToggle = { viewModel.toggleSelection(contact.contactId) },
+    )
+}
+
+@Composable
+private fun SectionLabel(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
+    )
+}
+
+@Composable
 private fun ContactRow(
     name: String,
     subtitle: String?,
     selected: Boolean,
+    enabled: Boolean,
     onToggle: () -> Unit,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onToggle() }
+            .alpha(if (enabled) 1f else 0.5f)
+            .clickable(enabled = enabled) { onToggle() }
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Checkbox(checked = selected, onCheckedChange = { onToggle() })
+        Checkbox(checked = selected, enabled = enabled, onCheckedChange = { onToggle() })
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.fillMaxWidth()) {
             Text(name, style = MaterialTheme.typography.bodyLarge)

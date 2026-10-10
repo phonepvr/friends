@@ -86,6 +86,16 @@ android {
     }
 
     buildTypes {
+        getByName("debug") {
+            // CI publishes the DEBUG APK to GitHub Releases for on-device testing,
+            // with versionCode = run_number * 100. Under the real application id
+            // those test builds out-rank every tagged release (versionCode 2, 3, …),
+            // so Android refuses to install a release over one ("App not installed")
+            // and F-Droid can never update it. A separate id keeps the two apart:
+            // test builds install NEXT TO the real app with their own data, and the
+            // release (what F-Droid builds) keeps com.phonepvr.friends untouched.
+            applicationIdSuffix = ".dev"
+        }
         getByName("release") {
             // Sign the release with our key only when the keystore is present
             // (our CI / local release builds). The guard is on the ENV VAR, not on

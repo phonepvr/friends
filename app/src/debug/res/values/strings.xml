@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Debug/CI test builds install next to the real app (see applicationIdSuffix
+         in app/build.gradle.kts), so label them to tell the two launcher icons apart. -->
+    <string name="app_name">Bondwidth (dev)</string>
+</resources>

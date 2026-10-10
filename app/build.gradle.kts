@@ -24,9 +24,13 @@ android {
         // Moving them into a variable or a getenv/`?:` expression makes F-Droid's
         // parser report no version and breaks auto-update. Bump BOTH for every
         // F-Droid release, commit, then tag vX.Y.Z matching versionName;
-        // versionCode must increase by at least 1 each release. See RELEASING.md.
-        versionCode = 2
-        versionName = "1.1.0"
+        // versionCode must increase by at least 1 each release and must NEVER go
+        // down. It starts at 30000 from 1.1.1 because devices exist that run a CI
+        // test build from before dev builds got their own id (versionCode up to
+        // 21801), and Android only installs a higher versionCode over an installed
+        // one. See RELEASING.md.
+        versionCode = 30000
+        versionName = "1.1.1"
 
         // CI experimentation overrides the literals above via env (APP_VERSION_CODE
         // / APP_VERSION_NAME, derived from github.run_number) so every branch build

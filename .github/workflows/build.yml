@@ -82,7 +82,7 @@ jobs:
           set -euo pipefail
           mkdir -p release
           cp app/build/outputs/apk/debug/app-debug.apk \
-             "release/Bondwidth-v${APP_VERSION_NAME}.apk"
+             "release/Bondwidth-dev-v${APP_VERSION_NAME}.apk"
           ls -la release/
 
       - name: Verify APK declares no network permissions
@@ -137,7 +137,13 @@ jobs:
           # No checkout in this job, so name the commit the tag must point at:
           # the one that was built, not the default branch's HEAD.
           target_commitish: ${{ github.sha }}
-          name: Bondwidth v${{ env.APP_VERSION_NAME }}
-          body: "Bondwidth build ${{ github.run_number }} (v${{ env.APP_VERSION_NAME }})."
-          files: release/Bondwidth-v${{ env.APP_VERSION_NAME }}.apk
+          name: Bondwidth dev build ${{ github.run_number }}
+          body: >-
+            Test build ${{ github.run_number }} (v${{ env.APP_VERSION_NAME }}) for trying
+            out changes. It installs next to the regular app as "Bondwidth (dev)" with its
+            own data. For the real app, use the latest release whose tag has no "build" in it.
+          files: release/Bondwidth-dev-v${{ env.APP_VERSION_NAME }}.apk
+          # A pre-release never becomes the repository's "Latest" release, so these
+          # test builds cannot displace the real vX.Y.Z release on the Releases page.
+          prerelease: true
           fail_on_unmatched_files: true

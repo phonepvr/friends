@@ -1,31 +1,36 @@
 # Releasing Bondwidth
 
-Bondwidth ships through **two independent channels**. Keeping them separate is
+Bondwidth ships through **two separate channels**. Keeping them apart is
 deliberate: day-to-day experimentation stays on GitHub, and only intentional
-releases reach F-Droid.
+releases reach users.
 
-| | GitHub (experimentation) | F-Droid (releases) |
+| | Dev builds (experimentation) | Releases (users) |
 | --- | --- | --- |
-| Built by | our GitHub Actions CI | F-Droid's build servers, from source |
-| Signed with | **our** release key (see `SIGNING.md`) | **F-Droid's** key |
+| Built by | our GitHub Actions CI (`build.yml`) | `release.yml` on GitHub; F-Droid's build servers reproduce it from source |
+| Application id | `com.phonepvr.friends.dev`, labelled "Bondwidth (dev)" | `com.phonepvr.friends` |
+| Signed with | our release key (see `SIGNING.md`) | the same key (F-Droid ships our signature after verifying its build matches) |
 | Trigger | every push to a `claude/**` or `main` branch | a clean `vX.Y.Z` git tag |
-| Version | `1.0.<run_number>` (from `github.run_number`) | committed `versionCode` / `versionName` |
-| Tag | `v1.0.0-build.<N>.<attempt>` | `vX.Y.Z` |
+| Version | `1.0.<run_number>`, versionCode `run_number * 100 + attempt` | committed `versionCode` / `versionName` |
+| Tag | `v1.0.0-build.<N>.<attempt>` (GitHub pre-release) | `vX.Y.Z` |
 | Audience | us, for on-device testing (sideload) | end users |
 
-Because the two channels are signed with **different keys**, their APKs cannot
-update over one another. A user is either an "F-Droid user" or a
-"GitHub-sideload user"; that's normal and expected for an F-Droid app.
+Dev builds use their **own application id**, so they install next to the real app
+with separate data and can never block or be mistaken for a release. This matters
+because their versionCode (run number × 100) is far higher than a release's: under
+the same id, Android would refuse to install any release over one ("App not
+installed") and F-Droid could never update it. Releases are signed with the same
+key, so a GitHub-sideloaded release and an F-Droid install update over each other.
 
 ---
 
 ## Day-to-day experimentation (no action needed)
 
 Push to a branch as usual. CI runs `testDebugUnitTest` + `assembleDebug` and,
-on success, publishes a `v1.0.0-build.<N>.<attempt>` pre-release APK signed
-with our key. These builds are for our own testing and are **invisible to
-F-Droid** — the recipe's `UpdateCheckMode: Tags ^v[0-9.]+$` ignores any tag
-containing `-build.`.
+on success, publishes a `v1.0.0-build.<N>.<attempt>` **pre-release** APK
+(`Bondwidth-dev-v1.0.<N>.apk`) signed with our key. These builds are for our own
+testing and are **invisible to F-Droid** — the recipe's
+`UpdateCheckMode: Tags ^v[0-9.]+$` ignores any tag containing `-build.`. Being
+pre-releases, they never take the "Latest" badge from the real release.
 
 ## Cutting an F-Droid release
 

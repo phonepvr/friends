@@ -21,6 +21,11 @@ the same id, Android would refuse to install any release over one ("App not
 installed") and F-Droid could never update it. Releases are signed with the same
 key, so a GitHub-sideloaded release and an F-Droid install update over each other.
 
+> **Never lower a release's `versionCode`.** Releases 1.0.0 and 1.1.0 used 1 and 2,
+> but some devices had installed a dev build from before the split (versionCode up
+> to 21801), which Android would not let a release replace. Releases from 1.1.1 on
+> therefore start at 30000 and only go up.
+
 ---
 
 ## Day-to-day experimentation (no action needed)
@@ -35,22 +40,26 @@ pre-releases, they never take the "Latest" badge from the real release.
 ## Cutting an F-Droid release
 
 1. **Bump the committed version** in `app/build.gradle.kts`:
-   - `versionCode` → previous + 1 (must always increase)
-   - `versionName` → the new public version, e.g. `1.1.0`
+   - `versionCode` → previous + 1 (must always increase, never lower)
+   - `versionName` → the new public version, e.g. `1.1.1`
 2. **Add a changelog** at
    `fastlane/metadata/android/en-US/changelogs/<versionCode>.txt`
-   (the filename is the *versionCode*, e.g. `2.txt`).
+   (the filename is the *versionCode*, e.g. `30000.txt`; keep it under 500 bytes).
 3. **Land it on `main`** via a normal PR.
 4. **Tag the release commit** with the matching version and push the tag:
    ```sh
-   git tag v1.1.0    # must equal versionName, prefixed with v
-   git push origin v1.1.0
+   git tag v1.1.1    # must equal versionName, prefixed with v
+   git push origin v1.1.1
    ```
-   Tags do not trigger our CI (it runs on branch pushes), so this adds no
-   experimental build.
+   (Or create the release with that tag in the GitHub UI.) A clean `vX.Y.Z` tag
+   runs `release.yml`, which builds the **signed** release APK and attaches
+   `Bondwidth-X.Y.Z.apk` to the release. `build.yml` does not run for tags, so no
+   dev build is added.
 5. **F-Droid takes it from there.** Its `UpdateCheckMode`/`AutoUpdateMode`
-   detect the new `vX.Y.Z` tag, build the tagged source, sign it, and publish
-   — typically within ~24–48h. Nothing to upload.
+   detect the new `vX.Y.Z` tag, build the tagged source unsigned, check that it
+   is byte-identical to the APK from step 4 (`Binaries` /
+   `AllowedAPKSigningKeys` in the recipe) and publish that signed APK — typically
+   within ~24–48h. Nothing to upload.
 
 > Keep `versionName` and the `vX.Y.Z` tag in lockstep. F-Droid reads the
 > version from the committed gradle values at the tagged commit, not from the
@@ -92,11 +101,16 @@ pre-releases, they never take the "Latest" badge from the real release.
 
 ---
 
-## Optional, later: reproducible builds
+## Reproducible builds (in place)
 
-F-Droid can verify that *its* build of a tag byte-for-byte matches an APK we
-publish, and then ship **our** signature instead of F-Droid's — which would let
-F-Droid and GitHub installs update over each other. It requires a reproducible
-release-signing setup and a `Binaries:`/reproducible config in the recipe. Not
-needed for the initial listing; revisit if we want a single signature across
-both channels.
+F-Droid verifies that *its* build of a tag byte-for-byte matches the APK we
+publish, and then ships **our** signature instead of its own, so F-Droid and
+GitHub installs update over each other. What keeps this working:
+
+- `versionCode` / `versionName` stay plain literals in `app/build.gradle.kts`.
+- The release signing config is guarded by the `SIGNING_KEYSTORE_PATH`
+  environment variable, and `dependenciesInfo { includeInApk = false }` is set.
+- No minification; nothing in the release variant depends on the build
+  environment, the date or the machine.
+- The recipe carries `Binaries:` and `AllowedAPKSigningKeys:` (the SHA-256 of our
+  signing certificate).

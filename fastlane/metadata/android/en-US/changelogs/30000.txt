@@ -1,0 +1,1 @@
+Fixes "App not installed" when updating a test build downloaded from GitHub: releases now use a higher internal version number, so they install over those builds and keep your data. Test builds now install as a separate app named "Bondwidth (dev)". No other changes since 1.1.0.

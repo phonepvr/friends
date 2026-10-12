@@ -294,6 +294,9 @@ class InCallViewModel @Inject constructor(
     /** Swap which call is active when two calls are present. */
     fun swap() = callSession.swap()
 
+    /** The in-call keypad keeps the screen on while open (see ProximityPolicy). */
+    fun setKeypadOpen(open: Boolean) = callSession.setKeypadOpen(open)
+
     /** Merge the active and held calls into a conference. */
     fun merge() = callSession.merge()
 

@@ -122,6 +122,7 @@ class InCallActivity : ComponentActivity() {
                         onSwap = viewModel::swap,
                         onMerge = viewModel::merge,
                         onAddCall = ::openDialpadForAddCall,
+                        onKeypadVisibilityChange = viewModel::setKeypadOpen,
                     )
                 }
             }

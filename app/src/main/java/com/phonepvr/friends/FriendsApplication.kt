@@ -68,8 +68,9 @@ class FriendsApplication : Application() {
         // No-op without READ_CALL_LOG.
         callLogChangeObserver.start(appScope)
         // Keep every bond pointing at its address-book contact across renames:
-        // reconciles now and whenever the system contacts change. No-op without
-        // READ_CONTACTS.
+        // reconciles now and whenever the system contacts change. Must not touch
+        // the contacts provider without READ_CONTACTS (a fresh install has none
+        // yet): it starts watching once the permission is granted.
         bondContactReconciler.start(appScope)
         // Sync once now and every time the app comes back to the foreground.
         // onStart fires on cold launch AND every return-to-foreground, which

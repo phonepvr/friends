@@ -27,6 +27,7 @@ import com.phonepvr.friends.ui.navigation.FriendsNavHost
 import com.phonepvr.friends.ui.navigation.Routes
 import com.phonepvr.friends.ui.onboarding.OnboardingScreen
 import com.phonepvr.friends.ui.theme.FriendsTheme
+import com.phonepvr.friends.data.contacts.BondContactReconciler
 import com.phonepvr.friends.data.incall.CallSession
 import com.phonepvr.friends.ui.incall.InCallActivity
 import dagger.hilt.android.AndroidEntryPoint
@@ -39,8 +40,13 @@ class MainActivity : FragmentActivity() {
 
     @Inject lateinit var callSession: CallSession
 
+    @Inject lateinit var bondContactReconciler: BondContactReconciler
+
     override fun onResume() {
         super.onResume()
+        // Back from a permission prompt (onboarding or a screen asking for
+        // contacts): start keeping bonds in sync if contacts access was just granted.
+        bondContactReconciler.onPermissionsMaybeChanged()
         // If a call is live and the user lands back on the app (e.g. tapping
         // the launcher icon during a call), bounce them to the in-call screen
         // — that's what every phone app does. When the call ends, the in-call

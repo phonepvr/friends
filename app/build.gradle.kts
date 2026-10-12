@@ -191,4 +191,5 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.sqlite.jdbc)
+    testImplementation(libs.robolectric)
 }

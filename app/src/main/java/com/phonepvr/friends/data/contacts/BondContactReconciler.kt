@@ -25,6 +25,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -53,6 +54,16 @@ class BondContactReconciler @Inject constructor(
 ) {
     private val mutex = Mutex()
     private var started = false
+    private var scope: CoroutineScope? = null
+
+    /** Address-book changes, debounced into reconcile passes once [start] runs. */
+    private val changes = Channel<Unit>(Channel.CONFLATED)
+    private val contactsObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
+        override fun onChange(selfChange: Boolean) {
+            changes.trySend(Unit)
+        }
+    }
+    private val observing = AtomicBoolean(false)
 
     private val _unlinkedPersonIds = MutableStateFlow<Set<Long>>(emptySet())
 
@@ -66,27 +77,56 @@ class BondContactReconciler @Inject constructor(
     /**
      * Reconciles now and again whenever the address book changes (debounced, so
      * a sync that touches hundreds of contacts triggers a single pass).
-     * Idempotent.
+     * Idempotent, and safe to call before contacts permission is granted: it runs
+     * from Application.onCreate, where a fresh install has no permissions yet.
      */
     @OptIn(FlowPreview::class)
     fun start(scope: CoroutineScope) {
         if (started) return
         started = true
-        val changes = Channel<Unit>(Channel.CONFLATED)
-        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
-            override fun onChange(selfChange: Boolean) {
-                changes.trySend(Unit)
-            }
-        }
-        context.contentResolver.registerContentObserver(
-            ContactsContract.Contacts.CONTENT_URI,
-            /* notifyForDescendants = */ true,
-            observer,
-        )
+        this.scope = scope
         scope.launch {
             changes.receiveAsFlow().debounce(CHANGE_DEBOUNCE_MS).collect { reconcile() }
         }
+        observeContactsIfAllowed()
         scope.launch { reconcile() }
+    }
+
+    /**
+     * Call when contacts permission may just have been granted (e.g. the app
+     * comes back from a permission prompt). Starts watching the address book if
+     * it wasn't yet, and reconciles once to catch up. Cheap when nothing changed.
+     */
+    fun onPermissionsMaybeChanged() {
+        val scope = scope ?: return
+        if (observeContactsIfAllowed()) scope.launch { reconcile() }
+    }
+
+    /**
+     * Registers the address-book observer once READ_CONTACTS is granted. Returns
+     * true only when this call started observing.
+     *
+     * Observing the contacts provider without that permission throws
+     * SecurityException on Android 8+ (for apps targeting O or later); thrown
+     * from Application.onCreate it closed the app on every launch of a fresh
+     * install, before onboarding could even ask for the permission.
+     */
+    private fun observeContactsIfAllowed(): Boolean {
+        // Runs on every activity resume: skip the permission lookup once observing.
+        if (observing.get() || !hasContactsPermission()) return false
+        if (!observing.compareAndSet(false, true)) return false
+        return try {
+            context.contentResolver.registerContentObserver(
+                ContactsContract.Contacts.CONTENT_URI,
+                /* notifyForDescendants = */ true,
+                contactsObserver,
+            )
+            true
+        } catch (e: SecurityException) {
+            // Revoked between the check and the call; the next pass retries.
+            observing.set(false)
+            false
+        }
     }
 
     /** One reconciliation pass. Safe to call from anywhere, any time. */
@@ -110,6 +150,8 @@ class BondContactReconciler @Inject constructor(
             _unlinkedPersonIds.value = emptySet()
             return
         }
+        // Permission may have arrived since start(); begin watching for changes.
+        observeContactsIfAllowed()
         val contacts = reader.listContacts()
         val plan = BondContactMatcher.plan(
             people = personDao.getAllWithDetails(),

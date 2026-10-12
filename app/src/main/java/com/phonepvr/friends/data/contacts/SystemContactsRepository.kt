@@ -1,10 +1,13 @@
 package com.phonepvr.friends.data.contacts
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.database.ContentObserver
 import android.os.Handler
 import android.os.Looper
 import android.provider.ContactsContract
+import androidx.core.content.ContextCompat
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
@@ -30,20 +33,27 @@ class SystemContactsRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val reader: ContactsReader,
 ) {
+    /**
+     * All contacts, re-emitted whenever the address book changes. Without contacts
+     * permission it emits an empty list once: observing or querying the contacts
+     * provider without it throws SecurityException on Android 8+, and some callers
+     * (call history, call analytics) subscribe without checking first.
+     */
     fun observeAll(): Flow<List<DeviceContact>> = callbackFlow {
+        if (!hasContactsPermission()) {
+            trySend(emptyList())
+            awaitClose()
+            return@callbackFlow
+        }
         val resolver = context.contentResolver
         val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
             override fun onChange(selfChange: Boolean) {
-                trySend(reader.listContacts())
+                trySend(listContactsOrEmpty())
             }
         }
-        resolver.registerContentObserver(
-            ContactsContract.Contacts.CONTENT_URI,
-            /* notifyForDescendants = */ true,
-            observer,
-        )
-        trySend(reader.listContacts())
-        awaitClose { resolver.unregisterContentObserver(observer) }
+        val registered = registerContactsObserver(observer)
+        trySend(listContactsOrEmpty())
+        awaitClose { if (registered) resolver.unregisterContentObserver(observer) }
     }.flowOn(Dispatchers.IO)
 
     suspend fun details(contactId: Long): ContactDetails? =
@@ -75,10 +85,35 @@ class SystemContactsRepository @Inject constructor(
                 trySend(Unit)
             }
         }
-        resolver.registerContentObserver(ContactsContract.Contacts.CONTENT_URI, true, observer)
+        // Without permission there is nothing to watch; emit once and stay quiet.
+        val registered = hasContactsPermission() && registerContactsObserver(observer)
         trySend(Unit)
-        awaitClose { resolver.unregisterContentObserver(observer) }
+        awaitClose { if (registered) resolver.unregisterContentObserver(observer) }
     }
+
+    private fun hasContactsPermission(): Boolean =
+        ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) ==
+            PackageManager.PERMISSION_GRANTED
+
+    /** False if the provider refused (permission revoked since the check). */
+    private fun registerContactsObserver(observer: ContentObserver): Boolean =
+        try {
+            context.contentResolver.registerContentObserver(
+                ContactsContract.Contacts.CONTENT_URI,
+                /* notifyForDescendants = */ true,
+                observer,
+            )
+            true
+        } catch (e: SecurityException) {
+            false
+        }
+
+    private fun listContactsOrEmpty(): List<DeviceContact> =
+        try {
+            reader.listContacts()
+        } catch (e: SecurityException) {
+            emptyList()
+        }
 
     /** User-visible contact-group titles for the browser's group filter. */
     suspend fun listGroupTitles(): List<String> =

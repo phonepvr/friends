@@ -21,6 +21,7 @@ coil = "2.7.0"
 profileinstaller = "1.4.1"
 junit = "4.13.2"
 sqliteJdbc = "3.53.4.0"
+robolectric = "4.14.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -57,6 +58,9 @@ junit = { group = "junit", name = "junit", version.ref = "junit" }
 # Test-only: a real SQLite on the JVM so the Room migration test can run the
 # actual migration SQL without an emulator. Never part of the shipped app.
 sqlite-jdbc = { group = "org.xerial", name = "sqlite-jdbc", version.ref = "sqliteJdbc" }
+# Test-only: runs the real Application and Activities on the JVM, so startup can be
+# checked in CI without a device. Never part of the shipped app.
+robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

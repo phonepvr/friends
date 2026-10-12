@@ -1,10 +1,13 @@
 package com.phonepvr.friends.data.dialer
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.database.ContentObserver
 import android.os.Handler
 import android.os.Looper
 import android.provider.CallLog
+import androidx.core.content.ContextCompat
 import com.phonepvr.friends.data.calllog.CallLogReader
 import com.phonepvr.friends.data.calllog.DeviceCall
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -21,10 +24,10 @@ import javax.inject.Singleton
  * Emits whenever the system CallLog changes so the list never goes stale
  * after an outgoing or incoming call.
  *
- * No permission check here — [CallLogReader.recentCalls] handles a missing
- * READ_CALL_LOG gracefully (the resolver query returns null → empty list).
- * The dialer screen guards with its own permission prompt before
- * subscribing.
+ * Without READ_CALL_LOG it emits an empty list instead of failing: on a device
+ * querying the call log without that permission throws SecurityException (it does
+ * not return null), and not every caller checks first — the call-history screen
+ * opened from a missed-call notification, for one.
  */
 @Singleton
 class RecentsRepository @Inject constructor(
@@ -35,13 +38,28 @@ class RecentsRepository @Inject constructor(
         val resolver = context.contentResolver
         val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
             override fun onChange(selfChange: Boolean) {
-                trySend(reader.recentCalls(sinceMillis))
+                trySend(recentCallsOrEmpty(sinceMillis))
             }
         }
-        runCatching {
-            resolver.registerContentObserver(CallLog.Calls.CONTENT_URI, true, observer)
+        if (hasCallLogPermission()) {
+            runCatching {
+                resolver.registerContentObserver(CallLog.Calls.CONTENT_URI, true, observer)
+            }
         }
-        trySend(reader.recentCalls(sinceMillis))
+        trySend(recentCallsOrEmpty(sinceMillis))
         awaitClose { runCatching { resolver.unregisterContentObserver(observer) } }
     }.flowOn(Dispatchers.IO)
+
+    private fun hasCallLogPermission(): Boolean =
+        ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALL_LOG) ==
+            PackageManager.PERMISSION_GRANTED
+
+    private fun recentCallsOrEmpty(sinceMillis: Long): List<DeviceCall> {
+        if (!hasCallLogPermission()) return emptyList()
+        return try {
+            reader.recentCalls(sinceMillis)
+        } catch (e: SecurityException) {
+            emptyList()
+        }
+    }
 }

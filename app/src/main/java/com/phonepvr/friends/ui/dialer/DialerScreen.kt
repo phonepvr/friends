@@ -213,6 +213,7 @@ fun DialerScreen(
     var sheetEntry by remember { mutableStateOf<RecentEntry?>(null) }
     var numberPicker by remember { mutableStateOf<CallTarget.Pick?>(null) }
     var confirmDeleteEntry by remember { mutableStateOf<RecentEntry?>(null) }
+    var confirmBlockEntry by remember { mutableStateOf<RecentEntry?>(null) }
     var deleteAfterPermission by remember { mutableStateOf<Long?>(null) }
 
     // Deleting a call writes to the log; request WRITE_CALL_LOG, then delete
@@ -298,18 +299,51 @@ fun DialerScreen(
             },
             onToggleBlock = {
                 val number = entry.number
-                val nextBlocked = !(blockedStatus ?: false)
-                if (nextBlocked) haptics.perform(Haptic.Reject)
                 sheetEntry = null
-                scope.launch {
-                    val ok = viewModel.setBlocked(number, nextBlocked)
-                    val msg = when {
-                        !ok -> "Couldn't update the block list"
-                        nextBlocked -> "$number blocked"
-                        else -> "$number unblocked"
+                if (blockedStatus == true) {
+                    // Unblocking is harmless, so it happens straight away.
+                    scope.launch {
+                        val ok = viewModel.setBlocked(number, false)
+                        snackbarState.showSnackbar(
+                            if (ok) "$number unblocked" else "Couldn't update the block list",
+                        )
                     }
-                    snackbarState.showSnackbar(msg)
+                } else {
+                    // Blocking is confirmed first (issue #45): the call you just
+                    // finished sits at the top of this list, so a cheek against a
+                    // still-lit screen could otherwise block someone in two taps.
+                    confirmBlockEntry = entry
                 }
+            },
+        )
+    }
+
+    confirmBlockEntry?.let { entry ->
+        val who = entry.displayName ?: entry.number
+        AlertDialog(
+            onDismissRequest = { confirmBlockEntry = null },
+            title = { Text("Block $who?") },
+            text = {
+                Text(
+                    "Calls from ${entry.number} will be blocked and won't ring. " +
+                        "You can unblock it from this menu.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val number = entry.number
+                    confirmBlockEntry = null
+                    haptics.perform(Haptic.Reject)
+                    scope.launch {
+                        val ok = viewModel.setBlocked(number, true)
+                        snackbarState.showSnackbar(
+                            if (ok) "$number blocked" else "Couldn't update the block list",
+                        )
+                    }
+                }) { Text("Block") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmBlockEntry = null }) { Text("Cancel") }
             },
         )
     }

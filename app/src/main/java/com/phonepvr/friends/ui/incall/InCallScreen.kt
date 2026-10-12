@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.PictureInPictureAlt
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SwapCalls
 import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
@@ -47,6 +48,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -99,6 +101,7 @@ fun InCallScreen(
     onSwap: () -> Unit,
     onMerge: () -> Unit,
     onAddCall: () -> Unit,
+    onKeypadVisibilityChange: (Boolean) -> Unit,
 ) {
     // PiP renders a compact, tap-to-expand card. All controls are gone from
     // the small window — there's no room and Telecom keeps audio routing
@@ -111,6 +114,10 @@ fun InCallScreen(
     val snapshot = state.snapshot
     var showKeypad by remember { mutableStateOf(false) }
     var dtmfDigits by remember { mutableStateOf("") }
+    // While the keypad is open the user is typing menu digits, not holding the
+    // phone to their ear, so it keeps the screen on (no proximity screen-off).
+    LaunchedEffect(showKeypad) { onKeypadVisibilityChange(showKeypad) }
+    DisposableEffect(Unit) { onDispose { onKeypadVisibilityChange(false) } }
 
     Box(
         modifier = Modifier
@@ -144,6 +151,10 @@ fun InCallScreen(
                         quickReplies = state.quickReplyMessages,
                         canBlock = state.canBlockCaller,
                         onBlockReject = onBlockReject,
+                        callerLabel = state.bondedPerson?.displayName
+                            ?: state.callerName
+                            ?: snapshot.callerDisplayName
+                            ?: snapshot.number.ifBlank { "this caller" },
                     )
                 showKeypad -> InCallDialpad(
                     onDigit = { c ->
@@ -459,8 +470,34 @@ private fun IncomingControls(
     quickReplies: List<String>,
     canBlock: Boolean,
     onBlockReject: () -> Unit,
+    callerLabel: String,
 ) {
     var showQuickReplies by remember { mutableStateOf(false) }
+    var confirmBlock by remember { mutableStateOf(false) }
+
+    // Blocking is easy to trigger by accident (a pocket, a cheek) and silent
+    // afterwards: a blocked caller simply never rings again. Ask first.
+    if (confirmBlock) {
+        AlertDialog(
+            onDismissRequest = { confirmBlock = false },
+            title = { Text("Block $callerLabel?") },
+            text = {
+                Text(
+                    "This call is rejected and future calls from this number are " +
+                        "blocked. You can unblock it later from Recents.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmBlock = false
+                    onBlockReject()
+                }) { Text("Block & reject") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmBlock = false }) { Text("Cancel") }
+            },
+        )
+    }
 
     if (showQuickReplies) {
         QuickReplySheet(
@@ -515,12 +552,12 @@ private fun IncomingControls(
                 haptic = ActionHaptic.Confirm,
             )
         }
-        // Tertiary action for nuisance callers: block the number and decline
-        // in one tap. Hidden when we can't block (not default dialer, tablet,
-        // or withheld number) so it never dead-ends.
+        // Tertiary action for nuisance callers: block the number and decline,
+        // after a confirmation. Hidden when we can't block (not default dialer,
+        // tablet, or withheld number) so it never dead-ends.
         if (canBlock) {
             Spacer(Modifier.height(16.dp))
-            TextButton(onClick = onBlockReject) {
+            TextButton(onClick = { confirmBlock = true }) {
                 Icon(
                     imageVector = Icons.Filled.Block,
                     contentDescription = null,

@@ -21,6 +21,18 @@ class FavouritesRepository @Inject constructor(
     fun observeIsFavourite(lookupKey: String): Flow<Boolean> =
         dao.observeIsFavourite(lookupKey)
 
+    /**
+     * Stores a new strip order, [lookupKeys] first to last, in one transaction so
+     * the strip never shows a half-applied order. See [FavouriteOrder.withPositions].
+     */
+    suspend fun reorder(lookupKeys: List<String>) {
+        dao.updateAll(FavouriteOrder.withPositions(dao.getAll(), lookupKeys))
+    }
+
+    suspend fun remove(lookupKey: String) {
+        dao.delete(lookupKey)
+    }
+
     suspend fun toggle(
         lookupKey: String,
         displayName: String,

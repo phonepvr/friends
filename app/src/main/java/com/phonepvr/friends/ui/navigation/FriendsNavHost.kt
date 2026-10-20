@@ -152,7 +152,8 @@ fun FriendsNavHost(
         }
     NavHost(
         navController = navController,
-        startDestination = Routes.PEOPLE_LIST,
+        // The app opens on the Calls tab; Bonds is one tap away.
+        startDestination = Routes.DIALER,
         enterTransition = slidePushIn,
         exitTransition = slidePushOut,
         popEnterTransition = slidePopIn,
@@ -180,8 +181,13 @@ fun FriendsNavHost(
                 onDeleted = {
                     // Skip past the now-stale PersonDetail screen so its
                     // observePersonWithDetails flow doesn't surface "Loading…"
-                    // for a row that just got deleted.
-                    navController.popBackStack(Routes.PEOPLE_LIST, inclusive = false)
+                    // for a row that just got deleted. The Bonds list isn't
+                    // always underneath (Calls is the start tab, and a widget
+                    // opens a bond directly), so fall back to leaving the
+                    // detail screen itself.
+                    if (!navController.popBackStack(Routes.PEOPLE_LIST, inclusive = false)) {
+                        navController.popBackStack(Routes.PERSON_DETAIL, inclusive = true)
+                    }
                 },
             )
         }

@@ -211,6 +211,7 @@ fun DialerScreen(
     }
 
     var sheetEntry by remember { mutableStateOf<RecentEntry?>(null) }
+    var editingFavourites by remember { mutableStateOf(false) }
     var numberPicker by remember { mutableStateOf<CallTarget.Pick?>(null) }
     var confirmDeleteEntry by remember { mutableStateOf<RecentEntry?>(null) }
     var confirmBlockEntry by remember { mutableStateOf<RecentEntry?>(null) }
@@ -235,6 +236,21 @@ fun DialerScreen(
             },
             onDismiss = { numberPicker = null },
         )
+    }
+
+    if (editingFavourites) {
+        if (state.favourites.isEmpty()) {
+            // Last favourite removed: nothing left to edit.
+            LaunchedEffect(Unit) { editingFavourites = false }
+        } else {
+            EditFavouritesSheet(
+                favourites = state.favourites,
+                photoByLookupKey = state.favouritePhotoByLookupKey,
+                onReorder = viewModel::reorderFavourites,
+                onRemove = viewModel::removeFavourite,
+                onDismiss = { editingFavourites = false },
+            )
+        }
     }
 
     sheetEntry?.let { entry ->
@@ -421,6 +437,9 @@ fun DialerScreen(
                     onQueryChange = viewModel::onQueryChange,
                 )
             }
+            if (hasCallLog && state.query.isBlank()) {
+                RecentsFilterRow(selected = state.filter, onSelect = viewModel::onFilterChange)
+            }
             Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
             // Crossfade between the permission gate and the recents list —
             // smoother than a hard swap after the user grants access.
@@ -478,6 +497,10 @@ fun DialerScreen(
                         onOpenContact = onOpenContact,
                         onAddToContacts = onSaveNumber,
                         onCallFavourite = { fav -> placeCall(fav.primaryNumber) },
+                        onEditFavourites = {
+                            haptics.perform(Haptic.LongPress)
+                            editingFavourites = true
+                        },
                         onLongPress = { entry ->
                             haptics.perform(Haptic.LongPress)
                             sheetEntry = entry
@@ -554,23 +577,27 @@ private fun RecentsContent(
     onOpenContact: (Long) -> Unit,
     onAddToContacts: (String) -> Unit,
     onCallFavourite: (FavouriteContactEntity) -> Unit,
+    onEditFavourites: () -> Unit,
     onLongPress: (RecentEntry) -> Unit,
 ) {
     if (!state.recentsLoaded && state.favourites.isEmpty()) {
         EmptyArea(message = "Loading…")
         return
     }
-    if (state.recents.isEmpty() && state.favourites.isEmpty()) {
-        EmptyArea(message = "No calls in the last 30 days.")
+    // Favourites belong to the unfiltered view; a filter shows just those calls.
+    val showFavourites = state.filter == RecentsFilter.ALL && state.favourites.isNotEmpty()
+    if (state.recents.isEmpty() && !showFavourites) {
+        EmptyArea(message = state.filter.emptyMessage)
         return
     }
     LazyColumn(modifier = Modifier.fillMaxSize()) {
-        if (state.favourites.isNotEmpty()) {
+        if (showFavourites) {
             item(key = "__favourites_strip", contentType = "favourites") {
                 FavouritesStrip(
                     favourites = state.favourites,
                     photoByLookupKey = state.favouritePhotoByLookupKey,
                     onCallFavourite = onCallFavourite,
+                    onEdit = onEditFavourites,
                 )
             }
         }
@@ -669,14 +696,24 @@ private fun FavouritesStrip(
     favourites: List<FavouriteContactEntity>,
     photoByLookupKey: Map<String, String>,
     onCallFavourite: (FavouriteContactEntity) -> Unit,
+    onEdit: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            text = "Favourites",
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 6.dp),
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 4.dp, top = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "Favourites",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            // Reorder / remove. Long-pressing a favourite opens the same sheet.
+            TextButton(onClick = onEdit) { Text("Edit") }
+        }
         LazyRow(
             modifier = Modifier
                 .fillMaxWidth()
@@ -693,23 +730,30 @@ private fun FavouritesStrip(
                     fav = fav,
                     photoUri = photoByLookupKey[fav.lookupKey],
                     onClick = { onCallFavourite(fav) },
+                    onLongClick = onEdit,
                 )
             }
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun FavouriteTile(
     fav: FavouriteContactEntity,
     photoUri: String?,
     onClick: () -> Unit,
+    onLongClick: () -> Unit,
 ) {
     Column(
         modifier = Modifier
             .width(76.dp)
             .clip(RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClickLabel = "Edit favourites",
+                onLongClick = onLongClick,
+            )
             .padding(vertical = 8.dp, horizontal = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {

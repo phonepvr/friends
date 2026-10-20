@@ -72,6 +72,8 @@ data class DialerUiState(
     val query: String = "",
     /** Contact-search results, populated whenever [query] is non-empty. */
     val contactResults: List<ContactSearchResult> = emptyList(),
+    /** Selected chip at the top of the tab; [recents] is already filtered by it. */
+    val filter: RecentsFilter = RecentsFilter.ALL,
 )
 
 /**
@@ -96,7 +98,7 @@ class DialerViewModel @Inject constructor(
     private val systemContactsRepository: SystemContactsRepository,
     recentsRepository: RecentsRepository,
     personDao: PersonDao,
-    favouritesRepository: FavouritesRepository,
+    private val favouritesRepository: FavouritesRepository,
     private val callPlacer: CallPlacer,
     private val blockedNumberManager: BlockedNumberManager,
     private val callLogWriter: CallLogWriter,
@@ -126,6 +128,7 @@ class DialerViewModel @Inject constructor(
     private val contactsGranted = MutableStateFlow(false)
     private val placeError = MutableStateFlow<String?>(null)
     private val query = MutableStateFlow("")
+    private val filter = MutableStateFlow(RecentsFilter.ALL)
 
     private val recentsSince = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(30)
 
@@ -230,8 +233,14 @@ class DialerViewModel @Inject constructor(
         baseState,
         query,
         searchResults,
-    ) { base, q, results ->
-        base.copy(query = q, contactResults = results)
+        filter,
+    ) { base, q, results, f ->
+        base.copy(
+            query = q,
+            contactResults = results,
+            filter = f,
+            recents = if (f == RecentsFilter.ALL) base.recents else base.recents.filter { f.matches(it.type) },
+        )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
@@ -240,6 +249,19 @@ class DialerViewModel @Inject constructor(
 
     fun onQueryChange(value: String) {
         query.value = value
+    }
+
+    fun onFilterChange(value: RecentsFilter) {
+        filter.value = value
+    }
+
+    /** Saves the favourites strip in this order (lookup keys, first to last). */
+    fun reorderFavourites(lookupKeys: List<String>) {
+        viewModelScope.launch { favouritesRepository.reorder(lookupKeys) }
+    }
+
+    fun removeFavourite(lookupKey: String) {
+        viewModelScope.launch { favouritesRepository.remove(lookupKey) }
     }
 
     fun onPermissionState(callLog: Boolean, contacts: Boolean) {

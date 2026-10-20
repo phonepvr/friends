@@ -309,6 +309,25 @@ fun SettingsScreen(
                 modifier = Modifier.clickable { openBlockedNumbers(context) },
             )
             ListItem(
+                headlineContent = { Text("Screen off at your ear") },
+                supportingContent = {
+                    Text(
+                        "During calls the screen turns off when the phone is held to your " +
+                            "ear, so your cheek can't press buttons. Turn off only if your " +
+                            "phone's proximity sensor misbehaves.",
+                    )
+                },
+                trailingContent = {
+                    Switch(
+                        checked = settings.proximityScreenOff,
+                        onCheckedChange = viewModel::setProximityScreenOff,
+                    )
+                },
+                modifier = Modifier.clickable {
+                    viewModel.setProximityScreenOff(!settings.proximityScreenOff)
+                },
+            )
+            ListItem(
                 headlineContent = { Text("Quick replies") },
                 supportingContent = {
                     Text("Pre-written messages for declining a call when you can't talk.")

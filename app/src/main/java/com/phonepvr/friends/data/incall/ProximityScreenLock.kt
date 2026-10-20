@@ -31,22 +31,19 @@ class ProximityScreenLock @Inject constructor(
 
     val isHeld: Boolean get() = wakeLock?.isHeld == true
 
-    /**
-     * Turns proximity screen-off on or off. Idempotent. When turned off the
-     * screen stays dark until the phone moves away from the face
-     * (RELEASE_FLAG_WAIT_FOR_NO_PROXIMITY), so a call that ends while the phone
-     * is still at the ear doesn't light up the app underneath against the cheek.
-     */
-    // No timeout on purpose: a call can last hours, and the lock is always
-    // released when the call ends or the in-call service goes away.
+    /** Applies a [ProximityPolicy] decision. Idempotent. */
+    // No timeout on purpose: a call can last hours (a timed lock would silently stop
+    // working mid-call), and the lock is always let go when the call ends or the
+    // in-call service goes away.
     @SuppressLint("WakelockTimeout")
     @Synchronized
-    fun setEnabled(enabled: Boolean) {
+    fun update(action: ProximityPolicy.Action) {
         val lock = wakeLock ?: return
-        if (enabled) {
-            if (!lock.isHeld) lock.acquire()
-        } else if (lock.isHeld) {
-            lock.release(PowerManager.RELEASE_FLAG_WAIT_FOR_NO_PROXIMITY)
+        when (action) {
+            ProximityPolicy.Action.HOLD -> if (!lock.isHeld) lock.acquire()
+            ProximityPolicy.Action.RELEASE_WHEN_CLEAR ->
+                if (lock.isHeld) lock.release(PowerManager.RELEASE_FLAG_WAIT_FOR_NO_PROXIMITY)
+            ProximityPolicy.Action.RELEASE_NOW -> if (lock.isHeld) lock.release()
         }
     }
 

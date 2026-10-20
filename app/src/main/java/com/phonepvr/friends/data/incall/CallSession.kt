@@ -99,15 +99,6 @@ class CallSession @Inject constructor() {
     )
     val audio: StateFlow<AudioSnapshot> = _audio.asStateFlow()
 
-    private val _keypadOpen = MutableStateFlow(false)
-
-    /** True while the in-call keypad is showing; it keeps the screen on (see [ProximityPolicy]). */
-    val keypadOpen: StateFlow<Boolean> = _keypadOpen.asStateFlow()
-
-    fun setKeypadOpen(open: Boolean) {
-        _keypadOpen.value = open
-    }
-
     // --- Wiring from the InCallService ---
 
     fun attachService(svc: InCallService) {
@@ -147,7 +138,6 @@ class CallSession @Inject constructor() {
         if (calls.isEmpty()) {
             _snapshot.value = null
             _heldSnapshot.value = null
-            _keypadOpen.value = false
             return
         }
         // Legs inside a conference are represented by the conference parent,

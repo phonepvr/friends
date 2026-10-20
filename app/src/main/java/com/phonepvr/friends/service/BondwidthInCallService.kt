@@ -15,6 +15,7 @@ import com.phonepvr.friends.data.incall.CallerIdentityResolver
 import com.phonepvr.friends.data.incall.ProximityPolicy
 import com.phonepvr.friends.data.incall.ProximityScreenLock
 import com.phonepvr.friends.data.incall.Ringer
+import com.phonepvr.friends.data.settings.SettingsRepository
 import com.phonepvr.friends.ui.incall.InCallActivity
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
@@ -23,6 +24,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -54,6 +56,7 @@ class BondwidthInCallService : InCallService() {
     @Inject lateinit var callerIdentityResolver: CallerIdentityResolver
     @Inject lateinit var ringer: Ringer
     @Inject lateinit var proximityScreenLock: ProximityScreenLock
+    @Inject lateinit var settingsRepository: SettingsRepository
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var inForeground = false
@@ -67,12 +70,12 @@ class BondwidthInCallService : InCallService() {
             combine(
                 callSession.snapshot,
                 callSession.audio,
-                callSession.keypadOpen,
-            ) { call, audio, keypadOpen ->
-                ProximityPolicy.shouldUseProximity(call, audio.route, keypadOpen)
+                settingsRepository.settings.map { it.proximityScreenOff }.distinctUntilChanged(),
+            ) { call, audio, enabled ->
+                ProximityPolicy.decide(call, audio.route, enabled)
             }
                 .distinctUntilChanged()
-                .collect { proximityScreenLock.setEnabled(it) }
+                .collect { proximityScreenLock.update(it) }
         }
     }
 
@@ -174,7 +177,7 @@ class BondwidthInCallService : InCallService() {
 
     override fun onDestroy() {
         super.onDestroy()
-        proximityScreenLock.setEnabled(false)
+        proximityScreenLock.update(ProximityPolicy.Action.RELEASE_WHEN_CLEAR)
         ringer.stop()
         callSession.detachService(this)
         callNotifier.cancel()

@@ -48,7 +48,6 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -101,7 +100,6 @@ fun InCallScreen(
     onSwap: () -> Unit,
     onMerge: () -> Unit,
     onAddCall: () -> Unit,
-    onKeypadVisibilityChange: (Boolean) -> Unit,
 ) {
     // PiP renders a compact, tap-to-expand card. All controls are gone from
     // the small window — there's no room and Telecom keeps audio routing
@@ -114,10 +112,6 @@ fun InCallScreen(
     val snapshot = state.snapshot
     var showKeypad by remember { mutableStateOf(false) }
     var dtmfDigits by remember { mutableStateOf("") }
-    // While the keypad is open the user is typing menu digits, not holding the
-    // phone to their ear, so it keeps the screen on (no proximity screen-off).
-    LaunchedEffect(showKeypad) { onKeypadVisibilityChange(showKeypad) }
-    DisposableEffect(Unit) { onDispose { onKeypadVisibilityChange(false) } }
 
     Box(
         modifier = Modifier

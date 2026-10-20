@@ -1,7 +1,7 @@
 package com.phonepvr.friends.data.incall
 
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
+import com.phonepvr.friends.data.incall.ProximityPolicy.Action
+import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class ProximityPolicyTest {
@@ -9,6 +9,7 @@ class ProximityPolicyTest {
     private fun call(
         state: CallSimpleState,
         direction: CallDirection = CallDirection.OUTGOING,
+        isVideo: Boolean = false,
     ) = CallSnapshot(
         callId = "1",
         state = state,
@@ -16,51 +17,59 @@ class ProximityPolicyTest {
         number = "5551234567",
         callerDisplayName = null,
         connectTimeMillis = null,
-        isVideo = false,
+        isVideo = isVideo,
     )
 
-    private fun use(
+    private fun decide(
         call: CallSnapshot?,
         route: CallAudioRoute = CallAudioRoute.EARPIECE,
-        keypadOpen: Boolean = false,
-    ) = ProximityPolicy.shouldUseProximity(call, route, keypadOpen)
+        enabled: Boolean = true,
+    ) = ProximityPolicy.decide(call, route, enabled)
 
     @Test
-    fun offHookOnEarpiece_turnsScreenOffNearTheFace() {
-        assertTrue(use(call(CallSimpleState.DIALING)))
-        assertTrue(use(call(CallSimpleState.CONNECTING)))
-        assertTrue(use(call(CallSimpleState.ACTIVE, CallDirection.INCOMING)))
-        assertTrue(use(call(CallSimpleState.ACTIVE, CallDirection.OUTGOING)))
-        assertTrue(use(call(CallSimpleState.HOLDING)))
+    fun offHookOnEarpiece_holdsTheSensor() {
+        assertEquals(Action.HOLD, decide(call(CallSimpleState.DIALING)))
+        assertEquals(Action.HOLD, decide(call(CallSimpleState.CONNECTING)))
+        assertEquals(Action.HOLD, decide(call(CallSimpleState.ACTIVE, CallDirection.INCOMING)))
+        assertEquals(Action.HOLD, decide(call(CallSimpleState.ACTIVE, CallDirection.OUTGOING)))
+        assertEquals(Action.HOLD, decide(call(CallSimpleState.HOLDING)))
     }
 
     @Test
-    fun outgoingCallBeforeDialling_alreadyUsesProximity() {
-        assertTrue(use(call(CallSimpleState.NEW, CallDirection.OUTGOING)))
-        assertFalse(use(call(CallSimpleState.NEW, CallDirection.INCOMING)))
+    fun outgoingCallBeforeDialling_alreadyHolds() {
+        assertEquals(Action.HOLD, decide(call(CallSimpleState.NEW, CallDirection.OUTGOING)))
+        assertEquals(
+            Action.RELEASE_WHEN_CLEAR,
+            decide(call(CallSimpleState.NEW, CallDirection.INCOMING)),
+        )
     }
 
     @Test
-    fun ringing_keepsScreenOnSoTheUserCanAnswer() {
-        assertFalse(use(call(CallSimpleState.RINGING, CallDirection.INCOMING)))
+    fun ringingEndedOrNoCall_releaseOnlyOnceThePhoneLeavesTheFace() {
+        assertEquals(
+            Action.RELEASE_WHEN_CLEAR,
+            decide(call(CallSimpleState.RINGING, CallDirection.INCOMING)),
+        )
+        assertEquals(Action.RELEASE_WHEN_CLEAR, decide(call(CallSimpleState.DISCONNECTED)))
+        assertEquals(Action.RELEASE_WHEN_CLEAR, decide(null))
     }
 
     @Test
-    fun noCallOrEndedCall_releasesProximity() {
-        assertFalse(use(null))
-        assertFalse(use(call(CallSimpleState.DISCONNECTED)))
-    }
-
-    @Test
-    fun audioAwayFromTheEarpiece_keepsScreenOn() {
+    fun audioAwayFromTheEarpiece_lightsTheScreenAtOnce() {
         val active = call(CallSimpleState.ACTIVE)
-        assertFalse(use(active, route = CallAudioRoute.SPEAKER))
-        assertFalse(use(active, route = CallAudioRoute.BLUETOOTH))
-        assertFalse(use(active, route = CallAudioRoute.WIRED_HEADSET))
+        assertEquals(Action.RELEASE_NOW, decide(active, route = CallAudioRoute.SPEAKER))
+        assertEquals(Action.RELEASE_NOW, decide(active, route = CallAudioRoute.BLUETOOTH))
+        assertEquals(Action.RELEASE_NOW, decide(active, route = CallAudioRoute.WIRED_HEADSET))
     }
 
     @Test
-    fun openKeypad_keepsScreenOnForTyping() {
-        assertFalse(use(call(CallSimpleState.ACTIVE), keypadOpen = true))
+    fun videoCall_lightsTheScreenAtOnce() {
+        assertEquals(Action.RELEASE_NOW, decide(call(CallSimpleState.ACTIVE, isVideo = true)))
+    }
+
+    @Test
+    fun switchedOffInSettings_neverHolds() {
+        assertEquals(Action.RELEASE_NOW, decide(call(CallSimpleState.ACTIVE), enabled = false))
+        assertEquals(Action.RELEASE_NOW, decide(null, enabled = false))
     }
 }

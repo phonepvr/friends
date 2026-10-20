@@ -32,13 +32,18 @@ class ProximityScreenLockTest {
         assertTrue(lock.isSupported)
         assertFalse(lock.isHeld)
 
-        lock.setEnabled(true)
+        lock.update(ProximityPolicy.Action.HOLD)
         assertTrue(lock.isHeld)
         val wakeLock = shadowOf(ShadowPowerManager.getLatestWakeLock())
         assertEquals("Bondwidth:InCallProximity", wakeLock.tag)
         assertFalse(wakeLock.isReferenceCounted)
 
-        lock.setEnabled(false)
+        lock.update(ProximityPolicy.Action.RELEASE_WHEN_CLEAR)
+        assertFalse(lock.isHeld)
+
+        lock.update(ProximityPolicy.Action.HOLD)
+        assertTrue(lock.isHeld)
+        lock.update(ProximityPolicy.Action.RELEASE_NOW)
         assertFalse(lock.isHeld)
     }
 
@@ -46,13 +51,13 @@ class ProximityScreenLockTest {
     fun repeatedUpdates_doNotStackAcquires() {
         deviceWithProximitySensor(true)
         val lock = ProximityScreenLock(context)
-        lock.setEnabled(true)
-        lock.setEnabled(true)
-        lock.setEnabled(true)
+        lock.update(ProximityPolicy.Action.HOLD)
+        lock.update(ProximityPolicy.Action.HOLD)
+        lock.update(ProximityPolicy.Action.HOLD)
         // Not reference counted: a single release turns it off however often it was enabled.
-        lock.setEnabled(false)
+        lock.update(ProximityPolicy.Action.RELEASE_WHEN_CLEAR)
         assertFalse(lock.isHeld)
-        lock.setEnabled(false)
+        lock.update(ProximityPolicy.Action.RELEASE_WHEN_CLEAR)
         assertFalse(lock.isHeld)
     }
 
@@ -61,7 +66,7 @@ class ProximityScreenLockTest {
         deviceWithProximitySensor(false)
         val lock = ProximityScreenLock(context)
         assertFalse(lock.isSupported)
-        lock.setEnabled(true)
+        lock.update(ProximityPolicy.Action.HOLD)
         assertFalse(lock.isHeld)
         assertNull(ShadowPowerManager.getLatestWakeLock())
     }

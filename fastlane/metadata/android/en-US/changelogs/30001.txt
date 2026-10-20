@@ -1,0 +1,1 @@
+Calls: the screen now turns off when the phone is at your ear, so your cheek can't press buttons (switch it off in Settings > Phone app if your sensor misbehaves). Blocking a number now asks for confirmation first. Dialpad: paste a number you copied elsewhere - tap or long-press the number, or use the Paste chip.

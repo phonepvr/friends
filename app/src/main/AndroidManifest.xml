@@ -76,8 +76,8 @@
 
     <!--
       Android 11+ requires explicit <queries> for PackageManager.getPackageInfo
-      and Intent resolution against other apps. We only check for WhatsApp and
-      Signal, and we only ever launch tel: / sms: / https://wa.me / signal.me
+      and Intent resolution against other apps. We only check for WhatsApp
+      (and WhatsApp Business) and Signal, and we only ever launch tel: / sms: / https://wa.me / signal.me
       schemes — no broad QUERY_ALL_PACKAGES.
     -->
     <queries>
@@ -94,6 +94,7 @@
             <data android:scheme="https" android:host="wa.me" />
         </intent>
         <package android:name="com.whatsapp" />
+        <package android:name="com.whatsapp.w4b" />
         <package android:name="org.thoughtcrime.securesms" />
     </queries>
 

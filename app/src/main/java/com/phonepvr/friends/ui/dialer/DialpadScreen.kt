@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
 import android.provider.ContactsContract
 import android.view.HapticFeedbackConstants
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -29,8 +30,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Backspace
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -80,6 +87,7 @@ fun DialpadScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbarState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val clipboardHasNumber = rememberClipboardHasNumber()
 
     var hasContacts by remember {
         mutableStateOf(
@@ -208,6 +216,24 @@ fun DialpadScreen(
         }
     }
 
+    // Paste reads the clipboard only now, on the user's tap (see ClipboardNumber.kt),
+    // and keeps just the dialable part of whatever was copied.
+    val pasteNumber: () -> Unit = {
+        val number = readNumberFromClipboard(context)
+        if (number != null) {
+            viewModel.onPaste(number)
+        } else {
+            scope.launch { snackbarState.showSnackbar("No phone number to paste") }
+        }
+    }
+    val copyNumber: () -> Unit = {
+        copyNumberToClipboard(context, state.input)
+        // Android 13+ confirms copies itself; a second message would be noise.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            scope.launch { snackbarState.showSnackbar("Number copied") }
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -226,7 +252,7 @@ fun DialpadScreen(
                 .padding(padding)
                 .fillMaxSize(),
         ) {
-            InputBar(input = state.input)
+            InputBar(input = state.input, onPaste = pasteNumber, onCopy = copyNumber)
             Box(modifier = Modifier.weight(1f)) {
                 if (state.matches.isNotEmpty()) {
                     LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -277,6 +303,28 @@ fun DialpadScreen(
                             }
                         }
                     }
+                } else if (clipboardHasNumber) {
+                    // Copied a number somewhere else? Offer it on the empty dialpad.
+                    // The chip doesn't show what's on the clipboard: reading it is
+                    // left for the tap.
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(top = 8.dp),
+                        contentAlignment = Alignment.TopCenter,
+                    ) {
+                        AssistChip(
+                            onClick = pasteNumber,
+                            label = { Text("Paste number") },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Filled.ContentPaste,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(AssistChipDefaults.IconSize),
+                                )
+                            },
+                        )
+                    }
                 }
             }
             DialpadGrid(
@@ -319,16 +367,52 @@ fun DialpadScreen(
     }
 }
 
+/**
+ * The typed number. Tap or long-press it for Paste / Copy, like the stock dialer's
+ * number field (whose long-press shows the system Paste menu).
+ */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun InputBar(input: String) {
-    Text(
-        text = input.ifEmpty { " " },
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 16.dp),
-        style = MaterialTheme.typography.headlineMedium,
-        textAlign = TextAlign.End,
-    )
+private fun InputBar(input: String, onPaste: () -> Unit, onCopy: () -> Unit) {
+    var menuOpen by remember { mutableStateOf(false) }
+    Box(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = input.ifEmpty { " " },
+            modifier = Modifier
+                .fillMaxWidth()
+                .combinedClickable(
+                    onClickLabel = "Paste or copy number",
+                    onClick = { menuOpen = true },
+                    onLongClickLabel = "Paste or copy number",
+                    onLongClick = { menuOpen = true },
+                )
+                .padding(horizontal = 16.dp, vertical = 16.dp),
+            style = MaterialTheme.typography.headlineMedium,
+            textAlign = TextAlign.End,
+        )
+        Box(modifier = Modifier.align(Alignment.BottomEnd)) {
+            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                DropdownMenuItem(
+                    text = { Text("Paste") },
+                    leadingIcon = { Icon(Icons.Filled.ContentPaste, contentDescription = null) },
+                    onClick = {
+                        menuOpen = false
+                        onPaste()
+                    },
+                )
+                if (input.isNotEmpty()) {
+                    DropdownMenuItem(
+                        text = { Text("Copy") },
+                        leadingIcon = { Icon(Icons.Filled.ContentCopy, contentDescription = null) },
+                        onClick = {
+                            menuOpen = false
+                            onCopy()
+                        },
+                    )
+                }
+            }
+        }
+    }
 }
 
 /**

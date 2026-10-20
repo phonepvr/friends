@@ -2,6 +2,7 @@ package com.phonepvr.friends.data.repository
 
 import com.phonepvr.friends.data.db.dao.TimelineDao
 import com.phonepvr.friends.data.db.entity.TimelineEntryEntity
+import com.phonepvr.friends.domain.model.CallContactRule
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -14,6 +15,10 @@ class TimelineRepository @Inject constructor(
         timelineDao.observeForPerson(personId)
 
     fun observeAll(): Flow<List<TimelineEntryEntity>> = timelineDao.observeAll()
+
+    /** Brings stored call-log entries in line with [CallContactRule]; see the DAO. */
+    suspend fun reapplyCallContactRule(): Int =
+        timelineDao.stopCountingCallsShorterThan(CallContactRule.MIN_CONNECTED_SECONDS)
 
     suspend fun addEntry(entry: TimelineEntryEntity): Long = timelineDao.insert(entry)
 

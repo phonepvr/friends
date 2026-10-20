@@ -44,6 +44,20 @@ interface TimelineDao {
     )
     suspend fun latestContactAt(personId: Long): Long?
 
+    /**
+     * Re-applies CallContactRule to call-log entries already stored: an entry made
+     * under the earlier rule (any connected second counted), or restored from an
+     * older backup, stops counting when the call lasted under [minSeconds]. Entries
+     * whose length is unknown (logged before durations were recorded) and manual
+     * entries are left alone. Returns how many entries changed.
+     */
+    @Query(
+        "UPDATE timeline_entries SET countsAsContact = 0 " +
+            "WHERE source = 'CALL_LOG' AND countsAsContact = 1 " +
+            "AND callDurationSeconds IS NOT NULL AND callDurationSeconds < :minSeconds",
+    )
+    suspend fun stopCountingCallsShorterThan(minSeconds: Long): Int
+
     @Query("SELECT EXISTS(SELECT 1 FROM timeline_entries WHERE callDedupKey = :key)")
     suspend fun existsByCallDedupKey(key: String): Boolean
 }

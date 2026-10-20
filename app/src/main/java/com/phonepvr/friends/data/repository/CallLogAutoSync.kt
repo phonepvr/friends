@@ -1,7 +1,7 @@
 package com.phonepvr.friends.data.repository
 
 import com.phonepvr.friends.data.db.entity.TimelineEntryEntity
-import com.phonepvr.friends.domain.model.CallType
+import com.phonepvr.friends.domain.model.CallContactRule
 import com.phonepvr.friends.domain.model.EntrySource
 import com.phonepvr.friends.domain.model.InteractionType
 import kotlinx.coroutines.flow.first
@@ -32,6 +32,9 @@ class CallLogAutoSync @Inject constructor(
 ) {
     /** Returns the number of timeline rows added across all people. */
     suspend fun syncAllPeople(): Int {
+        // Idempotent and cheap: keeps entries logged under an earlier rule, or
+        // restored from an older backup, consistent with CallContactRule.
+        timelineRepository.reapplyCallContactRule()
         val people = peopleRepository.observeActiveWithDetails().first()
         if (people.isEmpty()) return 0
         var added = 0
@@ -46,10 +49,12 @@ class CallLogAutoSync @Inject constructor(
                         type = InteractionType.CALL,
                         note = null,
                         source = EntrySource.CALL_LOG,
-                        // Same rule the manual scan flow used: only real
-                        // conversations move the cadence clock.
-                        countsAsContact = (call.type == CallType.INCOMING ||
-                            call.type == CallType.OUTGOING) && call.durationSeconds > 0L,
+                        // Only real conversations move the cadence clock: no
+                        // missed calls, nothing under 3 seconds.
+                        countsAsContact = CallContactRule.countsAsContact(
+                            call.type,
+                            call.durationSeconds,
+                        ),
                         callDedupKey = candidate.callDedupKey,
                         callDirection = call.type,
                         callDurationSeconds = call.durationSeconds,

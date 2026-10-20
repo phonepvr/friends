@@ -32,7 +32,10 @@ data class TimelineEntryEntity(
     val type: InteractionType,
     val note: String? = null,
     val source: EntrySource,
-    /** False for logged missed/rejected calls, so cadence math ignores them. */
+    /**
+     * False for logged missed/rejected calls and calls under 3 seconds
+     * (see CallContactRule), so cadence math ignores them.
+     */
     val countsAsContact: Boolean = true,
     /** Set for call-log entries to prevent importing the same call twice. */
     val callDedupKey: String? = null,

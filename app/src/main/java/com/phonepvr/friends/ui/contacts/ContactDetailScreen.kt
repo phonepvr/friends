@@ -87,6 +87,7 @@ import com.phonepvr.friends.data.contacts.ContactDetails
 import com.phonepvr.friends.data.contacts.PhoneType
 import com.phonepvr.friends.data.contacts.VCardBuilder
 import com.phonepvr.friends.data.dialer.CallPlacer
+import com.phonepvr.friends.data.dialer.telUri
 import com.phonepvr.friends.ui.dialer.rememberSimCallLauncher
 import com.phonepvr.friends.ui.permissions.PermissionRationaleSheet
 import kotlinx.coroutines.launch
@@ -171,7 +172,7 @@ fun ContactDetailScreen(
                 showCallPermissionSheet = false
                 pendingNumber?.let { num ->
                     pendingNumber = null
-                    val intent = Intent(Intent.ACTION_DIAL, "tel:$num".toUri())
+                    val intent = Intent(Intent.ACTION_DIAL, telUri(num))
                     context.startActivity(intent)
                 }
             },

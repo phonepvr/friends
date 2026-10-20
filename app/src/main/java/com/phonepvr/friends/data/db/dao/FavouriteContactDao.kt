@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Update
 import com.phonepvr.friends.data.db.entity.FavouriteContactEntity
 import kotlinx.coroutines.flow.Flow
 
@@ -26,6 +27,10 @@ interface FavouriteContactDao {
 
     @Query("SELECT * FROM favourite_contacts")
     suspend fun getAll(): List<FavouriteContactEntity>
+
+    /** Saves several rows in one transaction (used to store a new strip order). */
+    @Update
+    suspend fun updateAll(favourites: List<FavouriteContactEntity>)
 
     /** Points a favourite at its contact's current lookup key (and name). */
     @Query(

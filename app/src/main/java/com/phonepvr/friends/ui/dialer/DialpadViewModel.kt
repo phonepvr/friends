@@ -8,6 +8,7 @@ import com.phonepvr.friends.data.contacts.DeviceContact
 import com.phonepvr.friends.data.contacts.SystemContactsRepository
 import com.phonepvr.friends.data.db.dao.PersonDao
 import com.phonepvr.friends.data.dialer.CallPlacer
+import com.phonepvr.friends.data.dialer.PastedNumber
 import com.phonepvr.friends.data.dialer.T9
 import com.phonepvr.friends.data.settings.SettingsRepository
 import com.phonepvr.friends.ui.navigation.Routes
@@ -126,6 +127,15 @@ class DialpadViewModel @Inject constructor(
 
     fun onClearInput() {
         input.value = ""
+    }
+
+    /**
+     * Appends a number taken from the clipboard (already cleaned up by
+     * PastedNumber), as if it had been typed: like the stock dialer, whose number
+     * field pastes at the cursor, which sits at the end.
+     */
+    fun onPaste(number: String) {
+        input.update { (it + number).take(PastedNumber.MAX_LENGTH) }
     }
 
     /** SIMs that can place calls, for the multi-SIM chooser. */

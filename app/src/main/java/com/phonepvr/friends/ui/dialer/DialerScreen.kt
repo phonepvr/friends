@@ -90,6 +90,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import com.phonepvr.friends.R
 import com.phonepvr.friends.data.db.entity.FavouriteContactEntity
 import com.phonepvr.friends.data.dialer.CallPlacer
+import com.phonepvr.friends.data.reachout.ReachOutLauncher
+import com.phonepvr.friends.data.reachout.ReachOutMethod
 import com.phonepvr.friends.domain.model.CallType
 import com.phonepvr.friends.ui.components.CallTypeBadge
 import com.phonepvr.friends.ui.components.Haptic
@@ -269,8 +271,12 @@ fun DialerScreen(
         // sheet open so we don't re-query on every recomposition. The
         // <queries> block in AndroidManifest declares both packages so
         // these resolve correctly on Android 11+.
-        val hasWhatsApp = remember(context) { isAppInstalled(context, PKG_WHATSAPP) }
-        val hasSignal = remember(context) { isAppInstalled(context, PKG_SIGNAL) }
+        val hasWhatsApp = remember(context) {
+            ReachOutLauncher.isAvailable(context, ReachOutMethod.WHATSAPP)
+        }
+        val hasSignal = remember(context) {
+            ReachOutLauncher.isAvailable(context, ReachOutMethod.SIGNAL)
+        }
         RecentActionsSheet(
             entry = entry,
             blockedStatus = blockedStatus,
@@ -294,11 +300,11 @@ fun DialerScreen(
             },
             onWhatsApp = {
                 sheetEntry = null
-                openWhatsApp(context, entry.number)
+                ReachOutLauncher.launch(context, ReachOutMethod.WHATSAPP, entry.number)
             },
             onSignal = {
                 sheetEntry = null
-                openSignal(context, entry.number)
+                ReachOutLauncher.launch(context, ReachOutMethod.SIGNAL, entry.number)
             },
             onCopy = {
                 sheetEntry = null
@@ -533,33 +539,6 @@ private fun ContactSearchResult.toRecentEntry(): RecentEntry = RecentEntry(
 
 private fun openSms(context: Context, number: String) {
     val intent = Intent(Intent.ACTION_SENDTO, "smsto:$number".toUri())
-    runCatching { context.startActivity(intent) }
-}
-
-private const val PKG_WHATSAPP = "com.whatsapp"
-private const val PKG_SIGNAL = "org.thoughtcrime.securesms"
-
-private fun isAppInstalled(context: Context, pkg: String): Boolean = runCatching {
-    context.packageManager.getPackageInfo(pkg, 0)
-    true
-}.getOrDefault(false)
-
-private fun openWhatsApp(context: Context, number: String) {
-    // wa.me wants digits only with no leading + (per WhatsApp's docs); we
-    // pin setPackage so it goes to WhatsApp directly instead of the chooser.
-    val digits = number.filter(Char::isDigit)
-    val intent = Intent(Intent.ACTION_VIEW, "https://wa.me/$digits".toUri())
-        .setPackage(PKG_WHATSAPP)
-    runCatching { context.startActivity(intent) }
-}
-
-private fun openSignal(context: Context, number: String) {
-    // Signal expects E.164 (leading + and digits). Preserve a leading + if
-    // typed; otherwise prepend it so signal.me routes correctly.
-    val digits = number.filter(Char::isDigit)
-    val e164 = if (digits.isEmpty()) return else "+$digits"
-    val intent = Intent(Intent.ACTION_VIEW, "https://signal.me/#p/$e164".toUri())
-        .setPackage(PKG_SIGNAL)
     runCatching { context.startActivity(intent) }
 }
 

@@ -12,6 +12,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -39,6 +41,7 @@ import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -50,6 +53,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -63,6 +67,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -70,7 +75,10 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.phonepvr.friends.R
 import com.phonepvr.friends.data.dialer.CallPlacer
+import com.phonepvr.friends.data.reachout.ReachOutLauncher
+import com.phonepvr.friends.data.reachout.ReachOutMethod
 import com.phonepvr.friends.ui.components.PersonAvatar
 import com.phonepvr.friends.ui.permissions.PermissionRationaleSheet
 import kotlinx.coroutines.launch
@@ -88,6 +96,8 @@ fun DialpadScreen(
     val snackbarState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val clipboardHasNumber = rememberClipboardHasNumber()
+    val hasWhatsApp = remember(context) { ReachOutLauncher.isAvailable(context, ReachOutMethod.WHATSAPP) }
+    val hasSignal = remember(context) { ReachOutLauncher.isAvailable(context, ReachOutMethod.SIGNAL) }
 
     var hasContacts by remember {
         mutableStateOf(
@@ -281,25 +291,35 @@ fun DialpadScreen(
                         verticalArrangement = Arrangement.Center,
                     ) {
                         Text(
-                            text = "No matching contacts. Hit Call to dial directly.",
+                            text = "Not in your contacts",
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center,
                         )
-                        // Only worth offering "Save as new contact" when the
-                        // typed number is plausibly real (at least 3 digits)
-                        // — same threshold the matcher uses to avoid noise.
+                        // Only worth offering actions when the typed number is
+                        // plausibly real (at least 3 digits), the same threshold
+                        // the matcher uses to avoid noise.
                         if (state.input.count(Char::isDigit) >= 3) {
                             Spacer(Modifier.height(16.dp))
-                            OutlinedButton(
-                                onClick = { onSaveNumber(state.input) },
-                            ) {
+                            UnsavedNumberActions(
+                                hasWhatsApp = hasWhatsApp,
+                                hasSignal = hasSignal,
+                                onCall = { placeCall(state.input) },
+                                onChat = { method ->
+                                    if (!ReachOutLauncher.launch(context, method, state.input)) {
+                                        val app = if (method == ReachOutMethod.WHATSAPP) "WhatsApp" else "Signal"
+                                        scope.launch { snackbarState.showSnackbar("Couldn't open $app") }
+                                    }
+                                },
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            TextButton(onClick = { onSaveNumber(state.input) }) {
                                 Icon(
                                     Icons.Filled.PersonAdd,
                                     contentDescription = null,
                                     modifier = Modifier.size(18.dp),
                                 )
                                 Spacer(Modifier.width(8.dp))
-                                Text("Save '${state.input}' as new contact")
+                                Text("Save as new contact")
                             }
                         }
                     }
@@ -362,6 +382,53 @@ fun DialpadScreen(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Ways to reach a number that isn't in the address book: a normal call, or a chat
+ * in WhatsApp / Signal when installed. Wraps onto two lines on narrow screens.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun UnsavedNumberActions(
+    hasWhatsApp: Boolean,
+    hasSignal: Boolean,
+    onCall: () -> Unit,
+    onChat: (ReachOutMethod) -> Unit,
+) {
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        FilledTonalButton(onClick = onCall) {
+            Icon(Icons.Filled.Call, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("Call")
+        }
+        if (hasWhatsApp) {
+            OutlinedButton(onClick = { onChat(ReachOutMethod.WHATSAPP) }) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_brand_whatsapp),
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text("WhatsApp")
+            }
+        }
+        if (hasSignal) {
+            OutlinedButton(onClick = { onChat(ReachOutMethod.SIGNAL) }) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_brand_signal),
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text("Signal")
             }
         }
     }

@@ -2,6 +2,7 @@ package com.phonepvr.friends.ui.incall
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.phonepvr.friends.BuildConfig
 import com.phonepvr.friends.data.blocking.BlockedNumberManager
 import com.phonepvr.friends.data.db.dao.PersonDao
 import com.phonepvr.friends.data.db.dao.PhoneNumberDao
@@ -12,6 +13,7 @@ import com.phonepvr.friends.data.incall.CallSession
 import com.phonepvr.friends.data.incall.CallSimpleState
 import com.phonepvr.friends.data.incall.CallSnapshot
 import com.phonepvr.friends.data.incall.CallerIdentityResolver
+import com.phonepvr.friends.data.incall.ProximityScreenLock
 import com.phonepvr.friends.data.incall.Ringer
 import com.phonepvr.friends.data.settings.DEFAULT_QUICK_REPLIES
 import com.phonepvr.friends.data.settings.SettingsRepository
@@ -23,6 +25,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -85,7 +88,26 @@ class InCallViewModel @Inject constructor(
     private val blockedNumberManager: BlockedNumberManager,
     private val settingsRepository: SettingsRepository,
     private val ringer: Ringer,
+    proximityScreenLock: ProximityScreenLock,
 ) : ViewModel() {
+
+    /**
+     * Test builds only (null in releases): the line at the top of the call screen
+     * that names the build and says whether the screen goes dark at the ear, and if
+     * not, why. See [proximityTestLine].
+     */
+    val testBuildLine: StateFlow<String?> = if (BuildConfig.DEBUG) {
+        combine(
+            proximityScreenLock.status,
+            callSession.snapshot,
+            callSession.audio,
+            settingsRepository.settings.map { it.proximityScreenOff },
+        ) { status, call, audio, enabled ->
+            proximityTestLine(status, call, audio.route, enabled)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+    } else {
+        MutableStateFlow(null)
+    }
 
     // Default-dialer role + device capability can't change mid-call, so
     // resolve the "can we block at all?" question once instead of on every

@@ -6,6 +6,9 @@ import android.os.PowerManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * Holds the platform's proximity wake lock during a call so the screen turns
@@ -31,6 +34,21 @@ class ProximityScreenLock @Inject constructor(
 
     val isHeld: Boolean get() = wakeLock?.isHeld == true
 
+    /**
+     * What the lock is doing right now. Test builds show it on the call screen, so
+     * a test on a real phone tells for certain whether the sensor was armed.
+     */
+    data class Status(
+        val supported: Boolean,
+        val held: Boolean,
+        val lastAction: ProximityPolicy.Action?,
+        /** Set when the platform refused the last change (e.g. an OEM build throwing). */
+        val error: String? = null,
+    )
+
+    private val _status = MutableStateFlow(Status(supported = isSupported, held = false, lastAction = null))
+    val status: StateFlow<Status> = _status.asStateFlow()
+
     /** Applies a [ProximityPolicy] decision. Idempotent. */
     // No timeout on purpose: a call can last hours (a timed lock would silently stop
     // working mid-call), and the lock is always let go when the call ends or the
@@ -38,13 +56,28 @@ class ProximityScreenLock @Inject constructor(
     @SuppressLint("WakelockTimeout")
     @Synchronized
     fun update(action: ProximityPolicy.Action) {
-        val lock = wakeLock ?: return
-        when (action) {
-            ProximityPolicy.Action.HOLD -> if (!lock.isHeld) lock.acquire()
-            ProximityPolicy.Action.RELEASE_WHEN_CLEAR ->
-                if (lock.isHeld) lock.release(PowerManager.RELEASE_FLAG_WAIT_FOR_NO_PROXIMITY)
-            ProximityPolicy.Action.RELEASE_NOW -> if (lock.isHeld) lock.release()
+        val lock = wakeLock
+        var error: String? = null
+        if (lock != null) {
+            try {
+                when (action) {
+                    ProximityPolicy.Action.HOLD -> if (!lock.isHeld) lock.acquire()
+                    ProximityPolicy.Action.RELEASE_WHEN_CLEAR ->
+                        if (lock.isHeld) lock.release(PowerManager.RELEASE_FLAG_WAIT_FOR_NO_PROXIMITY)
+                    ProximityPolicy.Action.RELEASE_NOW -> if (lock.isHeld) lock.release()
+                }
+            } catch (e: RuntimeException) {
+                // Runs from the in-call service: a failure here must never take the
+                // call screen down with it. Recorded so test builds can show it.
+                error = e.javaClass.simpleName
+            }
         }
+        _status.value = Status(
+            supported = lock != null,
+            held = lock?.isHeld == true,
+            lastAction = action,
+            error = error,
+        )
     }
 
     private companion object {

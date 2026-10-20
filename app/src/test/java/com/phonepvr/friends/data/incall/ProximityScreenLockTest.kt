@@ -69,5 +69,47 @@ class ProximityScreenLockTest {
         lock.update(ProximityPolicy.Action.HOLD)
         assertFalse(lock.isHeld)
         assertNull(ShadowPowerManager.getLatestWakeLock())
+        // Test builds say so on the call screen.
+        assertEquals(
+            ProximityScreenLock.Status(supported = false, held = false, lastAction = ProximityPolicy.Action.HOLD),
+            lock.status.value,
+        )
+    }
+
+    @Test
+    fun status_followsTheLock() {
+        deviceWithProximitySensor(true)
+        val lock = ProximityScreenLock(context)
+        assertEquals(
+            ProximityScreenLock.Status(supported = true, held = false, lastAction = null),
+            lock.status.value,
+        )
+
+        lock.update(ProximityPolicy.Action.HOLD)
+        assertEquals(
+            ProximityScreenLock.Status(supported = true, held = true, lastAction = ProximityPolicy.Action.HOLD),
+            lock.status.value,
+        )
+
+        lock.update(ProximityPolicy.Action.RELEASE_WHEN_CLEAR)
+        assertEquals(
+            ProximityScreenLock.Status(
+                supported = true,
+                held = false,
+                lastAction = ProximityPolicy.Action.RELEASE_WHEN_CLEAR,
+            ),
+            lock.status.value,
+        )
+
+        lock.update(ProximityPolicy.Action.HOLD)
+        lock.update(ProximityPolicy.Action.RELEASE_NOW)
+        assertEquals(
+            ProximityScreenLock.Status(
+                supported = true,
+                held = false,
+                lastAction = ProximityPolicy.Action.RELEASE_NOW,
+            ),
+            lock.status.value,
+        )
     }
 }

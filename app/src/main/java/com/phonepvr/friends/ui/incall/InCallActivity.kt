@@ -78,6 +78,7 @@ class InCallActivity : ComponentActivity() {
             val state by viewModel.state.collectAsStateWithLifecycle()
             val hideFromScreenshots by viewModel.hideFromScreenshots
                 .collectAsStateWithLifecycle()
+            val testBuildLine by viewModel.testBuildLine.collectAsStateWithLifecycle()
 
             // Match MainActivity: toggle FLAG_SECURE in lockstep with the
             // user's setting so the in-call screen (caller name / number /
@@ -122,6 +123,9 @@ class InCallActivity : ComponentActivity() {
                         onSwap = viewModel::swap,
                         onMerge = viewModel::merge,
                         onAddCall = ::openDialpadForAddCall,
+                        // Test builds only: names the build and shows whether the
+                        // proximity sensor is armed, so a test on a phone is conclusive.
+                        testBuildLine = testBuildLine,
                     )
                 }
             }

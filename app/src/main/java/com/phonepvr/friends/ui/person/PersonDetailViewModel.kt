@@ -1,10 +1,12 @@
 package com.phonepvr.friends.ui.person
 
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.phonepvr.friends.data.blocking.BlockAvailability
 import com.phonepvr.friends.data.blocking.BlockedNumberManager
 import com.phonepvr.friends.data.contacts.BondContactReconciler
 import com.phonepvr.friends.data.contacts.ContactDetails
@@ -25,6 +27,7 @@ import com.phonepvr.friends.domain.cadence.CadenceStatus
 import com.phonepvr.friends.domain.model.EntrySource
 import com.phonepvr.friends.domain.model.EventType
 import com.phonepvr.friends.domain.model.InteractionType
+import com.phonepvr.friends.role.DialerRoleManager
 import com.phonepvr.friends.ui.navigation.Routes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -65,6 +68,7 @@ class PersonDetailViewModel @Inject constructor(
     private val contactWriter: ContactWriter,
     private val favouritesRepository: FavouritesRepository,
     private val blockedNumberManager: BlockedNumberManager,
+    private val dialerRoleManager: DialerRoleManager,
     @ApplicationContext private val appContext: Context,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
@@ -183,7 +187,16 @@ class PersonDetailViewModel @Inject constructor(
 
     // --- Block / unblock the primary number ---
 
-    fun canBlock(): Boolean = blockedNumberManager.canBlock()
+    /** Whether Block can work here, or needs Bondwidth to be the phone app first. */
+    fun blockAvailability(): BlockAvailability = blockedNumberManager.availability()
+
+    fun isPhoneApp(): Boolean = dialerRoleManager.isDefaultDialer()
+
+    fun makePhoneAppRoleIntent(): Intent? = dialerRoleManager.makeAcquireRoleIntent()
+
+    fun makeAppInfoIntent(): Intent = dialerRoleManager.makeAppInfoIntent()
+
+    fun makeDefaultAppsSettingsIntent(): Intent = dialerRoleManager.makeDefaultAppsSettingsIntent()
 
     suspend fun isPrimaryBlocked(): Boolean {
         val number = primaryNumber() ?: return false
@@ -195,7 +208,8 @@ class PersonDetailViewModel @Inject constructor(
         return if (blocked) blockedNumberManager.block(number) else blockedNumberManager.unblock(number)
     }
 
-    private fun primaryNumber(): String? =
+    /** The number Block / Unblock acts on: the contact's first, else the bond's. */
+    fun primaryNumber(): String? =
         _contactSnapshot.value?.second?.phoneNumbers?.firstOrNull()
             ?: person.value?.phoneNumbers?.firstOrNull()?.rawNumber
 

@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.HorizontalDivider
 import androidx.core.content.FileProvider
 import androidx.core.net.toUri
+import com.phonepvr.friends.data.blocking.BlockAvailability
 import com.phonepvr.friends.data.contacts.ContactDetails
 import com.phonepvr.friends.data.contacts.VCardBuilder
 import java.io.File
@@ -73,6 +74,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
@@ -98,6 +101,9 @@ import com.phonepvr.friends.ui.common.formatEventDay
 import com.phonepvr.friends.ui.common.formatTimestamp
 import com.phonepvr.friends.ui.common.packDateDigits
 import com.phonepvr.friends.ui.common.parseDateDigits
+import com.phonepvr.friends.ui.permissions.BlockNeedsPhoneAppDialog
+import com.phonepvr.friends.ui.permissions.RestrictedDialerSettingsDialog
+import com.phonepvr.friends.ui.permissions.rememberPhoneAppRoleRequest
 import com.phonepvr.friends.ui.tooltips.CoachMarkBanner
 import com.phonepvr.friends.ui.tooltips.Tooltips
 import com.phonepvr.friends.ui.theme.callColor
@@ -143,22 +149,116 @@ fun PersonDetailScreen(
     val isContactUnlinked by viewModel.isContactUnlinked.collectAsStateWithLifecycle()
     var showDeleteContactDialog by remember { mutableStateOf(false) }
     var showRemoveBondDialog by remember { mutableStateOf(false) }
-    // Block state for the overflow menu's label. Re-queried whenever the
-    // linked contact changes; the menu item flips it optimistically on tap.
-    var isPrimaryBlocked by remember(contactDetails?.lookupKey) { mutableStateOf(false) }
-    LaunchedEffect(contactDetails?.lookupKey) {
-        isPrimaryBlocked = if (contactDetails?.phoneNumbers?.isNotEmpty() == true && viewModel.canBlock()) {
-            viewModel.isPrimaryBlocked()
-        } else {
-            false
-        }
-    }
     val today = remember { LocalDate.now() }
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val isSelectionMode = selectedTimelineIds.isNotEmpty()
     BackHandler(enabled = isSelectionMode) { viewModel.clearTimelineSelection() }
+
+    // Whether Block works here or first needs Bondwidth to be the phone app.
+    // Re-read on resume: the phone app can be changed in system Settings.
+    var blockAvailability by remember { mutableStateOf(viewModel.blockAvailability()) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        blockAvailability = viewModel.blockAvailability()
+    }
+    // Block state for the overflow menu's label. Re-queried whenever the
+    // linked contact changes; the menu item flips it optimistically on tap.
+    var isPrimaryBlocked by remember(contactDetails?.lookupKey) { mutableStateOf(false) }
+    LaunchedEffect(contactDetails?.lookupKey, blockAvailability) {
+        isPrimaryBlocked = if (
+            contactDetails?.phoneNumbers?.isNotEmpty() == true &&
+            blockAvailability == BlockAvailability.AVAILABLE
+        ) {
+            viewModel.isPrimaryBlocked()
+        } else {
+            false
+        }
+    }
+    val setPrimaryBlocked: (Boolean) -> Unit = { next ->
+        isPrimaryBlocked = next
+        scope.launch {
+            val ok = viewModel.setPrimaryBlocked(next)
+            if (!ok) isPrimaryBlocked = !next
+            snackbarHostState.showSnackbar(
+                when {
+                    !ok -> "Couldn't update the block list"
+                    next -> "Number blocked"
+                    else -> "Number unblocked"
+                },
+            )
+        }
+    }
+    var confirmBlock by remember { mutableStateOf(false) }
+    var explainBlock by remember { mutableStateOf(false) }
+    var blockAfterPhoneApp by remember { mutableStateOf(false) }
+    var showRestrictedDialog by remember { mutableStateOf(false) }
+    val requestPhoneApp = rememberPhoneAppRoleRequest(
+        makeRequestIntent = viewModel::makePhoneAppRoleIntent,
+        isPhoneApp = viewModel::isPhoneApp,
+        onRefused = { showRestrictedDialog = true },
+        onResult = { granted ->
+            blockAvailability = viewModel.blockAvailability()
+            val continueBlocking = blockAfterPhoneApp
+            blockAfterPhoneApp = false
+            if (granted && continueBlocking) {
+                scope.launch {
+                    if (viewModel.isPrimaryBlocked()) {
+                        isPrimaryBlocked = true
+                        snackbarHostState.showSnackbar("Number already blocked")
+                    } else {
+                        confirmBlock = true
+                    }
+                }
+            }
+        },
+    )
+
+    if (confirmBlock) {
+        val who = person?.person?.displayName?.takeIf { it.isNotBlank() } ?: "this number"
+        val number = viewModel.primaryNumber()
+        AlertDialog(
+            onDismissRequest = { confirmBlock = false },
+            title = { Text("Block $who?") },
+            text = {
+                Text(
+                    "Calls from ${number ?: "this number"} will be blocked and won't ring. " +
+                        "You can unblock it from this menu.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmBlock = false
+                    setPrimaryBlocked(true)
+                }) { Text("Block") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmBlock = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    if (explainBlock) {
+        BlockNeedsPhoneAppDialog(
+            onDismiss = { explainBlock = false },
+            onMakePhoneApp = {
+                blockAfterPhoneApp = true
+                requestPhoneApp()
+            },
+        )
+    }
+
+    if (showRestrictedDialog) {
+        RestrictedDialerSettingsDialog(
+            onDismiss = { showRestrictedDialog = false },
+            onOpenAppInfo = {
+                runCatching { context.startActivity(viewModel.makeAppInfoIntent()) }
+            },
+            onOpenDefaultApps = {
+                runCatching { context.startActivity(viewModel.makeDefaultAppsSettingsIntent()) }
+            },
+        )
+    }
 
     LaunchedEffect(pendingLogPrompt) {
         val method = pendingLogPrompt ?: return@LaunchedEffect
@@ -267,7 +367,10 @@ fun PersonDetailScreen(
                                         shareBondedContact(context, d)
                                     },
                                 )
-                                if (viewModel.canBlock() && d.phoneNumbers.isNotEmpty()) {
+                                if (
+                                    blockAvailability != BlockAvailability.UNAVAILABLE &&
+                                    d.phoneNumbers.isNotEmpty()
+                                ) {
                                     DropdownMenuItem(
                                         text = {
                                             Text(if (isPrimaryBlocked) "Unblock number" else "Block number")
@@ -277,18 +380,15 @@ fun PersonDetailScreen(
                                         },
                                         onClick = {
                                             menuOpen = false
-                                            val next = !isPrimaryBlocked
-                                            isPrimaryBlocked = next
-                                            scope.launch {
-                                                val ok = viewModel.setPrimaryBlocked(next)
-                                                if (!ok) isPrimaryBlocked = !next
-                                                snackbarHostState.showSnackbar(
-                                                    when {
-                                                        !ok -> "Couldn't update the block list"
-                                                        next -> "Number blocked"
-                                                        else -> "Number unblocked"
-                                                    },
-                                                )
+                                            when {
+                                                // Only the phone app may block: explain
+                                                // and offer to fix that.
+                                                blockAvailability == BlockAvailability.NEEDS_PHONE_APP ->
+                                                    explainBlock = true
+                                                // Unblocking is harmless: straight away.
+                                                isPrimaryBlocked -> setPrimaryBlocked(false)
+                                                // Blocking is confirmed first, as in Recents.
+                                                else -> confirmBlock = true
                                             }
                                         },
                                     )

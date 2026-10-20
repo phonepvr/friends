@@ -1,7 +1,9 @@
 package com.phonepvr.friends.ui.dialer
 
+import android.content.Intent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.phonepvr.friends.data.blocking.BlockAvailability
 import com.phonepvr.friends.data.blocking.BlockedNumberManager
 import com.phonepvr.friends.data.calllog.CallLogWriter
 import com.phonepvr.friends.data.contacts.BondIndex
@@ -14,7 +16,9 @@ import com.phonepvr.friends.data.dialer.CallPlacer
 import com.phonepvr.friends.data.dialer.RecentsRepository
 import com.phonepvr.friends.data.dialer.T9
 import com.phonepvr.friends.data.repository.FavouritesRepository
+import com.phonepvr.friends.data.settings.SettingsRepository
 import com.phonepvr.friends.domain.model.CallType
+import com.phonepvr.friends.role.DialerRoleManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -102,10 +106,41 @@ class DialerViewModel @Inject constructor(
     private val callPlacer: CallPlacer,
     private val blockedNumberManager: BlockedNumberManager,
     private val callLogWriter: CallLogWriter,
+    private val dialerRoleManager: DialerRoleManager,
+    private val settingsRepository: SettingsRepository,
 ) : ViewModel() {
 
-    /** True iff blocking is supported on this device + we're the default dialer. */
-    fun canBlock(): Boolean = blockedNumberManager.canBlock()
+    /** Whether Block can work here, or needs Bondwidth to be the phone app first. */
+    fun blockAvailability(): BlockAvailability = blockedNumberManager.availability()
+
+    // Whether Bondwidth is the phone app. A call started from here shows the phone
+    // app's call screen, and only the phone app may block numbers, so the tab says
+    // so when it isn't. Re-read on every resume: the user may change it in Settings.
+    private val isPhoneApp = MutableStateFlow(dialerRoleManager.isDefaultDialer())
+
+    /** True when Bondwidth isn't the phone app and the user hasn't dismissed the banner. */
+    val showPhoneAppBanner: StateFlow<Boolean> = combine(
+        isPhoneApp,
+        settingsRepository.settings.map { PHONE_APP_BANNER_ID in it.dismissedTooltipIds },
+    ) { phoneApp, dismissed -> !phoneApp && !dismissed }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    /** Re-reads the phone-app role; returns whether Bondwidth holds it now. */
+    fun refreshPhoneAppRole(): Boolean {
+        val phoneApp = dialerRoleManager.isDefaultDialer()
+        isPhoneApp.value = phoneApp
+        return phoneApp
+    }
+
+    fun dismissPhoneAppBanner() {
+        viewModelScope.launch { settingsRepository.dismissTooltip(PHONE_APP_BANNER_ID) }
+    }
+
+    fun makePhoneAppRoleIntent(): Intent? = dialerRoleManager.makeAcquireRoleIntent()
+
+    fun makeAppInfoIntent(): Intent = dialerRoleManager.makeAppInfoIntent()
+
+    fun makeDefaultAppsSettingsIntent(): Intent = dialerRoleManager.makeDefaultAppsSettingsIntent()
 
     suspend fun isBlocked(number: String): Boolean = blockedNumberManager.isBlocked(number)
 
@@ -332,5 +367,8 @@ class DialerViewModel @Inject constructor(
          *  code prefixes still match (e.g. +44 7xxx vs 07xxx in the UK). */
         private const val SUFFIX_DIGITS = 9
         private const val SEARCH_RESULT_LIMIT = 50
+
+        /** Key in SettingsRepository.dismissedTooltipIds once "Not now" is tapped. */
+        const val PHONE_APP_BANNER_ID = "calls_phone_app_banner"
     }
 }

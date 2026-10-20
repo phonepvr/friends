@@ -100,6 +100,7 @@ fun InCallScreen(
     onSwap: () -> Unit,
     onMerge: () -> Unit,
     onAddCall: () -> Unit,
+    testBuildLine: String? = null,
 ) {
     // PiP renders a compact, tap-to-expand card. All controls are gone from
     // the small window — there's no room and Telecom keeps audio routing
@@ -124,6 +125,17 @@ fun InCallScreen(
                 .padding(horizontal = 24.dp, vertical = 48.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            testBuildLine?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.tertiary,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp),
+                )
+            }
             Header(
                 snapshot = snapshot,
                 bondedPerson = state.bondedPerson,

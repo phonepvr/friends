@@ -30,12 +30,20 @@ class BlockedNumberManager @Inject constructor(
      * right now: phones (not tablets / watches) AND we're the default
      * dialer. Surfaces / hide the Block action by this.
      */
-    fun canBlock(): Boolean {
-        if (!dialerRoleManager.isDefaultDialer()) return false
-        return runCatching {
+    fun canBlock(): Boolean = availability() == BlockAvailability.AVAILABLE
+
+    /**
+     * [canBlock], plus why not: when Bondwidth simply isn't the phone app the UI
+     * explains that and offers to fix it, instead of hiding the Block action.
+     * canCurrentUserBlockNumbers needs no permission or role (it only says whether
+     * this user may block numbers at all), so it is safe to ask either way.
+     */
+    fun availability(): BlockAvailability = BlockAvailability.of(
+        isDefaultPhoneApp = dialerRoleManager.isDefaultDialer(),
+        userCanBlockNumbers = runCatching {
             BlockedNumberContract.canCurrentUserBlockNumbers(context)
-        }.getOrDefault(false)
-    }
+        }.getOrDefault(false),
+    )
 
     /**
      * The static [BlockedNumberContract.isBlocked] helper is API 31+ and

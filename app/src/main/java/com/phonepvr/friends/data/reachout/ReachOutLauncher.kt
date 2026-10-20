@@ -4,6 +4,7 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import com.phonepvr.friends.data.dialer.telUri
 import com.phonepvr.friends.domain.model.InteractionType
 
 /** The four reach-out channels surfaced on the Person Detail screen. */
@@ -44,7 +45,7 @@ object ReachOutLauncher {
     fun launch(context: Context, method: ReachOutMethod, rawNumber: String): Boolean {
         val intent = when (method) {
             ReachOutMethod.CALL ->
-                Intent(Intent.ACTION_DIAL, Uri.parse("tel:$rawNumber"))
+                Intent(Intent.ACTION_DIAL, telUri(rawNumber))
             ReachOutMethod.SMS ->
                 Intent(Intent.ACTION_VIEW, Uri.parse("sms:$rawNumber"))
             ReachOutMethod.WHATSAPP ->

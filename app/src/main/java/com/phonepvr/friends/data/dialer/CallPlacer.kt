@@ -8,7 +8,6 @@ import android.os.Bundle
 import android.telecom.PhoneAccountHandle
 import android.telecom.TelecomManager
 import androidx.core.content.ContextCompat
-import androidx.core.net.toUri
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -81,7 +80,7 @@ class CallPlacer @Inject constructor(
         if (trimmed.isBlank()) return PlaceResult.INVALID_NUMBER
         if (!hasCallPhonePermission()) return PlaceResult.NO_PERMISSION
         return try {
-            val uri: Uri = "tel:$trimmed".toUri()
+            val uri: Uri = telUri(trimmed)
             val extras = account?.let {
                 Bundle().apply {
                     putParcelable(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, it)

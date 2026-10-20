@@ -71,6 +71,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.phonepvr.friends.data.calllog.DeviceCall
 import com.phonepvr.friends.data.dialer.CallPlacer
+import com.phonepvr.friends.data.dialer.telUri
 import com.phonepvr.friends.domain.model.CallType
 import com.phonepvr.friends.ui.components.CallTypeBadge
 import com.phonepvr.friends.ui.components.PersonAvatar
@@ -158,7 +159,7 @@ fun CallHistoryScreen(
             },
             onManualFallback = {
                 showCallRationale = false
-                val intent = Intent(Intent.ACTION_DIAL, "tel:${state.number}".toUri())
+                val intent = Intent(Intent.ACTION_DIAL, telUri(state.number))
                 runCatching { context.startActivity(intent) }
             },
             onDismiss = { showCallRationale = false },

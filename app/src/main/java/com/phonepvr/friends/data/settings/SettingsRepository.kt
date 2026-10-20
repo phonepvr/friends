@@ -75,6 +75,13 @@ data class AppSettings(
      */
     val hideFromScreenshots: Boolean = false,
     /**
+     * Turn the screen off when the phone is at the ear during a call (proximity
+     * sensor). On by default, like every phone app; switching it off is an escape
+     * hatch for phones with a faulty or dirty sensor that blanks the screen.
+     * Device-specific, so not part of backups.
+     */
+    val proximityScreenOff: Boolean = true,
+    /**
      * Pre-written replies offered on long-press of Reject on the incoming
      * call screen. Order is preserved (top of the list = first chip). On
      * first launch this is the bundled default; once the user edits it the
@@ -149,6 +156,7 @@ class SettingsRepository @Inject constructor(
                 cadenceBackfilled = prefs[Keys.CADENCE_BACKFILLED] ?: false,
                 dismissedTooltipIds = prefs[Keys.DISMISSED_TOOLTIPS].orEmpty(),
                 hideFromScreenshots = prefs[Keys.HIDE_FROM_SCREENSHOTS] ?: false,
+                proximityScreenOff = prefs[Keys.PROXIMITY_SCREEN_OFF] ?: true,
                 autoBackupEnabled = prefs[Keys.AUTO_BACKUP_ENABLED] ?: false,
                 autoBackupFolderUri = prefs[Keys.AUTO_BACKUP_FOLDER]?.takeIf { it.isNotBlank() },
                 autoBackupFrequency = AutoBackupFrequency.fromName(prefs[Keys.AUTO_BACKUP_FREQUENCY]),
@@ -278,6 +286,10 @@ class SettingsRepository @Inject constructor(
         dataStore.edit { it[Keys.HIDE_FROM_SCREENSHOTS] = enabled }
     }
 
+    suspend fun setProximityScreenOff(enabled: Boolean) {
+        dataStore.edit { it[Keys.PROXIMITY_SCREEN_OFF] = enabled }
+    }
+
     /** Replaces the stored quick-reply messages. Trims and drops blanks. */
     suspend fun setQuickReplyMessages(messages: List<String>) {
         val cleaned = messages.map { it.trim() }.filter { it.isNotEmpty() }
@@ -376,6 +388,7 @@ class SettingsRepository @Inject constructor(
         val CADENCE_BACKFILLED = booleanPreferencesKey("cadence_backfilled")
         val DISMISSED_TOOLTIPS = stringSetPreferencesKey("dismissed_tooltips")
         val HIDE_FROM_SCREENSHOTS = booleanPreferencesKey("hide_from_screenshots")
+        val PROXIMITY_SCREEN_OFF = booleanPreferencesKey("proximity_screen_off")
         val QUICK_REPLIES = stringPreferencesKey("quick_reply_messages")
         val SPEED_DIAL = stringPreferencesKey("speed_dial_map")
         val AUTO_BACKUP_ENABLED = booleanPreferencesKey("auto_backup_enabled")

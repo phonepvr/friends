@@ -12,13 +12,19 @@ import com.phonepvr.friends.data.incall.CallDirection
 import com.phonepvr.friends.data.incall.CallSession
 import com.phonepvr.friends.data.incall.CallSimpleState
 import com.phonepvr.friends.data.incall.CallerIdentityResolver
+import com.phonepvr.friends.data.incall.ProximityPolicy
+import com.phonepvr.friends.data.incall.ProximityScreenLock
 import com.phonepvr.friends.data.incall.Ringer
+import com.phonepvr.friends.data.settings.SettingsRepository
 import com.phonepvr.friends.ui.incall.InCallActivity
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -49,9 +55,29 @@ class BondwidthInCallService : InCallService() {
     @Inject lateinit var missedCallNotifier: MissedCallNotifier
     @Inject lateinit var callerIdentityResolver: CallerIdentityResolver
     @Inject lateinit var ringer: Ringer
+    @Inject lateinit var proximityScreenLock: ProximityScreenLock
+    @Inject lateinit var settingsRepository: SettingsRepository
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var inForeground = false
+
+    override fun onCreate() {
+        super.onCreate()
+        // Screen off while the phone is at the ear (issue #45). Driven from the
+        // service, not the in-call Activity, so it also works when the call UI is
+        // minimised and the phone is raised to the ear from another screen.
+        scope.launch {
+            combine(
+                callSession.snapshot,
+                callSession.audio,
+                settingsRepository.settings.map { it.proximityScreenOff }.distinctUntilChanged(),
+            ) { call, audio, enabled ->
+                ProximityPolicy.decide(call, audio.route, enabled)
+            }
+                .distinctUntilChanged()
+                .collect { proximityScreenLock.update(it) }
+        }
+    }
 
     private val callCallback = object : Call.Callback() {
         override fun onStateChanged(call: Call, state: Int) {
@@ -151,6 +177,7 @@ class BondwidthInCallService : InCallService() {
 
     override fun onDestroy() {
         super.onDestroy()
+        proximityScreenLock.update(ProximityPolicy.Action.RELEASE_WHEN_CLEAR)
         ringer.stop()
         callSession.detachService(this)
         callNotifier.cancel()

@@ -119,6 +119,10 @@ class SettingsViewModel @Inject constructor(
         settingsRepository.setHideFromScreenshots(enabled)
     }
 
+    fun setProximityScreenOff(enabled: Boolean) = runUpdate {
+        settingsRepository.setProximityScreenOff(enabled)
+    }
+
     fun setBackupNudgeIntervalDays(days: Int) = runUpdate {
         settingsRepository.setBackupNudgeIntervalDays(days)
     }

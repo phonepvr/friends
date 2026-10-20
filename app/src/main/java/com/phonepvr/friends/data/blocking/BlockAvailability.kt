@@ -12,14 +12,20 @@ enum class BlockAvailability {
     /** Blocking works on this phone, but only once Bondwidth is the phone app. */
     NEEDS_PHONE_APP,
 
-    /** Not possible here at all (tablet, secondary user, no telephony). */
+    /** Not possible here at all (a secondary user, a tablet that can't make calls). */
     UNAVAILABLE,
     ;
 
     companion object {
-        fun of(isDefaultPhoneApp: Boolean, userCanBlockNumbers: Boolean): BlockAvailability = when {
+        fun of(
+            isDefaultPhoneApp: Boolean,
+            userCanBlockNumbers: Boolean,
+            phoneAppRoleAvailable: Boolean,
+        ): BlockAvailability = when {
             !userCanBlockNumbers -> UNAVAILABLE
             isDefaultPhoneApp -> AVAILABLE
+            // Becoming the phone app is impossible here, so there is nothing to offer.
+            !phoneAppRoleAvailable -> UNAVAILABLE
             else -> NEEDS_PHONE_APP
         }
     }

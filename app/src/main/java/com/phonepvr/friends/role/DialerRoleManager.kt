@@ -6,6 +6,7 @@ import android.content.Intent
 import android.os.Build
 import android.provider.Settings
 import android.telecom.TelecomManager
+import android.telephony.TelephonyManager
 import androidx.core.content.getSystemService
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -27,6 +28,18 @@ class DialerRoleManager @Inject constructor(
     fun isDefaultDialer(): Boolean {
         val telecom = context.getSystemService<TelecomManager>() ?: return false
         return telecom.defaultDialerPackage == context.packageName
+    }
+
+    /**
+     * False where Android has no phone-app role to give, e.g. a tablet that can't
+     * make phone calls. Nothing should suggest making Bondwidth the phone app there.
+     */
+    fun isRoleAvailable(): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val rm = context.getSystemService<RoleManager>() ?: return false
+            return rm.isRoleAvailable(RoleManager.ROLE_DIALER)
+        }
+        return context.getSystemService<TelephonyManager>()?.isVoiceCapable == true
     }
 
     /**

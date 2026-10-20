@@ -118,11 +118,14 @@ class DialerViewModel @Inject constructor(
     // so when it isn't. Re-read on every resume: the user may change it in Settings.
     private val isPhoneApp = MutableStateFlow(dialerRoleManager.isDefaultDialer())
 
+    // No banner where Android has no phone-app role (e.g. a tablet that can't call).
+    private val canBecomePhoneApp = dialerRoleManager.isRoleAvailable()
+
     /** True when Bondwidth isn't the phone app and the user hasn't dismissed the banner. */
     val showPhoneAppBanner: StateFlow<Boolean> = combine(
         isPhoneApp,
         settingsRepository.settings.map { PHONE_APP_BANNER_ID in it.dismissedTooltipIds },
-    ) { phoneApp, dismissed -> !phoneApp && !dismissed }
+    ) { phoneApp, dismissed -> canBecomePhoneApp && !phoneApp && !dismissed }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     /** Re-reads the phone-app role; returns whether Bondwidth holds it now. */

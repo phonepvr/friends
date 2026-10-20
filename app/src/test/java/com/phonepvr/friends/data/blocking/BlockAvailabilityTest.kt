@@ -1,5 +1,6 @@
 package com.phonepvr.friends.data.blocking
 
+import android.app.role.RoleManager
 import android.content.ContentProvider
 import android.content.ContentValues
 import android.content.Context
@@ -70,14 +71,36 @@ class BlockAvailabilityTest {
         )
     }
 
+    /** Robolectric starts with no roles available, like a tablet that can't make calls. */
+    private fun phoneAppRoleExists() {
+        shadowOf(context.getSystemService(RoleManager::class.java)).addAvailableRole(RoleManager.ROLE_DIALER)
+    }
+
     private fun manager() = BlockedNumberManager(context, DialerRoleManager(context))
 
     @Test
     fun of_coversEveryCase() {
-        assertEquals(BlockAvailability.AVAILABLE, BlockAvailability.of(isDefaultPhoneApp = true, userCanBlockNumbers = true))
-        assertEquals(BlockAvailability.NEEDS_PHONE_APP, BlockAvailability.of(isDefaultPhoneApp = false, userCanBlockNumbers = true))
-        assertEquals(BlockAvailability.UNAVAILABLE, BlockAvailability.of(isDefaultPhoneApp = true, userCanBlockNumbers = false))
-        assertEquals(BlockAvailability.UNAVAILABLE, BlockAvailability.of(isDefaultPhoneApp = false, userCanBlockNumbers = false))
+        for (phoneApp in listOf(true, false)) {
+            for (canBlock in listOf(true, false)) {
+                for (roleAvailable in listOf(true, false)) {
+                    val expected = when {
+                        !canBlock -> BlockAvailability.UNAVAILABLE
+                        phoneApp -> BlockAvailability.AVAILABLE
+                        roleAvailable -> BlockAvailability.NEEDS_PHONE_APP
+                        else -> BlockAvailability.UNAVAILABLE
+                    }
+                    assertEquals(
+                        "phoneApp=$phoneApp canBlock=$canBlock roleAvailable=$roleAvailable",
+                        expected,
+                        BlockAvailability.of(
+                            isDefaultPhoneApp = phoneApp,
+                            userCanBlockNumbers = canBlock,
+                            phoneAppRoleAvailable = roleAvailable,
+                        ),
+                    )
+                }
+            }
+        }
     }
 
     @Test
@@ -85,9 +108,20 @@ class BlockAvailabilityTest {
         // What a test build sees next to the regular app: the regular app is still
         // the phone app, so the test build can't write the block list itself.
         blockedNumbersProvider(userCanBlock = true)
+        phoneAppRoleExists()
         phoneApp(isBondwidth = false)
         assertEquals(BlockAvailability.NEEDS_PHONE_APP, manager().availability())
         assertFalse(manager().canBlock())
+    }
+
+    @Test
+    fun deviceWithoutAPhoneAppRole_isNotOfferedBlock() {
+        // E.g. a tablet that can't make calls: Bondwidth can never become the phone
+        // app there, so offering Block (and then a dead end) would be wrong.
+        blockedNumbersProvider(userCanBlock = true)
+        // No phoneAppRoleExists(): the role isn't available on this "device".
+        phoneApp(isBondwidth = false)
+        assertEquals(BlockAvailability.UNAVAILABLE, manager().availability())
     }
 
     @Test

@@ -1,10 +1,6 @@
 package com.phonepvr.friends.ui.dialer
 
 import android.Manifest
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
-import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -36,14 +32,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Message
-import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Dialpad
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Warning
@@ -75,32 +66,23 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.annotation.DrawableRes
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import androidx.core.net.toUri
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.text.style.TextOverflow
-import com.phonepvr.friends.R
-import com.phonepvr.friends.data.blocking.BlockAvailability
 import com.phonepvr.friends.data.db.entity.FavouriteContactEntity
 import com.phonepvr.friends.data.dialer.CallPlacer
-import com.phonepvr.friends.data.reachout.ReachOutLauncher
-import com.phonepvr.friends.data.reachout.ReachOutMethod
 import com.phonepvr.friends.domain.model.CallType
 import com.phonepvr.friends.ui.components.CallTypeBadge
 import com.phonepvr.friends.ui.components.Haptic
 import com.phonepvr.friends.ui.components.PersonAvatar
 import com.phonepvr.friends.ui.components.rememberHaptics
-import com.phonepvr.friends.ui.permissions.BlockNeedsPhoneAppDialog
 import com.phonepvr.friends.ui.permissions.PermissionRationaleSheet
 import com.phonepvr.friends.ui.permissions.RestrictedDialerSettingsDialog
 import com.phonepvr.friends.ui.permissions.rememberPhoneAppRoleRequest
@@ -226,31 +208,14 @@ fun DialerScreen(
     var editingFavourites by remember { mutableStateOf(false) }
     var numberPicker by remember { mutableStateOf<CallTarget.Pick?>(null) }
     var confirmDeleteEntry by remember { mutableStateOf<RecentEntry?>(null) }
-    var confirmBlockEntry by remember { mutableStateOf<RecentEntry?>(null) }
     var deleteAfterPermission by remember { mutableStateOf<Long?>(null) }
 
-    // Block tapped while Bondwidth isn't the phone app: the entry waits here while
-    // that is explained and fixed, then goes on to the usual block confirmation.
-    var explainBlockFor by remember { mutableStateOf<RecentEntry?>(null) }
-    var blockAfterPhoneApp by remember { mutableStateOf<RecentEntry?>(null) }
+    // The banner's "Make it the phone app" (Block runs its own request in NumberActions).
     var showRestrictedDialog by remember { mutableStateOf(false) }
     val requestPhoneApp = rememberPhoneAppRoleRequest(
         makeRequestIntent = viewModel::makePhoneAppRoleIntent,
         isPhoneApp = viewModel::refreshPhoneAppRole,
         onRefused = { showRestrictedDialog = true },
-        onResult = { granted ->
-            val entry = blockAfterPhoneApp
-            blockAfterPhoneApp = null
-            if (granted && entry != null) {
-                scope.launch {
-                    if (viewModel.isBlocked(entry.number)) {
-                        snackbarState.showSnackbar("${entry.number} is already blocked")
-                    } else {
-                        confirmBlockEntry = entry
-                    }
-                }
-            }
-        },
     )
 
     // Deleting a call writes to the log; request WRITE_CALL_LOG, then delete
@@ -271,16 +236,6 @@ fun DialerScreen(
                 placeCall(number)
             },
             onDismiss = { numberPicker = null },
-        )
-    }
-
-    explainBlockFor?.let { entry ->
-        BlockNeedsPhoneAppDialog(
-            onDismiss = { explainBlockFor = null },
-            onMakePhoneApp = {
-                blockAfterPhoneApp = entry
-                requestPhoneApp()
-            },
         )
     }
 
@@ -311,126 +266,17 @@ fun DialerScreen(
         }
     }
 
-    sheetEntry?.let { entry ->
-        val blockAvailability = remember { viewModel.blockAvailability() }
-        val canBlock = blockAvailability == BlockAvailability.AVAILABLE
-        // Loads asynchronously the first time the sheet opens for this
-        // number. Null hides the row; true / false picks Unblock vs Block.
-        var blockedStatus by remember(entry.number) { mutableStateOf<Boolean?>(null) }
-        LaunchedEffect(entry.number) {
-            blockedStatus = if (canBlock && entry.number.isNotBlank()) {
-                viewModel.isBlocked(entry.number)
-            } else {
-                null
-            }
-        }
-        // App-install checks are cheap PackageManager lookups; memoize per
-        // sheet open so we don't re-query on every recomposition. The
-        // <queries> block in AndroidManifest declares both packages so
-        // these resolve correctly on Android 11+.
-        val hasWhatsApp = remember(context) {
-            ReachOutLauncher.isAvailable(context, ReachOutMethod.WHATSAPP)
-        }
-        val hasSignal = remember(context) {
-            ReachOutLauncher.isAvailable(context, ReachOutMethod.SIGNAL)
-        }
-        RecentActionsSheet(
-            entry = entry,
-            blockedStatus = blockedStatus,
-            hasWhatsApp = hasWhatsApp,
-            hasSignal = hasSignal,
-            onDismiss = { sheetEntry = null },
-            // Only a real call-log entry (non-zero id) can be deleted; the
-            // sheet is also reused for search-result entries (id 0).
-            onDelete = if (entry.id != 0L) {
-                { sheetEntry = null; confirmDeleteEntry = entry }
-            } else {
-                null
-            },
-            onCall = {
-                sheetEntry = null
-                placeCall(entry.number)
-            },
-            onMessage = {
-                sheetEntry = null
-                openSms(context, entry.number)
-            },
-            onWhatsApp = {
-                sheetEntry = null
-                ReachOutLauncher.launch(context, ReachOutMethod.WHATSAPP, entry.number)
-            },
-            onSignal = {
-                sheetEntry = null
-                ReachOutLauncher.launch(context, ReachOutMethod.SIGNAL, entry.number)
-            },
-            onCopy = {
-                sheetEntry = null
-                copyToClipboard(context, entry.number)
-                scope.launch { snackbarState.showSnackbar("Number copied") }
-            },
-            onOpenContact = entry.contactId?.let { id ->
-                { sheetEntry = null; onOpenContact(id) }
-            },
-            onAddContact = if (entry.contactId == null) {
-                { sheetEntry = null; onSaveNumber(entry.number) }
-            } else {
-                null
-            },
-            blockNeedsPhoneApp = blockAvailability == BlockAvailability.NEEDS_PHONE_APP,
-            onBlockNeedsPhoneApp = {
-                sheetEntry = null
-                explainBlockFor = entry
-            },
-            onToggleBlock = {
-                val number = entry.number
-                sheetEntry = null
-                if (blockedStatus == true) {
-                    // Unblocking is harmless, so it happens straight away.
-                    scope.launch {
-                        val ok = viewModel.setBlocked(number, false)
-                        snackbarState.showSnackbar(
-                            if (ok) "$number unblocked" else "Couldn't update the block list",
-                        )
-                    }
-                } else {
-                    // Blocking is confirmed first (issue #45): the call you just
-                    // finished sits at the top of this list, so a cheek against a
-                    // still-lit screen could otherwise block someone in two taps.
-                    confirmBlockEntry = entry
-                }
-            },
-        )
-    }
-
-    confirmBlockEntry?.let { entry ->
-        val who = entry.displayName ?: entry.number
-        AlertDialog(
-            onDismissRequest = { confirmBlockEntry = null },
-            title = { Text("Block $who?") },
-            text = {
-                Text(
-                    "Calls from ${entry.number} will be blocked and won't ring. " +
-                        "You can unblock it from this menu.",
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    val number = entry.number
-                    confirmBlockEntry = null
-                    haptics.perform(Haptic.Reject)
-                    scope.launch {
-                        val ok = viewModel.setBlocked(number, true)
-                        snackbarState.showSnackbar(
-                            if (ok) "$number blocked" else "Couldn't update the block list",
-                        )
-                    }
-                }) { Text("Block") }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmBlockEntry = null }) { Text("Cancel") }
-            },
-        )
-    }
+    // Long-press on a call or a search result: the same sheet the dialpad's
+    // contact matches use.
+    NumberActions(
+        entry = sheetEntry,
+        onDismiss = { sheetEntry = null },
+        onCall = placeCall,
+        onOpenContact = onOpenContact,
+        onSaveNumber = onSaveNumber,
+        snackbarState = snackbarState,
+        onDelete = { entry -> confirmDeleteEntry = entry },
+    )
 
     confirmDeleteEntry?.let { entry ->
         AlertDialog(
@@ -604,17 +450,6 @@ private fun ContactSearchResult.toRecentEntry(): RecentEntry = RecentEntry(
     timestampMillis = 0L,
     durationSeconds = 0L,
 )
-
-private fun openSms(context: Context, number: String) {
-    val intent = Intent(Intent.ACTION_SENDTO, "smsto:$number".toUri())
-    runCatching { context.startActivity(intent) }
-}
-
-private fun copyToClipboard(context: Context, number: String) {
-    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-    clipboard?.setPrimaryClip(ClipData.newPlainText("Phone number", number))
-}
-
 
 @Composable
 private fun RecentsContent(
@@ -937,125 +772,6 @@ private fun NumberPickerSheet(
                 }
             }
         }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun RecentActionsSheet(
-    entry: RecentEntry,
-    blockedStatus: Boolean?,
-    hasWhatsApp: Boolean,
-    hasSignal: Boolean,
-    onDismiss: () -> Unit,
-    onCall: () -> Unit,
-    onMessage: () -> Unit,
-    onWhatsApp: () -> Unit,
-    onSignal: () -> Unit,
-    onCopy: () -> Unit,
-    onOpenContact: (() -> Unit)?,
-    onAddContact: (() -> Unit)?,
-    onToggleBlock: () -> Unit,
-    onDelete: (() -> Unit)?,
-    blockNeedsPhoneApp: Boolean = false,
-    onBlockNeedsPhoneApp: () -> Unit = {},
-) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(modifier = Modifier.padding(bottom = 24.dp)) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                PersonAvatar(
-                    photoRelativePath = entry.photoRelativePath,
-                    displayName = entry.displayName ?: entry.number,
-                    photoUri = entry.photoUri,
-                )
-                Spacer(Modifier.width(12.dp))
-                Column {
-                    Text(
-                        text = entry.displayName ?: entry.number,
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    if (entry.displayName != null) {
-                        Text(
-                            text = entry.number,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
-            HorizontalDivider()
-            SheetAction(Icons.Filled.Call, "Call", onCall)
-            SheetAction(Icons.AutoMirrored.Filled.Message, "Message", onMessage)
-            // WhatsApp / Signal only show when the package is actually
-            // installed — tapping otherwise would just snackbar a failure.
-            if (hasWhatsApp) {
-                SheetActionPainter(R.drawable.ic_brand_whatsapp, "WhatsApp", onWhatsApp)
-            }
-            if (hasSignal) {
-                SheetActionPainter(R.drawable.ic_brand_signal, "Signal", onSignal)
-            }
-            SheetAction(Icons.Filled.ContentCopy, "Copy number", onCopy)
-            onOpenContact?.let { SheetAction(Icons.Filled.Person, "View contact", it) }
-            onAddContact?.let { SheetAction(Icons.Filled.PersonAdd, "Add to contacts", it) }
-            // Block / Unblock — hidden when the device can't block (tablet,
-            // not default dialer) or while the current state is still loading.
-            blockedStatus?.let { blocked ->
-                SheetAction(
-                    icon = Icons.Filled.Block,
-                    label = if (blocked) "Unblock this number" else "Block this number",
-                    onClick = onToggleBlock,
-                )
-            } ?: run {
-                // Only the phone app may block numbers: explain and offer to fix
-                // that, rather than leave the option silently missing.
-                if (blockNeedsPhoneApp) {
-                    SheetAction(
-                        icon = Icons.Filled.Block,
-                        label = "Block this number",
-                        onClick = onBlockNeedsPhoneApp,
-                    )
-                }
-            }
-            onDelete?.let {
-                SheetAction(Icons.Filled.Delete, "Delete from call log", it)
-            }
-        }
-    }
-}
-
-@Composable
-private fun SheetAction(icon: ImageVector, label: String, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 24.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(icon, contentDescription = null)
-        Spacer(Modifier.width(20.dp))
-        Text(label, style = MaterialTheme.typography.bodyLarge)
-    }
-}
-
-/** Same as [SheetAction] but for vector drawables (brand icons). */
-@Composable
-private fun SheetActionPainter(@DrawableRes iconRes: Int, label: String, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 24.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(painter = painterResource(iconRes), contentDescription = null)
-        Spacer(Modifier.width(20.dp))
-        Text(label, style = MaterialTheme.typography.bodyLarge)
     }
 }
 

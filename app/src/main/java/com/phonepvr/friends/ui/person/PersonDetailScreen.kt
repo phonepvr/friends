@@ -89,6 +89,7 @@ import com.phonepvr.friends.data.db.entity.TimelineEntryEntity
 import com.phonepvr.friends.data.db.relation.PersonWithDetails
 import com.phonepvr.friends.data.reachout.ReachOutMethod
 import com.phonepvr.friends.ui.components.PersonAvatar
+import com.phonepvr.friends.ui.dialer.SimForNumberButton
 import com.phonepvr.friends.domain.cadence.CadenceState
 import com.phonepvr.friends.domain.cadence.CadenceStatus
 import com.phonepvr.friends.domain.model.AnnualDate
@@ -1389,6 +1390,8 @@ private fun ContactPhoneRow(
                 )
             }
         }
+        // Dual-SIM phones: which SIM calls to this number use.
+        SimForNumberButton(number)
         if (canSetPrimary) {
             IconButton(onClick = onSetPrimary) {
                 Icon(

@@ -88,6 +88,7 @@ import com.phonepvr.friends.data.contacts.PhoneType
 import com.phonepvr.friends.data.contacts.VCardBuilder
 import com.phonepvr.friends.data.dialer.CallPlacer
 import com.phonepvr.friends.data.dialer.telUri
+import com.phonepvr.friends.ui.dialer.SimForNumberButton
 import com.phonepvr.friends.ui.dialer.rememberSimCallLauncher
 import com.phonepvr.friends.ui.permissions.PermissionRationaleSheet
 import kotlinx.coroutines.launch
@@ -719,6 +720,8 @@ private fun PhoneRow(
                 )
             }
         }
+        // Dual-SIM phones: which SIM calls to this number use.
+        SimForNumberButton(number)
         when {
             isPrimary -> Icon(
                 imageVector = Icons.Filled.Star,

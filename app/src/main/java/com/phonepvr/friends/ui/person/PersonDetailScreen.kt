@@ -39,6 +39,7 @@ import androidx.core.content.FileProvider
 import androidx.core.net.toUri
 import com.phonepvr.friends.data.blocking.BlockAvailability
 import com.phonepvr.friends.data.contacts.ContactDetails
+import com.phonepvr.friends.ui.contacts.ShareContactDialog
 import com.phonepvr.friends.data.contacts.VCardBuilder
 import java.io.File
 import androidx.compose.material3.AlertDialog
@@ -150,6 +151,7 @@ fun PersonDetailScreen(
     val isContactUnlinked by viewModel.isContactUnlinked.collectAsStateWithLifecycle()
     var showDeleteContactDialog by remember { mutableStateOf(false) }
     var showRemoveBondDialog by remember { mutableStateOf(false) }
+    var shareDialogFor by remember { mutableStateOf<ContactDetails?>(null) }
     val today = remember { LocalDate.now() }
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
@@ -214,6 +216,10 @@ fun PersonDetailScreen(
             }
         },
     )
+
+    shareDialogFor?.let { details ->
+        ShareContactDialog(details = details, onDismiss = { shareDialogFor = null }, context = context)
+    }
 
     if (confirmBlock) {
         val who = person?.person?.displayName?.takeIf { it.isNotBlank() } ?: "this number"
@@ -365,7 +371,7 @@ fun PersonDetailScreen(
                                     },
                                     onClick = {
                                         menuOpen = false
-                                        shareBondedContact(context, d)
+                                        shareDialogFor = d
                                     },
                                 )
                                 if (
@@ -1507,29 +1513,3 @@ private fun ContactRingtoneRow(
     }
 }
 
-/**
- * Writes a vCard 3.0 file under cacheDir/shared_contacts and hands it to
- * whatever app the user picks via ACTION_SEND. The receiving app does the
- * delivery — Bondwidth never touches the network itself.
- */
-private fun shareBondedContact(context: android.content.Context, details: ContactDetails) {
-    runCatching {
-        val dir = File(context.cacheDir, "shared_contacts").apply { mkdirs() }
-        val file = File(dir, VCardBuilder.fileName(details.displayName))
-        file.writeText(VCardBuilder.build(details))
-        val uri = FileProvider.getUriForFile(
-            context,
-            "${context.packageName}.fileprovider",
-            file,
-        )
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "text/x-vcard"
-            putExtra(Intent.EXTRA_STREAM, uri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        context.startActivity(
-            Intent.createChooser(intent, "Share ${details.displayName}")
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-        )
-    }
-}

@@ -57,6 +57,12 @@ import com.phonepvr.friends.ui.permissions.BlockNeedsPhoneAppDialog
 import com.phonepvr.friends.ui.permissions.RestrictedDialerSettingsDialog
 import com.phonepvr.friends.ui.permissions.rememberPhoneAppRoleRequest
 import dagger.hilt.android.lifecycle.HiltViewModel
+import androidx.compose.material.icons.filled.Share
+import com.phonepvr.friends.data.contacts.ContactDetails
+import com.phonepvr.friends.data.contacts.ContactsReader
+import com.phonepvr.friends.ui.contacts.ShareContactDialog
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -65,7 +71,13 @@ import javax.inject.Inject
 class NumberActionsViewModel @Inject constructor(
     private val blockedNumberManager: BlockedNumberManager,
     private val dialerRoleManager: DialerRoleManager,
+    private val contactsReader: ContactsReader,
 ) : ViewModel() {
+
+    /** The saved contact behind an entry, for "Share contact". */
+    suspend fun contactDetails(contactId: Long): ContactDetails? = withContext(Dispatchers.IO) {
+        runCatching { contactsReader.readDetails(contactId) }.getOrNull()
+    }
 
     /** Whether Block can work here, or needs Bondwidth to be the phone app first. */
     fun blockAvailability(): BlockAvailability = blockedNumberManager.availability()
@@ -120,6 +132,7 @@ internal fun NumberActions(
     var explainBlockFor by remember { mutableStateOf<RecentEntry?>(null) }
     var blockAfterPhoneApp by remember { mutableStateOf<RecentEntry?>(null) }
     var showRestrictedDialog by remember { mutableStateOf(false) }
+    var shareDialogFor by remember { mutableStateOf<ContactDetails?>(null) }
     val requestPhoneApp = rememberPhoneAppRoleRequest(
         makeRequestIntent = viewModel::makePhoneAppRoleIntent,
         isPhoneApp = viewModel::isPhoneApp,
@@ -204,6 +217,19 @@ internal fun NumberActions(
                     onOpenContact(id)
                 }
             },
+            onShare = shown.contactId?.let { id ->
+                {
+                    onDismiss()
+                    scope.launch {
+                        val details = viewModel.contactDetails(id)
+                        if (details != null) {
+                            shareDialogFor = details
+                        } else {
+                            snackbarState.showSnackbar("Couldn't read this contact")
+                        }
+                    }
+                }
+            },
             onAddContact = if (shown.contactId == null) {
                 {
                     onDismiss()
@@ -278,6 +304,10 @@ internal fun NumberActions(
         )
     }
 
+    shareDialogFor?.let { details ->
+        ShareContactDialog(details = details, onDismiss = { shareDialogFor = null }, context = context)
+    }
+
     explainBlockFor?.let { pending ->
         BlockNeedsPhoneAppDialog(
             onDismiss = { explainBlockFor = null },
@@ -315,6 +345,7 @@ private fun NumberActionsSheet(
     onSignal: () -> Unit,
     onCopy: () -> Unit,
     onOpenContact: (() -> Unit)?,
+    onShare: (() -> Unit)?,
     onAddContact: (() -> Unit)?,
     onToggleBlock: () -> Unit,
     blockNeedsPhoneApp: Boolean,
@@ -362,6 +393,7 @@ private fun NumberActionsSheet(
             }
             SheetAction(Icons.Filled.ContentCopy, "Copy number", onCopy)
             onOpenContact?.let { SheetAction(Icons.Filled.Person, "View contact", it) }
+            onShare?.let { SheetAction(Icons.Filled.Share, "Share contact", it) }
             onAddContact?.let { SheetAction(Icons.Filled.PersonAdd, "Add to contacts", it) }
             // Block / Unblock — hidden when the device can't block at all, or
             // while the current state is still loading.

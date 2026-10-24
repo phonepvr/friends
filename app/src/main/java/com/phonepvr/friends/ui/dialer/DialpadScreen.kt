@@ -10,7 +10,6 @@ import android.view.HapticFeedbackConstants
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -79,7 +78,10 @@ import com.phonepvr.friends.R
 import com.phonepvr.friends.data.dialer.CallPlacer
 import com.phonepvr.friends.data.reachout.ReachOutLauncher
 import com.phonepvr.friends.data.reachout.ReachOutMethod
+import com.phonepvr.friends.domain.model.CallType
+import com.phonepvr.friends.ui.components.Haptic
 import com.phonepvr.friends.ui.components.PersonAvatar
+import com.phonepvr.friends.ui.components.rememberHaptics
 import com.phonepvr.friends.ui.permissions.PermissionRationaleSheet
 import kotlinx.coroutines.launch
 
@@ -244,6 +246,19 @@ fun DialpadScreen(
         }
     }
 
+    // Long-press a matching contact: the same actions as long-pressing a call in
+    // Recents (call, message, WhatsApp, Signal, copy, view contact, block).
+    var actionsFor by remember { mutableStateOf<RecentEntry?>(null) }
+    val haptics = rememberHaptics()
+    NumberActions(
+        entry = actionsFor,
+        onDismiss = { actionsFor = null },
+        onCall = placeCall,
+        onOpenContact = onOpenContact,
+        onSaveNumber = onSaveNumber,
+        snackbarState = snackbarState,
+    )
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -279,6 +294,16 @@ fun DialpadScreen(
                                     )
                                 },
                                 onOpen = { onOpenContact(match.contactId) },
+                                // A contact matched by name with no number has nothing
+                                // to call, copy or block: a tap still opens it.
+                                onLongPress = if (match.matchedNumber.isNotBlank()) {
+                                    {
+                                        haptics.perform(Haptic.LongPress)
+                                        actionsFor = match.toRecentEntry()
+                                    }
+                                } else {
+                                    null
+                                },
                             )
                         }
                     }
@@ -516,16 +541,22 @@ private fun BackspaceKey(onBackspace: () -> Unit, onClear: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MatchRow(
     match: DialpadMatch,
     onCall: () -> Unit,
     onOpen: () -> Unit,
+    onLongPress: (() -> Unit)?,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onOpen)
+            .combinedClickable(
+                onClick = onOpen,
+                onLongClickLabel = if (onLongPress != null) "More options" else null,
+                onLongClick = onLongPress,
+            )
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -550,6 +581,19 @@ private fun MatchRow(
         }
     }
 }
+
+/** The actions sheet works on a [RecentEntry]; a dialpad match stands in as one. */
+private fun DialpadMatch.toRecentEntry(): RecentEntry = RecentEntry(
+    number = matchedNumber,
+    displayName = displayName,
+    contactId = contactId,
+    isTracked = isTracked,
+    photoRelativePath = photoRelativePath,
+    photoUri = photoUri,
+    type = CallType.OUTGOING,
+    timestampMillis = 0L,
+    durationSeconds = 0L,
+)
 
 @Composable
 private fun DialpadGrid(

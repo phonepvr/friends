@@ -3,8 +3,6 @@ package com.phonepvr.friends.ui.dialer
 import android.content.Intent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.phonepvr.friends.data.blocking.BlockAvailability
-import com.phonepvr.friends.data.blocking.BlockedNumberManager
 import com.phonepvr.friends.data.calllog.CallLogWriter
 import com.phonepvr.friends.data.contacts.BondIndex
 import com.phonepvr.friends.data.contacts.ContactPhone
@@ -104,14 +102,10 @@ class DialerViewModel @Inject constructor(
     personDao: PersonDao,
     private val favouritesRepository: FavouritesRepository,
     private val callPlacer: CallPlacer,
-    private val blockedNumberManager: BlockedNumberManager,
     private val callLogWriter: CallLogWriter,
     private val dialerRoleManager: DialerRoleManager,
     private val settingsRepository: SettingsRepository,
 ) : ViewModel() {
-
-    /** Whether Block can work here, or needs Bondwidth to be the phone app first. */
-    fun blockAvailability(): BlockAvailability = blockedNumberManager.availability()
 
     // Whether Bondwidth is the phone app. A call started from here shows the phone
     // app's call screen, and only the phone app may block numbers, so the tab says
@@ -144,14 +138,6 @@ class DialerViewModel @Inject constructor(
     fun makeAppInfoIntent(): Intent = dialerRoleManager.makeAppInfoIntent()
 
     fun makeDefaultAppsSettingsIntent(): Intent = dialerRoleManager.makeDefaultAppsSettingsIntent()
-
-    suspend fun isBlocked(number: String): Boolean = blockedNumberManager.isBlocked(number)
-
-    suspend fun setBlocked(number: String, blocked: Boolean): Boolean = if (blocked) {
-        blockedNumberManager.block(number)
-    } else {
-        blockedNumberManager.unblock(number)
-    }
 
     /**
      * Deletes one entry from the system call log by provider id. The recents

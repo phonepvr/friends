@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.CallMade
 import androidx.compose.material.icons.filled.CallMissed
 import androidx.compose.material.icons.filled.CallReceived
@@ -28,6 +29,7 @@ fun CallType.callIcon(): ImageVector = when (this) {
     CallType.INCOMING -> Icons.Filled.CallReceived
     CallType.OUTGOING -> Icons.Filled.CallMade
     CallType.MISSED, CallType.REJECTED -> Icons.Filled.CallMissed
+    CallType.BLOCKED -> Icons.Filled.Block
 }
 
 /** Plain-language direction, used for the badge's screen-reader description. */
@@ -36,6 +38,7 @@ fun CallType.directionLabel(): String = when (this) {
     CallType.OUTGOING -> "Outgoing call"
     CallType.MISSED -> "Missed call"
     CallType.REJECTED -> "Rejected call"
+    CallType.BLOCKED -> "Blocked call"
 }
 
 /**

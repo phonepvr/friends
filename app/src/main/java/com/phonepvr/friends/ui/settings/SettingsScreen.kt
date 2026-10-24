@@ -303,6 +303,25 @@ fun SettingsScreen(
                 modifier = Modifier.clickable { openBlockedNumbers(context) },
             )
             ListItem(
+                headlineContent = { Text("Block hidden numbers") },
+                supportingContent = {
+                    Text(
+                        "Calls from private or unknown numbers are rejected without " +
+                            "ringing and listed in Recents as blocked." +
+                            if (isDefaultDialer) "" else " Works only while Bondwidth is your phone app.",
+                    )
+                },
+                trailingContent = {
+                    Switch(
+                        checked = settings.blockHiddenCallers,
+                        onCheckedChange = viewModel::setBlockHiddenCallers,
+                    )
+                },
+                modifier = Modifier.clickable {
+                    viewModel.setBlockHiddenCallers(!settings.blockHiddenCallers)
+                },
+            )
+            ListItem(
                 headlineContent = { Text("Screen off at your ear") },
                 supportingContent = {
                     Text(

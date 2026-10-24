@@ -82,6 +82,12 @@ data class AppSettings(
      */
     val proximityScreenOff: Boolean = true,
     /**
+     * Reject calls that hide their number (private, unknown, unavailable) without
+     * ringing. Works through Android's call screening, which only the phone app
+     * gets, so it needs Bondwidth to be the phone app. Off by default.
+     */
+    val blockHiddenCallers: Boolean = false,
+    /**
      * Pre-written replies offered on long-press of Reject on the incoming
      * call screen. Order is preserved (top of the list = first chip). On
      * first launch this is the bundled default; once the user edits it the
@@ -157,6 +163,7 @@ class SettingsRepository @Inject constructor(
                 dismissedTooltipIds = prefs[Keys.DISMISSED_TOOLTIPS].orEmpty(),
                 hideFromScreenshots = prefs[Keys.HIDE_FROM_SCREENSHOTS] ?: false,
                 proximityScreenOff = prefs[Keys.PROXIMITY_SCREEN_OFF] ?: true,
+                blockHiddenCallers = prefs[Keys.BLOCK_HIDDEN_CALLERS] ?: false,
                 autoBackupEnabled = prefs[Keys.AUTO_BACKUP_ENABLED] ?: false,
                 autoBackupFolderUri = prefs[Keys.AUTO_BACKUP_FOLDER]?.takeIf { it.isNotBlank() },
                 autoBackupFrequency = AutoBackupFrequency.fromName(prefs[Keys.AUTO_BACKUP_FREQUENCY]),
@@ -290,6 +297,10 @@ class SettingsRepository @Inject constructor(
         dataStore.edit { it[Keys.PROXIMITY_SCREEN_OFF] = enabled }
     }
 
+    suspend fun setBlockHiddenCallers(enabled: Boolean) {
+        dataStore.edit { it[Keys.BLOCK_HIDDEN_CALLERS] = enabled }
+    }
+
     /** Replaces the stored quick-reply messages. Trims and drops blanks. */
     suspend fun setQuickReplyMessages(messages: List<String>) {
         val cleaned = messages.map { it.trim() }.filter { it.isNotEmpty() }
@@ -389,6 +400,7 @@ class SettingsRepository @Inject constructor(
         val DISMISSED_TOOLTIPS = stringSetPreferencesKey("dismissed_tooltips")
         val HIDE_FROM_SCREENSHOTS = booleanPreferencesKey("hide_from_screenshots")
         val PROXIMITY_SCREEN_OFF = booleanPreferencesKey("proximity_screen_off")
+        val BLOCK_HIDDEN_CALLERS = booleanPreferencesKey("block_hidden_callers")
         val QUICK_REPLIES = stringPreferencesKey("quick_reply_messages")
         val SPEED_DIAL = stringPreferencesKey("speed_dial_map")
         val AUTO_BACKUP_ENABLED = booleanPreferencesKey("auto_backup_enabled")

@@ -675,6 +675,7 @@ private fun RecentRow(
     onAddToContacts: () -> Unit,
     onLongPress: () -> Unit,
 ) {
+    val hasNumber = entry.number.isNotBlank()
     // Four touch zones — avatar opens the contact card, the middle column
     // opens the call history (long-press = action sheet), the "+" saves an
     // unknown number, and the call button dials with multi-number picker
@@ -698,14 +699,19 @@ private fun RecentRow(
         Column(
             modifier = Modifier
                 .weight(1f)
-                .combinedClickable(onClick = onOpenHistory, onLongClick = onLongPress)
+                // A hidden caller has no number to look up, call or act on.
+                .combinedClickable(
+                    enabled = hasNumber,
+                    onClick = onOpenHistory,
+                    onLongClick = onLongPress,
+                )
                 .padding(vertical = 4.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 CallTypeBadge(type = entry.type, size = 22.dp)
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    text = entry.displayName ?: entry.number,
+                    text = entry.displayName ?: entry.number.ifBlank { PRIVATE_NUMBER },
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = if (entry.type == CallType.MISSED) FontWeight.SemiBold
                     else FontWeight.Normal,
@@ -728,7 +734,7 @@ private fun RecentRow(
         }
         // Unknown numbers get a quick "+" → system's create-new / save-to-existing
         // chooser; known numbers don't need it.
-        if (entry.contactId == null) {
+        if (entry.contactId == null && hasNumber) {
             IconButton(onClick = onAddToContacts) {
                 Icon(
                     Icons.Filled.PersonAdd,
@@ -736,11 +742,16 @@ private fun RecentRow(
                 )
             }
         }
-        IconButton(onClick = onCall) {
-            Icon(Icons.Filled.Call, contentDescription = "Call back")
+        if (hasNumber) {
+            IconButton(onClick = onCall) {
+                Icon(Icons.Filled.Call, contentDescription = "Call back")
+            }
         }
     }
 }
+
+/** What Recents shows for a caller who hid their number. */
+private const val PRIVATE_NUMBER = "Private number"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -799,7 +810,9 @@ private fun formatTimestamp(millis: Long): String = timestampFormat.format(Date(
  * time for an unknown number that's already shown as the title.
  */
 private fun secondaryLine(entry: RecentEntry): String {
-    val time = formatTimestamp(entry.timestampMillis)
+    val time = formatTimestamp(entry.timestampMillis).let {
+        if (entry.type == CallType.BLOCKED) "Blocked · $it" else it
+    }
     return if (entry.displayName != null && entry.number.isNotBlank()) {
         "${entry.number} · $time"
     } else {

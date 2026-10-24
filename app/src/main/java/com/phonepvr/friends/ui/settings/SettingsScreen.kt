@@ -60,6 +60,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.phonepvr.friends.domain.model.ThemeMode
 import com.phonepvr.friends.ui.lock.isAppLockAvailable
 import com.phonepvr.friends.ui.permissions.RestrictedDialerSettingsDialog
+import com.phonepvr.friends.ui.permissions.rememberPhoneAppRoleRequest
 
 private val LEAD_DAY_OPTIONS = listOf(1, 2, 3, 5, 7, 14, 30)
 private val HOUR_OPTIONS = (0..23).toList()
@@ -164,18 +165,14 @@ fun SettingsScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    val dialerRoleLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult(),
-    ) {
-        val granted = viewModel.refreshDialerRoleState()
-        // On Android 13+, a sideloaded app's role request is silently blocked
-        // by "restricted settings" — it returns without granting and with no
-        // error. Detect the no-op and open the guided fix automatically rather
-        // than relying on the user to find the "Can't set as default?" row.
-        if (!granted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            showRestrictedSettingsDialog = true
-        }
-    }
+    // One step: becoming the phone app also grants calls, call log, contacts and
+    // notifications. If Android silently refuses (Android 13+ restricted settings
+    // for apps installed outside an app store), the guided fix opens.
+    val requestPhoneApp = rememberPhoneAppRoleRequest(
+        makeRequestIntent = viewModel::makeAcquireDialerRoleIntent,
+        isPhoneApp = viewModel::refreshDialerRoleState,
+        onRefused = { showRestrictedSettingsDialog = true },
+    )
 
     Scaffold(
         topBar = {
@@ -268,10 +265,7 @@ fun SettingsScreen(
                         },
                     )
                 },
-                modifier = Modifier.clickable {
-                    val intent = viewModel.makeAcquireDialerRoleIntent() ?: return@clickable
-                    dialerRoleLauncher.launch(intent)
-                },
+                modifier = Modifier.clickable(onClick = requestPhoneApp),
             )
             if (!isDefaultDialer) {
                 ListItem(

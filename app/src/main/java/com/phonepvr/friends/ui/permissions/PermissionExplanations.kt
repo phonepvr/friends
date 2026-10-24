@@ -1,6 +1,9 @@
 package com.phonepvr.friends.ui.permissions
 
 import android.Manifest
+import androidx.core.content.ContextCompat
+import android.content.pm.PackageManager
+import android.content.Context
 import android.os.Build
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -106,11 +109,13 @@ fun PermissionInfoList(modifier: Modifier = Modifier) {
 }
 
 /**
- * The dangerous runtime permissions Friends asks for up front during
- * onboarding. POST_NOTIFICATIONS is only a runtime permission on API 33+, so
- * it's added conditionally. (CALL_PHONE / READ_CALL_LOG etc. are also granted
- * implicitly once Friends is the default phone app — requesting them here is
- * harmless and covers the "not default" case.)
+ * The dangerous runtime permissions Bondwidth needs. POST_NOTIFICATIONS is only
+ * a runtime permission on API 33+, so it's added conditionally.
+ *
+ * Android grants every one of these by itself when Bondwidth becomes the phone
+ * app (the dialer role's phone, contacts and notifications permission sets), so
+ * setup asks for the role first and requests these only when something is still
+ * missing, or when the user chooses not to make Bondwidth the phone app.
  */
 fun onboardingRuntimePermissions(): List<String> = buildList {
     add(Manifest.permission.READ_CONTACTS)
@@ -118,9 +123,14 @@ fun onboardingRuntimePermissions(): List<String> = buildList {
     add(Manifest.permission.READ_CALL_LOG)
     add(Manifest.permission.CALL_PHONE)
     add(Manifest.permission.READ_PHONE_STATE)
-    add(Manifest.permission.READ_PHONE_NUMBERS)
     add(Manifest.permission.ANSWER_PHONE_CALLS)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         add(Manifest.permission.POST_NOTIFICATIONS)
     }
 }
+
+/** The [onboardingRuntimePermissions] not granted yet. */
+fun missingRuntimePermissions(context: Context): List<String> =
+    onboardingRuntimePermissions().filter {
+        ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
+    }

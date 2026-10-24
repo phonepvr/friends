@@ -37,7 +37,6 @@
          through the right SIM, surface call state to the in-call UI,
          and qualify as a default-dialer app. Runtime. -->
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
-    <uses-permission android:name="android.permission.READ_PHONE_NUMBERS" />
 
     <!-- Default-dialer privileged permissions. Auto-granted when
          Bondwidth holds ROLE_DIALER; declared so the compile-time

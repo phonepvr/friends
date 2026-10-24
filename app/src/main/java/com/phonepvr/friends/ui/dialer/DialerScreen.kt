@@ -134,6 +134,15 @@ fun DialerScreen(
             ) == PackageManager.PERMISSION_GRANTED,
         )
     }
+    // Becoming the phone app (banner, Settings) grants these without a prompt we
+    // see, and they can change in system Settings: re-read them on every return.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        fun granted(permission: String) =
+            ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+        hasCallLog = granted(Manifest.permission.READ_CALL_LOG)
+        hasContacts = granted(Manifest.permission.READ_CONTACTS)
+        hasCallPhone = granted(Manifest.permission.CALL_PHONE)
+    }
     var showRationale by remember { mutableStateOf(false) }
     var pendingCallNumber by remember { mutableStateOf<String?>(null) }
 

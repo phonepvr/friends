@@ -129,6 +129,10 @@ fun ContactDetailScreen(
     }
     var showCallPermissionSheet by remember { mutableStateOf(false) }
     var pendingNumber by remember { mutableStateOf<String?>(null) }
+    var shareDialogFor by remember { mutableStateOf<ContactDetails?>(null) }
+    shareDialogFor?.let { details ->
+        ShareContactDialog(details = details, onDismiss = { shareDialogFor = null }, context = context)
+    }
 
     // Shows the SIM chooser first on a multi-SIM device with no default.
     val simLauncher = rememberSimCallLauncher(
@@ -238,7 +242,7 @@ fun ContactDetailScreen(
                 actions = {
                     if (state.details != null && !state.deleting) {
                         val sharable = state.details
-                        IconButton(onClick = { sharable?.let { shareContact(context, it) } }) {
+                        IconButton(onClick = { shareDialogFor = sharable }) {
                             Icon(Icons.Filled.Share, contentDescription = "Share contact")
                         }
                         // Pinning needs a primary number — hide if the
@@ -654,24 +658,6 @@ private fun lastContactedLabel(ms: Long): String {
     }
 }
 
-private fun shareContact(context: Context, details: ContactDetails) {
-    runCatching {
-        val dir = File(context.cacheDir, "shared_contacts").apply { mkdirs() }
-        val file = File(dir, VCardBuilder.fileName(details.displayName))
-        file.writeText(VCardBuilder.build(details))
-        val uri = FileProvider.getUriForFile(
-            context,
-            "${context.packageName}.fileprovider",
-            file,
-        )
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "text/x-vcard"
-            putExtra(Intent.EXTRA_STREAM, uri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        context.startActivity(Intent.createChooser(intent, "Share contact"))
-    }
-}
 
 @Composable
 private fun SectionLabel(text: String) {

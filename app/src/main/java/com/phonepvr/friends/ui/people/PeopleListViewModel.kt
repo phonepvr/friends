@@ -64,7 +64,7 @@ private fun CadenceState.bondsBucket(): Int = when (this) {
 
 @HiltViewModel
 class PeopleListViewModel @Inject constructor(
-    repository: PeopleRepository,
+    private val repository: PeopleRepository,
     timelineRepository: TimelineRepository,
     bondContactReconciler: BondContactReconciler,
     private val settingsRepository: SettingsRepository,
@@ -177,4 +177,40 @@ class PeopleListViewModel @Inject constructor(
             .getPackageInfo(appContext.packageName, 0)
             .firstInstallTime
     }.getOrDefault(System.currentTimeMillis())
+
+    // --- Selection: long-press a bond to select it, tap others to add them ---
+
+    private val _selection = MutableStateFlow(BondSelection())
+
+    /**
+     * Selected bonds, limited to those currently shown so nothing hidden by the
+     * search (or removed elsewhere) can be removed by accident.
+     */
+    val selection: StateFlow<BondSelection> = combine(_selection, people) { sel, shown ->
+        sel.keepOnly(shown.map { it.person.person.id })
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), BondSelection())
+
+    fun toggleSelection(personId: Long) {
+        _selection.value = selection.value.toggle(personId)
+    }
+
+    fun selectAllShown() {
+        _selection.value = selection.value.selectAll(people.value.map { it.person.person.id })
+    }
+
+    fun clearSelection() {
+        _selection.value = BondSelection()
+    }
+
+    /** Removes the selected bonds and their history; reports how many went. */
+    fun removeSelected(onRemoved: (Int) -> Unit) {
+        val ids = selection.value.ids
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            val removed = repository.deletePeople(ids)
+            _selection.value = BondSelection()
+            refreshUpcomingWidgets(appContext)
+            onRemoved(removed)
+        }
+    }
 }

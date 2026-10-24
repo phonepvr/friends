@@ -25,6 +25,14 @@ interface PersonDao {
     @Delete
     suspend fun delete(person: PersonEntity)
 
+    /**
+     * Removes several bonds at once. Their phone numbers, events and timeline go
+     * with them (foreign keys cascade), exactly as when one bond is removed.
+     * Returns how many were removed.
+     */
+    @Query("DELETE FROM people WHERE id IN (:ids)")
+    suspend fun deleteByIds(ids: List<Long>): Int
+
     @Query("SELECT * FROM people WHERE id = :id")
     suspend fun getById(id: Long): PersonEntity?
 

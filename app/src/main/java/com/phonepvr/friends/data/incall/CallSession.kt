@@ -306,9 +306,10 @@ private fun Call.toSnapshot(): CallSnapshot {
     val number = details.handle?.schemeSpecificPart.orEmpty()
     val callerDisplayName = details.callerDisplayName?.takeIf { it.isNotBlank() }
     val connectTime = details.connectTimeMillis.takeIf { it > 0 }
-    val isVideo =
-        details.videoState != android.telecom.VideoProfile.STATE_AUDIO_ONLY &&
-            details.videoState != 0
+    // The stock dialer's test: video is being sent or received. Other bits an OEM
+    // may set don't make a voice call count as video (which would keep the screen
+    // lit at the ear).
+    val isVideo = android.telecom.VideoProfile.isVideo(details.videoState)
     // Held / un-hold uses CAPABILITY_HOLD; CAPABILITY_SUPPORT_HOLD is the
     // "can hold be offered" flag — both wanted before the Hold UI shows.
     val canHold = details.can(Call.Details.CAPABILITY_HOLD) &&

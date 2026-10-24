@@ -85,9 +85,12 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.text.style.TextOverflow
 import com.phonepvr.friends.R
+import com.phonepvr.friends.data.blocking.BlockAvailability
 import com.phonepvr.friends.data.db.entity.FavouriteContactEntity
 import com.phonepvr.friends.data.dialer.CallPlacer
 import com.phonepvr.friends.data.reachout.ReachOutLauncher
@@ -97,7 +100,10 @@ import com.phonepvr.friends.ui.components.CallTypeBadge
 import com.phonepvr.friends.ui.components.Haptic
 import com.phonepvr.friends.ui.components.PersonAvatar
 import com.phonepvr.friends.ui.components.rememberHaptics
+import com.phonepvr.friends.ui.permissions.BlockNeedsPhoneAppDialog
 import com.phonepvr.friends.ui.permissions.PermissionRationaleSheet
+import com.phonepvr.friends.ui.permissions.RestrictedDialerSettingsDialog
+import com.phonepvr.friends.ui.permissions.rememberPhoneAppRoleRequest
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
@@ -117,6 +123,10 @@ fun DialerScreen(
     val snackbarState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val haptics = rememberHaptics()
+    val showPhoneAppBanner by viewModel.showPhoneAppBanner.collectAsStateWithLifecycle()
+
+    // The user may change the phone app in system Settings and come back.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refreshPhoneAppRole() }
 
     var hasCallLog by remember {
         mutableStateOf(
@@ -219,6 +229,30 @@ fun DialerScreen(
     var confirmBlockEntry by remember { mutableStateOf<RecentEntry?>(null) }
     var deleteAfterPermission by remember { mutableStateOf<Long?>(null) }
 
+    // Block tapped while Bondwidth isn't the phone app: the entry waits here while
+    // that is explained and fixed, then goes on to the usual block confirmation.
+    var explainBlockFor by remember { mutableStateOf<RecentEntry?>(null) }
+    var blockAfterPhoneApp by remember { mutableStateOf<RecentEntry?>(null) }
+    var showRestrictedDialog by remember { mutableStateOf(false) }
+    val requestPhoneApp = rememberPhoneAppRoleRequest(
+        makeRequestIntent = viewModel::makePhoneAppRoleIntent,
+        isPhoneApp = viewModel::refreshPhoneAppRole,
+        onRefused = { showRestrictedDialog = true },
+        onResult = { granted ->
+            val entry = blockAfterPhoneApp
+            blockAfterPhoneApp = null
+            if (granted && entry != null) {
+                scope.launch {
+                    if (viewModel.isBlocked(entry.number)) {
+                        snackbarState.showSnackbar("${entry.number} is already blocked")
+                    } else {
+                        confirmBlockEntry = entry
+                    }
+                }
+            }
+        },
+    )
+
     // Deleting a call writes to the log; request WRITE_CALL_LOG, then delete
     // the confirmed call once it's granted.
     val writeCallLogPermissionLauncher = rememberLauncherForActivityResult(
@@ -240,6 +274,28 @@ fun DialerScreen(
         )
     }
 
+    explainBlockFor?.let { entry ->
+        BlockNeedsPhoneAppDialog(
+            onDismiss = { explainBlockFor = null },
+            onMakePhoneApp = {
+                blockAfterPhoneApp = entry
+                requestPhoneApp()
+            },
+        )
+    }
+
+    if (showRestrictedDialog) {
+        RestrictedDialerSettingsDialog(
+            onDismiss = { showRestrictedDialog = false },
+            onOpenAppInfo = {
+                runCatching { context.startActivity(viewModel.makeAppInfoIntent()) }
+            },
+            onOpenDefaultApps = {
+                runCatching { context.startActivity(viewModel.makeDefaultAppsSettingsIntent()) }
+            },
+        )
+    }
+
     if (editingFavourites) {
         if (state.favourites.isEmpty()) {
             // Last favourite removed: nothing left to edit.
@@ -256,7 +312,8 @@ fun DialerScreen(
     }
 
     sheetEntry?.let { entry ->
-        val canBlock = remember { viewModel.canBlock() }
+        val blockAvailability = remember { viewModel.blockAvailability() }
+        val canBlock = blockAvailability == BlockAvailability.AVAILABLE
         // Loads asynchronously the first time the sheet opens for this
         // number. Null hides the row; true / false picks Unblock vs Block.
         var blockedStatus by remember(entry.number) { mutableStateOf<Boolean?>(null) }
@@ -318,6 +375,11 @@ fun DialerScreen(
                 { sheetEntry = null; onSaveNumber(entry.number) }
             } else {
                 null
+            },
+            blockNeedsPhoneApp = blockAvailability == BlockAvailability.NEEDS_PHONE_APP,
+            onBlockNeedsPhoneApp = {
+                sheetEntry = null
+                explainBlockFor = entry
             },
             onToggleBlock = {
                 val number = entry.number
@@ -432,6 +494,12 @@ fun DialerScreen(
                     message = msg,
                     onRetry = lastDialedNumber?.let { number -> { placeCall(number) } },
                     onDismiss = { viewModel.dismissPlaceError() },
+                )
+            }
+            if (showPhoneAppBanner) {
+                PhoneAppBanner(
+                    onMakePhoneApp = requestPhoneApp,
+                    onDismiss = viewModel::dismissPhoneAppBanner,
                 )
             }
             // In-tab contact search: visible whenever contacts are readable,
@@ -889,6 +957,8 @@ private fun RecentActionsSheet(
     onAddContact: (() -> Unit)?,
     onToggleBlock: () -> Unit,
     onDelete: (() -> Unit)?,
+    blockNeedsPhoneApp: Boolean = false,
+    onBlockNeedsPhoneApp: () -> Unit = {},
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(modifier = Modifier.padding(bottom = 24.dp)) {
@@ -940,6 +1010,16 @@ private fun RecentActionsSheet(
                     label = if (blocked) "Unblock this number" else "Block this number",
                     onClick = onToggleBlock,
                 )
+            } ?: run {
+                // Only the phone app may block numbers: explain and offer to fix
+                // that, rather than leave the option silently missing.
+                if (blockNeedsPhoneApp) {
+                    SheetAction(
+                        icon = Icons.Filled.Block,
+                        label = "Block this number",
+                        onClick = onBlockNeedsPhoneApp,
+                    )
+                }
             }
             onDelete?.let {
                 SheetAction(Icons.Filled.Delete, "Delete from call log", it)

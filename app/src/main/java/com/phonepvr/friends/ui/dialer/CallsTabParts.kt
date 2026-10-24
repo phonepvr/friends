@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -25,6 +26,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -238,6 +240,44 @@ internal fun EditFavouritesSheet(
                     .align(Alignment.End)
                     .padding(end = 16.dp, top = 8.dp),
             ) { Text("Done") }
+        }
+    }
+}
+
+/**
+ * Shown on the Calls tab while Bondwidth isn't the phone app. A call started here
+ * then shows the other app's call screen, and only the phone app may block
+ * numbers, so without this both look like Bondwidth features silently not working.
+ */
+@Composable
+internal fun PhoneAppBanner(onMakePhoneApp: () -> Unit, onDismiss: () -> Unit) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        shape = RoundedCornerShape(12.dp),
+    ) {
+        Column(modifier = Modifier.padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 4.dp)) {
+            Text(
+                text = "Bondwidth isn't your phone app",
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = "Calls you start here show your current phone app's call screen, " +
+                    "and blocking numbers needs Bondwidth as the phone app.",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(end = 8.dp),
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                TextButton(onClick = onDismiss) { Text("Not now") }
+                TextButton(onClick = onMakePhoneApp) { Text("Make it the phone app") }
+            }
         }
     }
 }

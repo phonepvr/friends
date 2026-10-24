@@ -47,6 +47,12 @@ data class CallSnapshot(
     val childCount: Int = 0,
     /** True when this call is a leg inside a conference (has a parent). */
     val hasParent: Boolean = false,
+    /**
+     * An outgoing call another app started on a dual-SIM phone set to "ask every
+     * time": Android waits for the phone app to say which SIM to use
+     * (Call.STATE_SELECT_PHONE_ACCOUNT, shown as [CallSimpleState.NEW]).
+     */
+    val needsSimChoice: Boolean = false,
 )
 
 data class AudioSnapshot(
@@ -184,6 +190,14 @@ class CallSession @Inject constructor() {
 
     fun end() {
         primaryCall()?.disconnect()
+    }
+
+    /** Answers Android's "which SIM?" for the call waiting on it ([CallSnapshot.needsSimChoice]). */
+    fun selectSim(account: android.telecom.PhoneAccountHandle) {
+        @Suppress("DEPRECATION")
+        calls.firstOrNull { it.call.state == Call.STATE_SELECT_PHONE_ACCOUNT }
+            ?.call
+            ?.phoneAccountSelected(account, false)
     }
 
     /** Puts the primary call on hold. */
@@ -337,6 +351,7 @@ private fun Call.toSnapshot(): CallSnapshot {
         isConference = isConference,
         childCount = childCount,
         hasParent = hasParent,
+        needsSimChoice = rawState == Call.STATE_SELECT_PHONE_ACCOUNT,
     )
 }
 

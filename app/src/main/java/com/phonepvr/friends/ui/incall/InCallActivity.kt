@@ -19,9 +19,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.phonepvr.friends.MainActivity
+import com.phonepvr.friends.data.dialer.SimMemoryKeys
+import com.phonepvr.friends.ui.dialer.SimChooserSheet
 import com.phonepvr.friends.data.incall.CallSimpleState
 import com.phonepvr.friends.ui.theme.FriendsTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -105,6 +108,17 @@ class InCallActivity : ComponentActivity() {
             }
 
             FriendsTheme {
+                // Another app started this call and Android is waiting for a SIM
+                // (dual-SIM, "ask every time", nothing remembered for the number).
+                if (state.snapshot?.needsSimChoice == true) {
+                    val accounts = remember { viewModel.simAccounts() }
+                    SimChooserSheet(
+                        accounts = accounts,
+                        offerRemember = SimMemoryKeys.numberKey(state.snapshot?.number.orEmpty()) != null,
+                        onPick = viewModel::selectSim,
+                        onDismiss = viewModel::end,
+                    )
+                }
                 Surface {
                     InCallScreen(
                         state = state,

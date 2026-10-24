@@ -1,6 +1,5 @@
 package com.phonepvr.friends.ui.onboarding
 
-import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -21,7 +20,6 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -29,6 +27,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -39,11 +38,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.phonepvr.friends.domain.quotes.Quote
 import com.phonepvr.friends.ui.permissions.PermissionInfoList
 import com.phonepvr.friends.ui.permissions.RestrictedDialerSettingsDialog
-import com.phonepvr.friends.ui.permissions.onboardingRuntimePermissions
+import com.phonepvr.friends.ui.permissions.missingRuntimePermissions
+import com.phonepvr.friends.ui.permissions.rememberPhoneAppRoleRequest
 import kotlinx.coroutines.launch
 
 // Welcome, cadence, events, privacy+permissions intro, then the permissions
@@ -238,28 +240,33 @@ private fun PermissionsSlide(viewModel: OnboardingViewModel) {
     val context = LocalContext.current
     val isDefaultDialer by viewModel.isDefaultDialer.collectAsStateWithLifecycle()
 
-    var requested by rememberSaveable { mutableStateOf(false) }
-    var allGranted by rememberSaveable { mutableStateOf(false) }
+    // What's still not granted; re-read after every request and on resume (the
+    // user may grant things in system Settings and come back).
+    var missing by remember { mutableStateOf(missingRuntimePermissions(context)) }
+    var declined by rememberSaveable { mutableStateOf(false) }
     var showRestrictedDialog by rememberSaveable { mutableStateOf(false) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        viewModel.refreshDefaultDialer()
+        missing = missingRuntimePermissions(context)
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
-    ) { result ->
-        requested = true
-        allGranted = result.values.all { it }
-    }
-    val roleLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult(),
     ) {
-        val granted = viewModel.refreshDefaultDialer()
-        // On Android 13+, a sideloaded app's role request is silently blocked
-        // by "restricted settings": the picker returns without granting and
-        // with no error, so the user is left thinking it worked. Detect that
-        // and take them straight to the guided fix instead of a dead end.
-        if (!granted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            showRestrictedDialog = true
-        }
+        missing = missingRuntimePermissions(context)
+        declined = missing.isNotEmpty()
     }
+    // The one-step path, as in other phone apps: becoming the phone app makes
+    // Android grant calls, call log, contacts and notifications itself.
+    val requestPhoneApp = rememberPhoneAppRoleRequest(
+        makeRequestIntent = viewModel::makeDialerRoleIntent,
+        isPhoneApp = viewModel::refreshDefaultDialer,
+        onRefused = { showRestrictedDialog = true },
+        onResult = {
+            missing = missingRuntimePermissions(context)
+            declined = missing.isNotEmpty()
+        },
+    )
 
     Column(
         modifier = Modifier
@@ -275,10 +282,9 @@ private fun PermissionsSlide(viewModel: OnboardingViewModel) {
         )
         Spacer(Modifier.height(12.dp))
         Text(
-            text = "Bondwidth is your phone and contacts app, so granting these " +
-                "gives you the full, smooth experience — calls, contacts and " +
-                "automatic check-ins all working from the start. Here's what, " +
-                "and why. It all stays on this device.",
+            text = "Make Bondwidth your phone app and Android sets up calls, " +
+                "contacts and notifications in one step — no separate pop-ups. " +
+                "Here's what that covers, and why. It all stays on this device.",
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
@@ -286,32 +292,41 @@ private fun PermissionsSlide(viewModel: OnboardingViewModel) {
         Spacer(Modifier.height(24.dp))
         PermissionInfoList()
         Spacer(Modifier.height(24.dp))
-        Button(
-            onClick = {
-                permissionLauncher.launch(onboardingRuntimePermissions().toTypedArray())
-            },
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(if (allGranted) "Permissions granted" else "Grant permissions")
-        }
-        Spacer(Modifier.height(8.dp))
         if (isDefaultDialer) {
             Text(
-                text = "Bondwidth is your default phone app.",
+                text = if (missing.isEmpty()) {
+                    "Bondwidth is your phone app. You're all set."
+                } else {
+                    "Bondwidth is your phone app."
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.primary,
                 textAlign = TextAlign.Center,
             )
-        } else {
-            OutlinedButton(
-                onClick = { viewModel.makeDialerRoleIntent()?.let(roleLauncher::launch) },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("Set as default phone app")
+            if (missing.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                Button(
+                    onClick = { permissionLauncher.launch(missing.toTypedArray()) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Allow the rest") }
             }
-            // Up-front explainer: the picker above can fail on Android 13+
-            // for sideloaded installs because of "restricted settings". We
-            // surface what's coming so the user isn't stuck on the toast.
+        } else {
+            Button(
+                onClick = requestPhoneApp,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Make Bondwidth your phone app") }
+            Spacer(Modifier.height(4.dp))
+            // Fallback for people who keep another phone app: the same permissions,
+            // asked one by one by Android.
+            if (missing.isNotEmpty()) {
+                TextButton(
+                    onClick = { permissionLauncher.launch(missing.toTypedArray()) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Keep my phone app, just allow permissions") }
+            }
+            // Up-front explainer: the request above can fail on Android 13+ for
+            // apps installed outside an app store because of "restricted
+            // settings". Say what's coming so the user isn't stuck.
             Spacer(Modifier.height(12.dp))
             DefaultDialerHelp(
                 onOpenDefaultApps = {
@@ -322,7 +337,7 @@ private fun PermissionsSlide(viewModel: OnboardingViewModel) {
                 onLearnHow = { showRestrictedDialog = true },
             )
         }
-        if (requested && !allGranted) {
+        if (declined && missing.isNotEmpty()) {
             Spacer(Modifier.height(8.dp))
             Text(
                 text = "Some permissions weren't granted. Bondwidth still works — " +
@@ -331,7 +346,9 @@ private fun PermissionsSlide(viewModel: OnboardingViewModel) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
             )
-            TextButton(onClick = { context.startActivity(viewModel.makeAppInfoIntent()) }) {
+            TextButton(onClick = {
+                runCatching { context.startActivity(viewModel.makeAppInfoIntent()) }
+            }) {
                 Text("Open app settings")
             }
         }

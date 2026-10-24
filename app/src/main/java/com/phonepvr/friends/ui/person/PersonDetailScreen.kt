@@ -1286,6 +1286,7 @@ private fun entryHeadline(entry: TimelineEntryEntity): String {
         CallType.OUTGOING -> "Outgoing call"
         CallType.MISSED -> "Missed call"
         CallType.REJECTED -> "Rejected call"
+        CallType.BLOCKED -> "Blocked call"
         null -> "Call"
     }
     val duration = entry.callDurationSeconds

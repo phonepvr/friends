@@ -150,6 +150,8 @@ object CallAnalytics {
                 CallType.INCOMING -> party.incoming++
                 CallType.OUTGOING -> party.outgoing++
                 CallType.MISSED, CallType.REJECTED -> party.missed++
+                // Never read here (blocked calls stay out of stats); counted as missed if so.
+                CallType.BLOCKED -> party.missed++
             }
             // Track the single most recent call so we can tell whether a missed
             // call was the *last* contact (still owed a call back) or has since

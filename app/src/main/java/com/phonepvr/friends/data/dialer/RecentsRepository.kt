@@ -57,7 +57,7 @@ class RecentsRepository @Inject constructor(
     private fun recentCallsOrEmpty(sinceMillis: Long): List<DeviceCall> {
         if (!hasCallLogPermission()) return emptyList()
         return try {
-            reader.recentCalls(sinceMillis)
+            reader.recentCalls(sinceMillis, includeBlocked = true)
         } catch (e: SecurityException) {
             emptyList()
         }

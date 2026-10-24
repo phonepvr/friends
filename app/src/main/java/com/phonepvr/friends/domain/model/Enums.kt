@@ -23,6 +23,13 @@ enum class CallType {
     OUTGOING,
     MISSED,
     REJECTED,
+
+    /**
+     * Turned away by the block list or call screening without ringing. Only Recents
+     * reads these (CallLogReader.recentCalls(includeBlocked = true)); they never
+     * reach a bond's history, stats or backups.
+     */
+    BLOCKED,
 }
 
 enum class ConfirmationStatus {

@@ -22,7 +22,12 @@ data class DeviceCall(
 class CallLogReader @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
-    fun recentCalls(sinceMillis: Long): List<DeviceCall> {
+    /**
+     * Calls since [sinceMillis], newest first. Blocked calls are left out unless
+     * [includeBlocked]: only Recents shows them; a bond's history, stats, export
+     * and backups never include a call that was turned away.
+     */
+    fun recentCalls(sinceMillis: Long, includeBlocked: Boolean = false): List<DeviceCall> {
         val calls = mutableListOf<DeviceCall>()
         context.contentResolver.query(
             CallLog.Calls.CONTENT_URI,
@@ -44,6 +49,7 @@ class CallLogReader @Inject constructor(
             val durationColumn = cursor.getColumnIndexOrThrow(CallLog.Calls.DURATION)
             while (cursor.moveToNext()) {
                 val type = mapCallType(cursor.getInt(typeColumn)) ?: continue
+                if (type == CallType.BLOCKED && !includeBlocked) continue
                 calls.add(
                     DeviceCall(
                         id = cursor.getLong(idColumn),
@@ -66,6 +72,7 @@ class CallLogReader @Inject constructor(
         CallLog.Calls.OUTGOING_TYPE -> CallType.OUTGOING
         CallLog.Calls.MISSED_TYPE -> CallType.MISSED
         CallLog.Calls.REJECTED_TYPE -> CallType.REJECTED
+        CallLog.Calls.BLOCKED_TYPE -> CallType.BLOCKED
         else -> null
     }
 }

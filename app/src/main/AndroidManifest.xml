@@ -216,6 +216,20 @@
         </service>
 
         <!--
+          Call screening: Android binds the default phone app's screening service
+          for each incoming call before it rings. Used only for "Block hidden
+          numbers" (Settings); it answers "allow" for everything else.
+        -->
+        <service
+            android:name=".service.BondwidthCallScreeningService"
+            android:exported="true"
+            android:permission="android.permission.BIND_SCREENING_SERVICE">
+            <intent-filter>
+                <action android:name="android.telecom.CallScreeningService" />
+            </intent-filter>
+        </service>
+
+        <!--
           InCallActivity — separate from MainActivity so it can be launched
           over the lock screen during an incoming call without colliding
           with the normal app stack. setShowWhenLocked + setTurnScreenOn

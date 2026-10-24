@@ -123,6 +123,10 @@ class SettingsViewModel @Inject constructor(
         settingsRepository.setProximityScreenOff(enabled)
     }
 
+    fun setBlockHiddenCallers(enabled: Boolean) = runUpdate {
+        settingsRepository.setBlockHiddenCallers(enabled)
+    }
+
     fun setBackupNudgeIntervalDays(days: Int) = runUpdate {
         settingsRepository.setBackupNudgeIntervalDays(days)
     }

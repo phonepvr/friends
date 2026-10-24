@@ -60,7 +60,7 @@ fun callColor(type: CallType): Color {
     return when (type) {
         CallType.INCOMING -> colors.incoming
         CallType.OUTGOING -> colors.outgoing
-        CallType.MISSED, CallType.REJECTED -> colors.missed
+        CallType.MISSED, CallType.REJECTED, CallType.BLOCKED -> colors.missed
     }
 }
 

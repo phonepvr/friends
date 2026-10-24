@@ -446,6 +446,7 @@ private fun CallType.label(): String = when (this) {
     CallType.OUTGOING -> "Outgoing"
     CallType.MISSED -> "Missed"
     CallType.REJECTED -> "Rejected"
+    CallType.BLOCKED -> "Blocked"
 }
 
 private fun formatDuration(seconds: Long): String {

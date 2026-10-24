@@ -19,8 +19,11 @@ class RecentsFilterTest {
     }
 
     @Test
-    fun incomingIncludesDeclinedCalls() {
-        assertEquals(setOf(CallType.INCOMING, CallType.REJECTED), shown(RecentsFilter.INCOMING))
+    fun incomingIncludesDeclinedAndBlockedCalls() {
+        assertEquals(
+            setOf(CallType.INCOMING, CallType.REJECTED, CallType.BLOCKED),
+            shown(RecentsFilter.INCOMING),
+        )
     }
 
     @Test

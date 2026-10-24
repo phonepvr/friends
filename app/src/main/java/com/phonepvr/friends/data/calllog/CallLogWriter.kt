@@ -89,5 +89,6 @@ class CallLogWriter @Inject constructor(
         CallType.OUTGOING -> CallLog.Calls.OUTGOING_TYPE
         CallType.MISSED -> CallLog.Calls.MISSED_TYPE
         CallType.REJECTED -> CallLog.Calls.REJECTED_TYPE
+        CallType.BLOCKED -> CallLog.Calls.BLOCKED_TYPE
     }
 }

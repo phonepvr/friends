@@ -8,6 +8,8 @@ import android.telecom.Call
 import android.telecom.CallAudioState
 import android.telecom.DisconnectCause
 import android.telecom.InCallService
+import com.phonepvr.friends.data.dialer.CallPlacer
+import com.phonepvr.friends.data.dialer.SimMemory
 import com.phonepvr.friends.data.incall.CallDirection
 import com.phonepvr.friends.data.incall.CallSession
 import com.phonepvr.friends.data.incall.CallSimpleState
@@ -57,6 +59,8 @@ class BondwidthInCallService : InCallService() {
     @Inject lateinit var ringer: Ringer
     @Inject lateinit var proximityScreenLock: ProximityScreenLock
     @Inject lateinit var settingsRepository: SettingsRepository
+    @Inject lateinit var simMemory: SimMemory
+    @Inject lateinit var callPlacer: CallPlacer
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var inForeground = false
@@ -81,6 +85,7 @@ class BondwidthInCallService : InCallService() {
 
     private val callCallback = object : Call.Callback() {
         override fun onStateChanged(call: Call, state: Int) {
+            useRememberedSim(call)
             callSession.publishSnapshot()
             refreshNotification()
         }
@@ -123,6 +128,7 @@ class BondwidthInCallService : InCallService() {
         callSession.attachService(this)
         callSession.attachCall(call)
         call.registerCallback(callCallback)
+        useRememberedSim(call)
         ensureForeground()
         refreshNotification()
         // FOREGROUND_SERVICE_TYPE_PHONE_CALL exempts us from the Android 14+
@@ -232,6 +238,20 @@ class BondwidthInCallService : InCallService() {
             val notification = callNotifier.build(snapshot, name, callSession.audio.value)
             callNotifier.post(notification)
         }
+    }
+
+    /**
+     * A call another app started on a dual-SIM phone set to "ask every time"
+     * waits for a SIM. If one is remembered for the number, use it; otherwise the
+     * call screen asks (see CallSnapshot.needsSimChoice).
+     */
+    private fun useRememberedSim(call: Call) {
+        @Suppress("DEPRECATION")
+        if (call.state != Call.STATE_SELECT_PHONE_ACCOUNT) return
+        val number = call.details?.handle?.schemeSpecificPart ?: return
+        val available = callPlacer.callCapableAccounts().map { it.handle }
+        val sim = simMemory.simFor(number, available) ?: return
+        runCatching { call.phoneAccountSelected(sim, false) }
     }
 
     private fun launchInCallUi() {

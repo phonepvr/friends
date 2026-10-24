@@ -36,6 +36,12 @@ class ProximityPolicyTest {
     }
 
     @Test
+    fun waitingForTheUserToPickASim_keepsTheScreenUsable() {
+        val waiting = call(CallSimpleState.NEW, CallDirection.OUTGOING).copy(needsSimChoice = true)
+        assertEquals(Action.RELEASE_WHEN_CLEAR, decide(waiting))
+    }
+
+    @Test
     fun outgoingCallBeforeDialling_alreadyHolds() {
         assertEquals(Action.HOLD, decide(call(CallSimpleState.NEW, CallDirection.OUTGOING)))
         assertEquals(

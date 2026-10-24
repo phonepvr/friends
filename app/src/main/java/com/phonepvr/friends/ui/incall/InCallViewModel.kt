@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.phonepvr.friends.BuildConfig
 import com.phonepvr.friends.data.blocking.BlockedNumberManager
 import com.phonepvr.friends.data.db.dao.PersonDao
+import com.phonepvr.friends.data.dialer.CallPlacer
+import com.phonepvr.friends.data.dialer.SimMemory
 import com.phonepvr.friends.data.db.dao.PhoneNumberDao
 import com.phonepvr.friends.data.db.dao.TimelineDao
 import com.phonepvr.friends.data.incall.AudioSnapshot
@@ -89,6 +91,8 @@ class InCallViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val ringer: Ringer,
     proximityScreenLock: ProximityScreenLock,
+    private val callPlacer: CallPlacer,
+    private val simMemory: SimMemory,
 ) : ViewModel() {
 
     /**
@@ -257,6 +261,15 @@ class InCallViewModel @Inject constructor(
     fun reject() = callSession.reject()
     fun rejectWith(message: String) = callSession.rejectWithMessage(message)
     fun end() = callSession.end()
+
+    /** SIMs to offer when a call waits for one (CallSnapshot.needsSimChoice). */
+    fun simAccounts(): List<CallPlacer.SimAccount> = callPlacer.callCapableAccounts()
+
+    fun selectSim(account: android.telecom.PhoneAccountHandle, rememberForNumber: Boolean) {
+        val number = state.value.snapshot?.number.orEmpty()
+        if (rememberForNumber && number.isNotBlank()) simMemory.remember(number, account)
+        callSession.selectSim(account)
+    }
 
     /**
      * Silences the ringtone for the current incoming call, without rejecting

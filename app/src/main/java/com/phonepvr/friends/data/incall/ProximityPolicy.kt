@@ -50,7 +50,8 @@ object ProximityPolicy {
         -> true
         // An outgoing call is briefly NEW before it starts dialling; the phone may
         // already be on its way to the ear.
-        CallSimpleState.NEW -> direction == CallDirection.OUTGOING
+        // Not while it waits for the user to pick a SIM on screen.
+        CallSimpleState.NEW -> direction == CallDirection.OUTGOING && !needsSimChoice
         // Ringing: the user has to see Accept / Reject.
         CallSimpleState.RINGING,
         CallSimpleState.DISCONNECTED,

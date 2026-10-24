@@ -29,8 +29,8 @@ android {
         // test build from before dev builds got their own id (versionCode up to
         // 21801), and Android only installs a higher versionCode over an installed
         // one. See RELEASING.md.
-        versionCode = 30001
-        versionName = "1.1.2"
+        versionCode = 30002
+        versionName = "1.1.3"
 
         // CI experimentation overrides the literals above via env (APP_VERSION_CODE
         // / APP_VERSION_NAME, derived from github.run_number) so every branch build

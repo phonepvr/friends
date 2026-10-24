@@ -1,5 +1,26 @@
 package com.phonepvr.friends.ui.people
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.SelectAll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import com.phonepvr.friends.ui.components.Haptic
+import com.phonepvr.friends.ui.components.rememberHaptics
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -63,25 +84,89 @@ fun PeopleListScreen(
     val showBackupNudge by viewModel.showBackupNudge.collectAsStateWithLifecycle()
     val todayQuote by viewModel.todayQuote.collectAsStateWithLifecycle()
     val dismissedTooltips by viewModel.dismissedTooltips.collectAsStateWithLifecycle()
+    val selection by viewModel.selection.collectAsStateWithLifecycle()
+    var confirmRemove by remember { mutableStateOf(false) }
+    val snackbarState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val haptics = rememberHaptics()
+
+    // Back leaves selection mode before it leaves the tab.
+    BackHandler(enabled = selection.active) { viewModel.clearSelection() }
+
+    if (confirmRemove && selection.active) {
+        val count = selection.count
+        AlertDialog(
+            onDismissRequest = { confirmRemove = false },
+            title = { Text(if (count == 1) "Remove 1 bond?" else "Remove $count bonds?") },
+            text = {
+                Text(
+                    "Their history in Bondwidth (logged calls, notes and check-ins) " +
+                        "is deleted. Your contacts are not changed.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmRemove = false
+                    haptics.perform(Haptic.Reject)
+                    viewModel.removeSelected { removed ->
+                        scope.launch {
+                            snackbarState.showSnackbar(
+                                if (removed == 1) "1 bond removed" else "$removed bonds removed",
+                            )
+                        }
+                    }
+                }) { Text("Remove", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmRemove = false }) { Text("Cancel") }
+            },
+        )
+    }
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Bondwidth") },
-                actions = {
-                    IconButton(onClick = onOpenSettings) {
-                        Icon(Icons.Filled.Settings, contentDescription = "Settings")
-                    }
-                },
-            )
+            if (selection.active) {
+                TopAppBar(
+                    title = { Text("${selection.count} selected") },
+                    navigationIcon = {
+                        IconButton(onClick = viewModel::clearSelection) {
+                            Icon(Icons.Filled.Close, contentDescription = "Cancel selection")
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = viewModel::selectAllShown) {
+                            Icon(Icons.Filled.SelectAll, contentDescription = "Select all")
+                        }
+                        IconButton(onClick = { confirmRemove = true }) {
+                            Icon(
+                                Icons.Filled.Delete,
+                                contentDescription = "Remove selected bonds",
+                                tint = MaterialTheme.colorScheme.error,
+                            )
+                        }
+                    },
+                )
+            } else {
+                TopAppBar(
+                    title = { Text("Bondwidth") },
+                    actions = {
+                        IconButton(onClick = onOpenSettings) {
+                            Icon(Icons.Filled.Settings, contentDescription = "Settings")
+                        }
+                    },
+                )
+            }
         },
         bottomBar = bottomBar,
+        snackbarHost = { SnackbarHost(snackbarState) },
         floatingActionButton = {
             // The single way to add a bond is to pick from your contacts —
             // there's no free-form manual entry, so the bond always maps to a
             // real contact (smoother, and keeps names/photos in sync).
-            FloatingActionButton(onClick = onImportContacts) {
-                Icon(Icons.Filled.Add, contentDescription = "Add a bond from contacts")
+            if (!selection.active) {
+                FloatingActionButton(onClick = onImportContacts) {
+                    Icon(Icons.Filled.Add, contentDescription = "Add a bond from contacts")
+                }
             }
         },
     ) { padding ->
@@ -140,9 +225,18 @@ fun PeopleListScreen(
                     }
                 } else {
                     items(people, key = { it.person.person.id }) { item ->
+                        val id = item.person.person.id
                         PersonCard(
                             item = item,
-                            onClick = { onOpenPerson(item.person.person.id) },
+                            selected = id in selection.ids,
+                            // In selection mode a tap adds or drops the bond.
+                            onClick = {
+                                if (selection.active) viewModel.toggleSelection(id) else onOpenPerson(id)
+                            },
+                            onLongPress = {
+                                haptics.perform(Haptic.LongPress)
+                                viewModel.toggleSelection(id)
+                            },
                         )
                     }
                 }
@@ -180,42 +274,77 @@ private fun QuoteCard(quote: Quote, onShuffle: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun PersonCard(item: PersonListItem, onClick: () -> Unit) {
+private fun PersonCard(
+    item: PersonListItem,
+    selected: Boolean,
+    onClick: () -> Unit,
+    onLongPress: () -> Unit,
+) {
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() },
+            .then(
+                if (selected) {
+                    Modifier.border(2.dp, MaterialTheme.colorScheme.primary, CardDefaults.elevatedShape)
+                } else {
+                    Modifier
+                },
+            )
+            .semantics { this.selected = selected }
+            .combinedClickable(
+                onClick = onClick,
+                onLongClickLabel = "Select",
+                onLongClick = onLongPress,
+            ),
+        colors = if (selected) {
+            CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+        } else {
+            CardDefaults.elevatedCardColors()
+        },
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            PersonAvatar(
-                photoRelativePath = item.person.person.photoRelativePath,
-                displayName = item.person.person.displayName,
-                diameter = 56.dp,
-            )
-            Text(
-                text = item.person.person.displayName,
-                style = MaterialTheme.typography.titleSmall,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.Center,
-            )
-            CadenceSubtitle(item.cadence)
-            if (item.contactUnlinked) {
+        Box(modifier = Modifier.fillMaxWidth()) {
+            if (selected) {
+                Icon(
+                    Icons.Filled.CheckCircle,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp),
+                )
+            }
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                PersonAvatar(
+                    photoRelativePath = item.person.person.photoRelativePath,
+                    displayName = item.person.person.displayName,
+                    diameter = 56.dp,
+                )
                 Text(
-                    text = "Contact unlinked",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.error,
+                    text = item.person.person.displayName,
+                    style = MaterialTheme.typography.titleSmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.Center,
                 )
+                CadenceSubtitle(item.cadence)
+                if (item.contactUnlinked) {
+                    Text(
+                        text = "Contact unlinked",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center,
+                    )
+                }
             }
         }
     }

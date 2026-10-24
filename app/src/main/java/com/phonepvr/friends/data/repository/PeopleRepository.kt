@@ -55,6 +55,13 @@ class PeopleRepository @Inject constructor(
         personDao.delete(person)
     }
 
+    /**
+     * Removes the bonds with these ids, with their history, in one transaction.
+     * Address-book contacts are not touched: a bond only points at one.
+     */
+    suspend fun deletePeople(ids: Collection<Long>): Int =
+        if (ids.isEmpty()) 0 else personDao.deleteByIds(ids.distinct())
+
     /** Inline cadence update used by the Person Detail tap-the-card flow. */
     suspend fun setCadenceTargetDays(personId: Long, days: Int?) {
         personDao.setCadenceTargetDays(personId, days, System.currentTimeMillis())

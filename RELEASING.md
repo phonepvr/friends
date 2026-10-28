@@ -9,7 +9,7 @@ releases reach users.
 | Built by | our GitHub Actions CI (`build.yml`) | `release.yml` on GitHub; F-Droid's build servers reproduce it from source |
 | Application id | `com.phonepvr.friends.dev`, labelled "Bondwidth (dev)" | `com.phonepvr.friends` |
 | Signed with | our release key (see `SIGNING.md`) | the same key (F-Droid ships our signature after verifying its build matches) |
-| Trigger | every push to a `claude/**` or `main` branch | a clean `vX.Y.Z` git tag |
+| Trigger | every push to a branch (incl. `main`) | a clean `vX.Y.Z` git tag |
 | Version | `1.0.<run_number>`, versionCode `run_number * 100 + attempt` | committed `versionCode` / `versionName` |
 | Tag | `v1.0.0-build.<N>.<attempt>` (GitHub pre-release) | `vX.Y.Z` |
 | Audience | us, for on-device testing (sideload) | end users |

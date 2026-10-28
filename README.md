@@ -1,106 +1,124 @@
-# Bondwidth
+<p align="center">
+  <img src="fastlane/metadata/android/en-US/images/icon.png" alt="Bondwidth icon" width="96">
+</p>
 
-**A privacy-first, fully offline phone & contacts app that helps you keep up with the people who matter.**
+<h1 align="center">Bondwidth</h1>
 
-Bondwidth is an all-in-one Android **dialer**, **contacts manager**, and **relationship companion**. It replaces your phone and contacts apps with something that works entirely on your device — no accounts, no servers, no tracking — and quietly helps you stay close to the people you care about.
+<p align="center">
+  <b>Your phone, your contacts, your people — and nothing leaves your phone.</b><br>
+  A free, open-source dialer and contacts app that quietly reminds you who you haven't called in a while.
+</p>
 
-![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)
-![Platform: Android](https://img.shields.io/badge/platform-Android-3DDC84.svg)
-![minSdk 26](https://img.shields.io/badge/minSdk-26%20(Android%208.0)-orange.svg)
-![Network: none](https://img.shields.io/badge/network-none-success.svg)
+<p align="center">
+  <a href="https://f-droid.org/packages/com.phonepvr.friends/">
+    <img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png" alt="Get it on F-Droid" height="80">
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://f-droid.org/packages/com.phonepvr.friends/"><img src="https://img.shields.io/f-droid/v/com.phonepvr.friends?label=F-Droid&logo=fdroid" alt="F-Droid version"></a>
+  <a href="../../releases/latest"><img src="https://img.shields.io/github/v/release/phonepvr/friends?label=GitHub%20release" alt="Latest GitHub release"></a>
+  <img src="https://img.shields.io/badge/internet%20permission-none-success" alt="No internet permission">
+  <img src="https://img.shields.io/badge/License-GPLv3-blue.svg" alt="License: GPL v3">
+  <img src="https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android" alt="Android 8.0+">
+</p>
+
+<p align="center">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1.png" alt="Bonds: who's on track and who's overdue" width="200">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/2.png" alt="Width: connection health at a glance" width="200">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/5.png" alt="Calls: recents with search" width="200">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/8.png" alt="Home-screen widget with upcoming birthdays" width="200">
+</p>
 
 ---
 
-## The idea
+## Why Bondwidth?
 
-Friendship is small attentions, often. It's easy to let weeks slide by without realising you haven't spoken to someone who matters. Bondwidth is a tiny ledger of the people you care about: set a check-in **cadence** for each person, and the app gently flags who's getting too quiet — so you can reach out before silence becomes a habit. Birthdays and anniversaries are remembered for you, and the calls you make are counted automatically.
+Weeks slip by. You mean to call your grandmother, your old roommate, your best friend — and then you don't. **Bondwidth fixes that, without becoming another app that watches you.**
 
-It's also a genuinely capable phone and contacts app, so the "did I call them recently?" question answers itself.
+- 📞 **It's your phone app.** Calls, contacts, recents, blocking, dual-SIM — everything you'd expect, in one clean Material You app.
+- 🤝 **It remembers your people.** Pick who matters, choose how often you want to talk ("every 2 weeks"), and Bondwidth gently shows who's getting quiet. Calls count automatically.
+- 🎂 **It never forgets a birthday.** Reminders a few days ahead, with a "mark as wished" button right on the notification.
+- 🔒 **It can't spy on you — literally.** Bondwidth has **no internet permission at all**. No accounts, no cloud, no ads, no analytics. Your data cannot leave your phone unless you export it.
+
+## Features
+
+### 📞 A complete phone app
+- Set up in **one tap**: make Bondwidth your phone app and Android grants everything it needs in a single step.
+- Fast **T9 smart dial**, **speed dial** on keys 1–9, and **paste** a copied number straight into the dialpad.
+- **Recents with filters** — All · Missed · Incoming · Outgoing — and contact search right in the Calls tab.
+- Long-press any number for **call, message, WhatsApp, Signal, copy, share or block**.
+- **Block numbers** (with a confirmation, so no accidental blocks) and, optionally, **block all private/hidden callers**.
+- **Dual-SIM done right**: choose a SIM per call, or let Bondwidth **remember the SIM for each number**.
+- Its own **in-call screen** that turns off at your ear, works over the lock screen, and supports picture-in-picture.
+- **USSD codes** like `*123#` work as they should.
+
+### 👥 Contacts that just work
+- Browse, search and filter your address book by group — search also matches company, nickname, notes and email.
+- Create and edit contacts with numbers, emails, address, website, notes, birthday, anniversary and photo.
+- **Find and merge duplicates.**
+- **Share a contact** as a card the other person saves in one tap (WhatsApp, Telegram, email) or as plain text for SMS.
+- Import and export **vCards**.
+
+### 🤝 Bonds — the part other dialers don't have
+- A **check-in cadence** per person; overdue people float to the top, colour-coded.
+- An automatic **timeline** of calls (calls under 3 seconds don't count), plus meet-ups, messages and notes you add.
+- **Width**, your relationship dashboard: connection health, talk time, and a year in review.
+- A **home-screen widget** for upcoming birthdays and who you haven't spoken to lately.
+- Long-press to select and **remove several bonds at once**.
 
 ## Private by design
 
 Privacy isn't a setting in Bondwidth — it's the architecture.
 
-- **No internet permission. At all.** The app does not request `INTERNET` or `ACCESS_NETWORK_STATE`. They're explicitly *removed* from the merged manifest, and **the CI build fails if the final APK declares either one**, so a stray dependency can never quietly add networking.
-- **No accounts, no servers, no cloud.** Everything lives in your device's app sandbox. There is nothing to sign into and nowhere for your data to go.
-- **No analytics, no ads, no trackers.** No third-party SDKs phoning home.
-- **Backups stay yours.** Export is a single local file you place wherever you choose, and it can be sealed with a passphrase using **AES-256-GCM** (key stretched with PBKDF2-HMAC-SHA256). Auto Backup and device-transfer extraction are disabled, so the OS won't copy your data off-device either.
-- **Lockable & shoulder-surf resistant.** Optional biometric / device-credential **app lock**, plus a "hide from screenshots" mode that blocks screenshots, screen recording, the recents thumbnail, and casting — including the in-call screen.
-
-Because there's no network code, the only way data leaves the device is a file *you* deliberately export or a contact *you* deliberately share.
-
-## Features
-
-### 📞 Phone
-- **Default dialer** with its own in-call UI — incoming-call screen over the lock screen, Picture-in-Picture, per-contact ringtones, and proper ringer-silence handling.
-- **T9 smart dial** with ranked results, and **speed dial** on dialpad keys 1–9.
-- **Dual-SIM aware** — a "Call with" picker when you have two call-capable SIMs and no default set.
-- **Block & reject** numbers (system blocked-numbers list), with **missed-call notifications** offering one-tap *Call back* / *Message*.
-- **Call history** per number and a recents list with **in-tab contact search**.
-- **Colour-coded call directions** — blue outgoing, green incoming, red missed — consistent across recents, history, and each person's timeline.
-- **WhatsApp / Signal** quick actions on a number (shown only when the app is installed).
-
-### 👥 Contacts
-- All-in-one **contacts browser** with **group filtering**, reading and writing the system Contacts provider.
-- **Create / edit / delete** contacts with typed **phone numbers, emails, postal address, website, organisation, notes**, and **birthday / anniversary**, plus contact **photos**.
-- **Find & merge duplicates** (shows each candidate's numbers before you confirm).
-- **vCard import** (open a `.vcf` from anywhere) and **export / share** a contact as a `.vcf`.
-
-### 🤝 Bonds
-- Per-person **check-in cadence** (every 7 / 14 / 30 days, or whatever fits); overdue people are surfaced and colour-coded.
-- **Birthday & anniversary reminders** a few days ahead, with a *Mark as wished* button right on the notification.
-- An **interaction timeline** — calls are logged automatically from your call log; meets, messages, and notes you can add by hand.
-- A **Width dashboard** with at-a-glance health: cadence breakdown, talk-time, connection health, and a year-in-review.
-- A scrollable **home-screen widget** for upcoming occasions and who you haven't spoken to in a while.
-
-### ✨ Polish
-- Material 3 with optional dynamic colour, light/dark themes, a curated warm palette, and tasteful haptics.
-- A daily quote you can add your own lines to.
-
-## Permissions, and why
-
-Bondwidth asks only for what a phone-and-contacts app genuinely needs, and explains each at first use:
-
-| Permission | Why |
-| --- | --- |
-| `READ_CONTACTS` / `WRITE_CONTACTS` | Browse, add to, and edit your address book |
-| `READ_CALL_LOG` | Detect recent calls so check-ins count automatically |
-| `WRITE_CALL_LOG` | Manage the call log as the default dialer — delete a call, clear or re-import history |
-| `CALL_PHONE` | Place calls from the in-app dialer |
-| `READ_PHONE_STATE` / `READ_PHONE_NUMBERS` | Route calls through the right SIM and surface call state |
-| `MANAGE_OWN_CALLS` / `ANSWER_PHONE_CALLS` | Act as the default phone app |
-| `FOREGROUND_SERVICE` (+ `_PHONE_CALL`) | Keep the in-call service alive during a call |
-| `WAKE_LOCK`, `MODIFY_AUDIO_SETTINGS` | Stay awake during a call and route its audio |
-| `USE_FULL_SCREEN_INTENT` | Show the incoming-call screen |
-| `POST_NOTIFICATIONS` | Reminders and call notifications |
-
-**Deliberately absent:** `INTERNET`, `ACCESS_NETWORK_STATE`. (The manifest also declares narrow `<queries>` for `tel:` / `sms:` and the WhatsApp/Signal packages — no broad package visibility.)
-
-## Tech
-
-Kotlin · Jetpack Compose (Material 3) · Hilt · Room · Preferences DataStore · WorkManager · Glance (widget) · Coil · AndroidX Biometric. **minSdk 26 (Android 8.0), targetSdk 35.**
+- **No `INTERNET` permission.** Not hidden, not optional: it isn't there, and the build fails if anything ever tries to add it.
+- **No accounts, servers or trackers.** Nothing to sign into, nowhere for your data to go.
+- **Backups stay yours** — one local file, optionally encrypted with AES-256-GCM, or scheduled automatic backups to a folder you choose.
+- **App lock** with fingerprint or screen lock, and a mode that hides the app from screenshots, recordings and the recents screen.
 
 ## Install
 
-Each successful CI build publishes a signed APK to [**Releases**](../../releases) named `Bondwidth-v1.0.<build>.apk`. Download it and sideload (you'll be prompted to allow installs from your browser/file manager the first time).
+| | |
+| --- | --- |
+| **F-Droid** (recommended) | [f-droid.org/packages/com.phonepvr.friends](https://f-droid.org/packages/com.phonepvr.friends/) — automatic updates, built from source |
+| **GitHub** | Download `Bondwidth-x.y.z.apk` from the [latest release](../../releases/latest) |
 
-> On Android 13+, making a sideloaded app your default phone app requires a one-time **Settings → App info → ⋮ → Allow restricted settings** step; Bondwidth detects when this blocks the request and walks you through it.
+Both are signed with the same key, so you can switch between them without losing data. F-Droid verifies that its own build of the source is byte-for-byte identical to the APK published here.
 
-## Build
+> Installing the APK straight from GitHub on Android 13+? Android asks you to allow "restricted settings" once before an app from outside an app store can become your phone app. Bondwidth walks you through it.
+
+## Permissions, and why
+
+| Permission | Why |
+| --- | --- |
+| `READ_CONTACTS` / `WRITE_CONTACTS` | Browse, add to and edit your address book |
+| `READ_CALL_LOG` / `WRITE_CALL_LOG` | Show recents, count calls toward your bonds, delete or re-import history |
+| `CALL_PHONE` / `ANSWER_PHONE_CALLS` / `MANAGE_OWN_CALLS` | Work as your phone app |
+| `READ_PHONE_STATE` | Pick the right SIM and follow call state |
+| `FOREGROUND_SERVICE` (+ `_PHONE_CALL`), `WAKE_LOCK`, `MODIFY_AUDIO_SETTINGS` | Keep a call running, turn the screen off at your ear, route audio |
+| `USE_FULL_SCREEN_INTENT`, `POST_NOTIFICATIONS` | Incoming-call screen, reminders and missed calls |
+
+**Deliberately absent:** `INTERNET`, `ACCESS_NETWORK_STATE`.
+
+## Build it yourself
 
 ```sh
-./gradlew assembleDebug      # build the APK
-./gradlew testDebugUnitTest  # run unit tests
+./gradlew assembleDebug      # build the app
+./gradlew testDebugUnitTest  # run the tests
 ```
 
-No SDKs or keys are required for a local debug build. Stable release signing (so each build installs as an update of the last) is documented in [`SIGNING.md`](SIGNING.md).
+No keys or accounts needed. Kotlin · Jetpack Compose (Material 3) · Hilt · Room · DataStore · WorkManager · Glance · minSdk 26, targetSdk 35. Release signing is described in [`SIGNING.md`](SIGNING.md) and the release process in [`RELEASING.md`](RELEASING.md).
 
-## A note on the name
+<details>
+<summary>A note on the package name</summary>
 
-The app is **Bondwidth** everywhere you see it. Some internal identifiers still use the project's original name — the package is `com.phonepvr.friends`, the database is `friends.db` (`FriendsDatabase`), and the theme is `Theme.Friends`. These are kept deliberately: renaming them would orphan existing installs' data. It's the same app.
+The app is **Bondwidth** everywhere you see it, but some internal identifiers keep the project's original name — the package `com.phonepvr.friends`, the database `friends.db`, the theme `Theme.Friends`. Renaming them would orphan existing installs' data, so they stay.
+</details>
 
-## License & attribution
+## License & credits
 
-Bondwidth is licensed under the **GNU General Public License v3.0 only** (`GPL-3.0-only`) — see [`LICENSE`](LICENSE).
+Bondwidth is free software under the **GNU General Public License v3.0 only** — see [`LICENSE`](LICENSE).
 
-Its phone and contacts surfaces are derived from the excellent GPL-3.0 **[Fossify Phone](https://github.com/FossifyOrg/Phone)** and **[Fossify Contacts](https://github.com/FossifyOrg/Contacts)** projects; full attribution is in [`NOTICE.md`](NOTICE.md).
+Its phone and contacts screens build on the excellent **[Fossify Phone](https://github.com/FossifyOrg/Phone)** and **[Fossify Contacts](https://github.com/FossifyOrg/Contacts)** (GPL-3.0); full attribution is in [`NOTICE.md`](NOTICE.md).
+
+**Like Bondwidth?** ⭐ Star the repo and tell a friend you haven't called in a while.

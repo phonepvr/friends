@@ -1,10 +1,10 @@
 name: Build & Release APK
 
 on:
+  # Every branch push gets a test build (Dependabot's update branches excluded).
   push:
-    branches:
-      - "claude/**"
-      - "main"
+    branches-ignore:
+      - "dependabot/**"
   workflow_dispatch:
 
 # Least privilege: building and testing only needs to read the repo. Only the

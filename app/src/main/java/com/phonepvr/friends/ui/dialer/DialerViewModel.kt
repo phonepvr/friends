@@ -191,7 +191,7 @@ class DialerViewModel @Inject constructor(
         favouritesRepository.observeAll(),
         placeError,
     ) { calls, index, bondIndex, favourites, err ->
-        val recents = calls.map { call ->
+        val recents = RecentsList.withoutDuplicates(calls).map { call ->
             val contact = lookupCallContact(call.number, index.byPhoneSuffix)
             val person = contact?.let { bondIndex.personFor(it) }
             RecentEntry(

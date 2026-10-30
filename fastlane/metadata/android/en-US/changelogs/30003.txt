@@ -1,0 +1,1 @@
+Fixes the app closing right after opening on some phones (seen on GrapheneOS) when the system call log listed the same call twice. Recents now skips the duplicate and the list can no longer trip over two identical entries.

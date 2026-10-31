@@ -1,1 +1,1 @@
-Fixes the app closing right after opening on some phones (seen on GrapheneOS) when the system call log listed the same call twice. Recents now skips the duplicate and the list can no longer trip over two identical entries.
+Fixes the app closing right after opening on some phones (seen on GrapheneOS) when the call log listed the same call twice. USSD codes like *100# are now dialled exactly as typed instead of calling a contact, and service codes like *#*#4636#*#* open their menu.

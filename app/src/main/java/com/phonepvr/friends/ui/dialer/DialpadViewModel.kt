@@ -8,6 +8,7 @@ import com.phonepvr.friends.data.contacts.DeviceContact
 import com.phonepvr.friends.data.contacts.SystemContactsRepository
 import com.phonepvr.friends.data.db.dao.PersonDao
 import com.phonepvr.friends.data.dialer.CallPlacer
+import com.phonepvr.friends.data.dialer.DialCodes
 import com.phonepvr.friends.data.dialer.PastedNumber
 import com.phonepvr.friends.data.dialer.T9
 import com.phonepvr.friends.data.settings.SettingsRepository
@@ -158,6 +159,9 @@ class DialpadViewModel @Inject constructor(
         return result
     }
 
+    /** Sends a `*#*#…#*#*` service code to Android; see [CallPlacer.sendServiceCode]. */
+    fun sendServiceCode(code: String): CallPlacer.CodeResult = callPlacer.sendServiceCode(code)
+
     fun dismissPlaceError() {
         placeError.value = null
     }
@@ -168,6 +172,9 @@ class DialpadViewModel @Inject constructor(
         bondIndex: BondIndex,
     ): List<DialpadMatch> {
         if (input.length < 2) return emptyList()
+        // A USSD or service code is dialled as typed, so no contact suggestions:
+        // otherwise *100# would match a contact by its digits (issue #71).
+        if (DialCodes.isCode(input)) return emptyList()
         val q = T9.digitsOnly(input)
         if (q.length < 2) return emptyList()
         val scored = ArrayList<ScoredMatch>()

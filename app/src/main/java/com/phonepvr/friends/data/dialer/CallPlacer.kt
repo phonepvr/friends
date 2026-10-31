@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.telecom.PhoneAccountHandle
 import android.telecom.TelecomManager
+import android.telephony.TelephonyManager
 import androidx.core.content.ContextCompat
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -93,6 +94,27 @@ class CallPlacer @Inject constructor(
         } catch (e: Exception) {
             PlaceResult.ERROR
         }
+    }
+
+    enum class CodeResult { SENT, NEEDS_PHONE_APP, ERROR }
+
+    /**
+     * Hands a `*#*#code#*#*` service code to Android, which opens the matching
+     * hidden menu (testing, battery info and so on), as the stock dialer does.
+     * Android only accepts it from the phone app.
+     */
+    fun sendServiceCode(code: String): CodeResult = try {
+        val telephony = context.getSystemService(TelephonyManager::class.java)
+        if (telephony == null) {
+            CodeResult.ERROR
+        } else {
+            telephony.sendDialerSpecialCode(code)
+            CodeResult.SENT
+        }
+    } catch (e: SecurityException) {
+        CodeResult.NEEDS_PHONE_APP
+    } catch (e: Exception) {
+        CodeResult.ERROR
     }
 
     fun hasCallPhonePermission(): Boolean =

@@ -76,6 +76,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.phonepvr.friends.R
 import com.phonepvr.friends.data.dialer.CallPlacer
+import com.phonepvr.friends.data.dialer.DialCodes
 import com.phonepvr.friends.data.reachout.ReachOutLauncher
 import com.phonepvr.friends.data.reachout.ReachOutMethod
 import com.phonepvr.friends.domain.model.CallType
@@ -187,6 +188,24 @@ fun DialpadScreen(
         } else {
             pendingCallNumber = number
             showRationale = true
+        }
+    }
+
+    // A *#*#…#*#* service code opens a hidden menu instead of calling.
+    val sendServiceCode: (String) -> Unit = { code ->
+        val message = when (viewModel.sendServiceCode(code)) {
+            CallPlacer.CodeResult.SENT -> null
+            CallPlacer.CodeResult.NEEDS_PHONE_APP ->
+                "Service codes work once Bondwidth is your phone app"
+            CallPlacer.CodeResult.ERROR -> "Couldn't send that code"
+        }
+        if (message != null) scope.launch { snackbarState.showSnackbar(message) }
+    }
+    // Like the stock dialer, a complete service code runs as soon as it's typed.
+    LaunchedEffect(state.input) {
+        DialCodes.serviceCode(state.input)?.let { code ->
+            sendServiceCode(code)
+            viewModel.onClearInput()
         }
     }
 
@@ -307,6 +326,15 @@ fun DialpadScreen(
                             )
                         }
                     }
+                } else if (DialCodes.isCode(state.input)) {
+                    Text(
+                        text = "Tap call to send this code",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .padding(horizontal = 32.dp),
+                    )
                 } else if (state.input.isNotEmpty()) {
                     Column(
                         modifier = Modifier
@@ -390,10 +418,19 @@ fun DialpadScreen(
                 Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
                     FloatingActionButton(
                         onClick = {
-                            val target = state.matches.firstOrNull()?.matchedNumber
-                                ?.takeIf { it.isNotBlank() }
-                                ?: state.input
-                            placeCall(target)
+                            val code = DialCodes.serviceCode(state.input)
+                            if (code != null) {
+                                sendServiceCode(code)
+                            } else {
+                                // USSD and MMI codes (*100#) are always dialled
+                                // exactly as typed, never swapped for a contact.
+                                val target = state.matches
+                                    .takeUnless { DialCodes.isCode(state.input) }
+                                    ?.firstOrNull()?.matchedNumber
+                                    ?.takeIf { it.isNotBlank() }
+                                    ?: state.input
+                                placeCall(target)
+                            }
                         },
                     ) {
                         Icon(Icons.Filled.Call, contentDescription = "Call")

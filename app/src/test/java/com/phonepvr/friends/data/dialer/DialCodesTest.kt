@@ -19,7 +19,7 @@ class DialCodesTest {
     @Test
     fun `plain numbers are not codes`() {
         assertFalse(DialCodes.isCode("100"))
-        assertFalse(DialCodes.isCode("+49 911 347717"))
+        assertFalse(DialCodes.isCode("+XX XXX XXXXXX"))
         assertFalse(DialCodes.isCode(""))
     }
 

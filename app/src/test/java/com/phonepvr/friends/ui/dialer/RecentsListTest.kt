@@ -9,7 +9,7 @@ import org.junit.Test
 class RecentsListTest {
 
     private fun call(id: Long, type: CallType = CallType.INCOMING, duration: Long = 30) =
-        DeviceCall(number = "+49911347717", type = type, timestampMillis = 1_793_170_878_786, durationSeconds = duration, id = id)
+        DeviceCall(number = "+XX-XXXXXXX", type = type, timestampMillis = 1_700_000_000_000, durationSeconds = duration, id = id)
 
     private fun entry(c: DeviceCall) = RecentEntry(
         number = c.number, displayName = null, contactId = null, isTracked = false,
